@@ -12,10 +12,10 @@ const monthlyData = [
 ];
 
 const metrics = [
-  { label: "Conversion Rate", value: "24.8%", change: "+3.2%", up: true, icon: TrendingUp, emoji: "🎯" },
-  { label: "Avg Deal Size", value: "$8,420", change: "+12.5%", up: true, icon: DollarSign, emoji: "💰" },
-  { label: "Client Retention", value: "94.2%", change: "+1.8%", up: true, icon: Users, emoji: "🤝" },
-  { label: "Response Time", value: "2.4h", change: "-18%", up: true, icon: Globe, emoji: "⚡" },
+  { label: "Conversion Rate", value: "24.8%", change: "+3.2%", up: true, icon: TrendingUp },
+  { label: "Avg Deal Size", value: "$8,420", change: "+12.5%", up: true, icon: DollarSign },
+  { label: "Client Retention", value: "94.2%", change: "+1.8%", up: true, icon: Users },
+  { label: "Response Time", value: "2.4h", change: "-18%", up: true, icon: Globe },
 ];
 
 const topPerformers = [
@@ -33,7 +33,7 @@ export default function AnalyticsPage() {
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       <motion.div variants={item}>
         <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
-          Analytics <span>📊</span>
+          Analytics
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Deep insights into your business performance</p>
       </motion.div>
@@ -43,7 +43,7 @@ export default function AnalyticsPage() {
         {metrics.map((m) => (
           <div key={m.label} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-5 shadow-card card-hover">
             <div className="flex items-start justify-between">
-              <span className="text-2xl">{m.emoji}</span>
+              <m.icon className="h-5 w-5 text-primary" />
               <span className={`flex items-center gap-0.5 text-xs font-semibold ${m.up ? "text-success" : "text-destructive"}`}>
                 {m.up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                 {m.change}

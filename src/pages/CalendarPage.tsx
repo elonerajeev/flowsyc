@@ -5,19 +5,19 @@ import { cn } from "@/lib/utils";
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const events = [
-  { id: 1, title: "Team standup", time: "9:00 AM", day: 25, color: "bg-primary/20 text-primary border-primary/30", emoji: "🗣️" },
-  { id: 2, title: "Client call - Acme", time: "11:00 AM", day: 25, color: "bg-success/20 text-success border-success/30", emoji: "📞" },
-  { id: 3, title: "Design review", time: "2:00 PM", day: 26, color: "bg-accent/20 text-accent border-accent/30", emoji: "🎨" },
-  { id: 4, title: "Sprint planning", time: "10:00 AM", day: 27, color: "bg-warning/20 text-warning border-warning/30", emoji: "📋" },
-  { id: 5, title: "Investor meeting", time: "3:00 PM", day: 28, color: "bg-destructive/20 text-destructive border-destructive/30", emoji: "💼" },
-  { id: 6, title: "Product demo", time: "1:00 PM", day: 25, color: "bg-info/20 text-info border-info/30", emoji: "🚀" },
+  { id: 1, title: "Team standup", time: "9:00 AM", day: 25, color: "bg-primary/20 text-primary border-primary/30" },
+  { id: 2, title: "Client call - Acme", time: "11:00 AM", day: 25, color: "bg-success/20 text-success border-success/30" },
+  { id: 3, title: "Design review", time: "2:00 PM", day: 26, color: "bg-accent/20 text-accent border-accent/30" },
+  { id: 4, title: "Sprint planning", time: "10:00 AM", day: 27, color: "bg-warning/20 text-warning border-warning/30" },
+  { id: 5, title: "Investor meeting", time: "3:00 PM", day: 28, color: "bg-destructive/20 text-destructive border-destructive/30" },
+  { id: 6, title: "Product demo", time: "1:00 PM", day: 25, color: "bg-info/20 text-info border-info/30" },
 ];
 
 const upcomingEvents = [
-  { title: "Team standup", time: "Today, 9:00 AM", emoji: "🗣️" },
-  { title: "Client call - Acme Corp", time: "Today, 11:00 AM", emoji: "📞" },
-  { title: "Product demo", time: "Today, 1:00 PM", emoji: "🚀" },
-  { title: "Design review", time: "Tomorrow, 2:00 PM", emoji: "🎨" },
+  { title: "Team standup", time: "Today, 9:00 AM" },
+  { title: "Client call - Acme Corp", time: "Today, 11:00 AM" },
+  { title: "Product demo", time: "Today, 1:00 PM" },
+  { title: "Design review", time: "Tomorrow, 2:00 PM" },
   { title: "Sprint planning", time: "Wed, 10:00 AM", emoji: "📋" },
   { title: "Investor meeting", time: "Thu, 3:00 PM", emoji: "💼" },
 ];
@@ -77,7 +77,7 @@ export default function CalendarPage() {
                       <div className="mt-1 space-y-1">
                         {dayEvents.slice(0, 2).map((e) => (
                           <div key={e.id} className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-medium truncate", e.color)}>
-                            {e.emoji} {e.title}
+                            {e.title}
                           </div>
                         ))}
                         {dayEvents.length > 2 && (
@@ -100,7 +100,7 @@ export default function CalendarPage() {
           <div className="space-y-0">
             {upcomingEvents.map((e, i) => (
               <div key={i} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
-                <span className="text-lg mt-0.5">{e.emoji}</span>
+                <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary/50" />
                 <div>
                   <p className="text-sm font-medium text-foreground">{e.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{e.time}</p>

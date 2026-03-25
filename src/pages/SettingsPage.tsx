@@ -1,14 +1,16 @@
 import { motion } from "framer-motion";
-import { User, Bell, Shield, Palette, Globe, Key, Monitor, Database } from "lucide-react";
-import { useTheme, ThemeColor, UserRole } from "@/contexts/ThemeContext";
-import { cn } from "@/lib/utils";
+import { Palette, Shield, User, Workflow } from "lucide-react";
 
-const colorSwatches: { value: ThemeColor; color: string; label: string }[] = [
-  { value: "teal", color: "bg-[hsl(173,58%,39%)]", label: "Teal" },
-  { value: "violet", color: "bg-[hsl(262,83%,58%)]", label: "Violet" },
-  { value: "rose", color: "bg-[hsl(346,77%,50%)]", label: "Rose" },
-  { value: "amber", color: "bg-[hsl(38,92%,50%)]", label: "Amber" },
-  { value: "blue", color: "bg-[hsl(217,91%,60%)]", label: "Blue" },
+import PageLoader from "@/components/shared/PageLoader";
+import { useTheme, type ThemeColor, type UserRole } from "@/contexts/ThemeContext";
+import { cn } from "@/lib/utils";
+import { useThemePreviews } from "@/hooks/use-crm-data";
+
+const colorSwatches: { value: ThemeColor; hex: string }[] = [
+  { value: "ocean", hex: "#2563EB" },
+  { value: "midnight", hex: "#6366F1" },
+  { value: "nebula", hex: "#7C3AED" },
+  { value: "slate", hex: "#334155" },
 ];
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
@@ -16,137 +18,177 @@ const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function SettingsPage() {
   const { mode, toggleMode, color, setColor, role, setRole } = useTheme();
+  const { data: themePreviews, isLoading } = useThemePreviews();
+
+  if (isLoading || !themePreviews) {
+    return <PageLoader />;
+  }
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 max-w-4xl">
-      <motion.div variants={item}>
-        <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">Settings ⚙️</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account and preferences</p>
-      </motion.div>
-
-      {/* Profile */}
-      <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
-        <h3 className="font-display font-semibold text-foreground flex items-center gap-2 mb-4"><User className="h-4 w-4 text-primary" /> Profile</h3>
-        <div className="flex items-center gap-5 mb-6">
-          <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-2xl font-display font-bold text-foreground">JD</div>
-          <div>
-            <p className="text-lg font-display font-bold text-foreground">John Doe</p>
-            <p className="text-sm text-muted-foreground">john@crmpro.com</p>
-            <p className="text-xs text-primary capitalize mt-0.5">👑 {role}</p>
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+      <motion.section variants={item} className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+        <div className="space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/45 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+            <Palette className="h-3.5 w-3.5 text-primary" />
+            Settings
           </div>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Workspace settings</h1>
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            Theme, role preview, and integration-ready configuration are grouped here with a cleaner hierarchy.
+          </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1 block">Full Name</label>
-            <input defaultValue="John Doe" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1 block">Email</label>
-            <input defaultValue="john@crmpro.com" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1 block">Phone</label>
-            <input defaultValue="+1 (555) 123-4567" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1 block">Location</label>
-            <input defaultValue="San Francisco, CA" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          </div>
-        </div>
-      </motion.div>
+      </motion.section>
 
-      {/* Appearance */}
-      <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
-        <h3 className="font-display font-semibold text-foreground flex items-center gap-2 mb-4"><Palette className="h-4 w-4 text-accent" /> Appearance</h3>
-
-        {/* Theme Mode */}
-        <div className="mb-6">
-          <p className="text-sm font-medium text-foreground mb-3">Theme Mode</p>
-          <div className="flex gap-3">
-            {(["light", "dark"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => { if (m !== mode) toggleMode(); }}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium transition-all",
-                  m === mode ? "border-primary bg-primary/10 text-primary shadow-sm" : "border-border text-muted-foreground hover:bg-secondary"
-                )}
-              >
-                {m === "light" ? "☀️" : "🌙"} {m.charAt(0).toUpperCase() + m.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Accent Color */}
-        <div>
-          <p className="text-sm font-medium text-foreground mb-3">Accent Color</p>
-          <div className="flex gap-3">
-            {colorSwatches.map((s) => (
-              <button
-                key={s.value}
-                onClick={() => setColor(s.value)}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all",
-                  color === s.value ? "border-primary shadow-sm bg-primary/5" : "border-border hover:bg-secondary"
-                )}
-              >
-                <div className={cn("h-8 w-8 rounded-full", s.color)} />
-                <span className="text-[10px] font-medium text-muted-foreground">{s.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Role (for demo) */}
-      <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
-        <h3 className="font-display font-semibold text-foreground flex items-center gap-2 mb-4"><Shield className="h-4 w-4 text-warning" /> Role Simulation (Demo)</h3>
-        <p className="text-xs text-muted-foreground mb-3">Switch roles to see how the sidebar and features change for different users.</p>
-        <div className="flex flex-wrap gap-3">
-          {(["admin", "manager", "employee", "client"] as UserRole[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRole(r)}
-              className={cn(
-                "flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all",
-                r === role ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-secondary"
-              )}
-            >
-              {r === "admin" && "👑"}{r === "manager" && "📋"}{r === "employee" && "💼"}{r === "client" && "🤝"}
-              <span className="capitalize">{r}</span>
-            </button>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Notifications */}
-      <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
-        <h3 className="font-display font-semibold text-foreground flex items-center gap-2 mb-4"><Bell className="h-4 w-4 text-info" /> Notifications</h3>
-        <div className="space-y-4">
-          {[
-            { label: "Email notifications", desc: "Receive updates via email", checked: true },
-            { label: "Push notifications", desc: "Browser push notifications", checked: true },
-            { label: "Task reminders", desc: "Get reminded about upcoming deadlines", checked: false },
-            { label: "Weekly digest", desc: "Summary of your week's activity", checked: true },
-          ].map((n) => (
-            <div key={n.label} className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium text-foreground">{n.label}</p>
-                <p className="text-xs text-muted-foreground">{n.desc}</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={n.checked} className="sr-only peer" />
-                <div className="w-10 h-5 bg-muted rounded-full peer peer-checked:after:translate-x-5 peer-checked:bg-primary after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-card after:rounded-full after:h-4 after:w-4 after:transition-all" />
-              </label>
+      <motion.section variants={item} className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <User className="h-5 w-5" />
             </div>
-          ))}
-        </div>
-      </motion.div>
+            <div>
+              <p className="font-display text-xl font-semibold text-foreground">Profile</p>
+              <p className="text-sm text-muted-foreground">Primary operator information.</p>
+            </div>
+          </div>
 
-      <motion.div variants={item} className="flex justify-end pb-8">
-        <button className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">Save Changes</button>
-      </motion.div>
+          <div className="mb-6 flex items-center gap-4 rounded-[1.5rem] border border-border/70 bg-secondary/25 p-4">
+            <div className="flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-secondary/55 text-2xl font-display font-semibold text-foreground">
+              JD
+            </div>
+            <div>
+              <p className="font-display text-xl font-semibold text-foreground">John Doe</p>
+              <p className="text-sm text-muted-foreground">john@crmpro.com</p>
+              <p className="mt-1 text-xs font-semibold text-primary">{role}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {[
+              { label: "Full Name", value: "John Doe" },
+              { label: "Email", value: "john@crmpro.com" },
+              { label: "Phone", value: "+1 (555) 123-4567" },
+              { label: "Location", value: "San Francisco, CA" },
+            ].map((field) => (
+              <label key={field.label} className="space-y-2">
+                <span className="text-sm font-medium text-foreground">{field.label}</span>
+                <input
+                  defaultValue={field.value}
+                  className="h-11 w-full rounded-2xl border border-border/70 bg-background/55 px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Palette className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-display text-xl font-semibold text-foreground">Theme</p>
+                <p className="text-sm text-muted-foreground">Choose a compact, contrast-safe preset.</p>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <p className="mb-3 text-sm font-medium text-foreground">Mode</p>
+              <div className="inline-flex rounded-full border border-border/70 bg-secondary/35 p-1">
+                {(["light", "dark"] as const).map((nextMode) => (
+                  <button
+                    key={nextMode}
+                    type="button"
+                    onClick={() => {
+                      if (nextMode !== mode) toggleMode();
+                    }}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-sm font-semibold transition",
+                      nextMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {nextMode === "light" ? "Light" : "Dark"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {colorSwatches.map((swatch) => (
+                <button
+                  key={swatch.value}
+                  type="button"
+                  onClick={() => setColor(swatch.value)}
+                  className={cn(
+                    "grid gap-3 rounded-[1.25rem] border p-3 text-left transition md:grid-cols-[72px_1fr_auto]",
+                    color === swatch.value ? "border-primary bg-primary/[0.05]" : "border-border/70 bg-secondary/20 hover:border-border",
+                  )}
+                >
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div className="h-11 rounded-xl border border-white/20" style={{ background: swatch.value === "ocean" ? "#EFF6FF" : swatch.value === "midnight" ? "#0F172A" : swatch.value === "nebula" ? "linear-gradient(135deg, #7C3AED, #EC4899)" : "#F8FAFC" }} />
+                    <div className="h-11 rounded-xl border border-white/20" style={{ background: swatch.hex }} />
+                    <div className="h-11 rounded-xl border border-white/20" style={{ background: swatch.value === "ocean" ? "#60A5FA" : swatch.value === "midnight" ? "#94A3B8" : swatch.value === "nebula" ? "#EC4899" : "#CBD5F5" }} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">{themePreviews[swatch.value].label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{themePreviews[swatch.value].subtitle}</p>
+                  </div>
+                  <div className="flex items-start justify-end">
+                    <span className={cn("rounded-full px-3 py-1 text-xs font-semibold", color === swatch.value ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground")}>
+                      {color === swatch.value ? "Active" : "Set"}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/90 p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-warning/12 text-warning">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-display text-lg font-semibold text-foreground">Role Simulation</p>
+                  <p className="text-xs text-muted-foreground">View-based access preview.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["admin", "manager", "employee", "client"] as UserRole[]).map((candidate) => (
+                  <button
+                    key={candidate}
+                    type="button"
+                    onClick={() => setRole(candidate)}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition",
+                      role === candidate ? "bg-primary text-primary-foreground" : "border border-border/70 bg-secondary/28 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {candidate}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/90 p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-success/12 text-success">
+                  <Workflow className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-display text-lg font-semibold text-foreground">Integration Readiness</p>
+                  <p className="text-xs text-muted-foreground">Prepared for backend layers.</p>
+                </div>
+              </div>
+              <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+                <p>Theming uses semantic tokens, so backend-driven workspace preferences can be added later.</p>
+                <p>Role state is centralized, which makes auth and permission sync easier to implement.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.section>
     </motion.div>
   );
 }

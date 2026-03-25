@@ -19,4 +19,16 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ["recharts"],
+          motion: ["framer-motion"],
+          icons: ["lucide-react"],
+          query: ["@tanstack/react-query"],
+        },
+      },
+    },
+  },
 }));

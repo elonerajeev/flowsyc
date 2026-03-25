@@ -1,12 +1,15 @@
+import { useMemo } from "react";
 import { Shield, Eye, Edit, Trash2, Users, ClipboardList, FolderKanban, UserCheck, Settings, BarChart3 } from "lucide-react";
+import { useTeamMembers } from "@/hooks/use-crm-data";
 import { cn } from "@/lib/utils";
+import type { TeamMemberRecord } from "@/types/crm";
+import { readStoredJSON } from "@/lib/preferences";
 
 const roles = [
   {
     name: "Admin",
     description: "Full access to all features and settings",
     color: "bg-accent/10 text-accent border-accent/20",
-    members: 2,
     permissions: {
       Dashboard: ["view", "edit"],
       "Team Management": ["view", "edit", "delete"],
@@ -21,7 +24,6 @@ const roles = [
     name: "Manager",
     description: "Manage team, clients, and tasks",
     color: "bg-info/10 text-info border-info/20",
-    members: 3,
     permissions: {
       Dashboard: ["view"],
       "Team Management": ["view", "edit"],
@@ -36,7 +38,6 @@ const roles = [
     name: "Employee",
     description: "View assigned tasks and projects only",
     color: "bg-muted text-muted-foreground border-border",
-    members: 4,
     permissions: {
       Dashboard: ["view"],
       "Team Management": [],
@@ -68,6 +69,23 @@ function PermBadge({ has }: { has: boolean }) {
 }
 
 export default function RolesPage() {
+  const { data: teamMembers = [] } = useTeamMembers();
+
+  const members = useMemo(() => {
+    const buckets = ["admin", "manager", "employee"] as const;
+    const localMembers = buckets.flatMap((bucket) => {
+      return readStoredJSON<TeamMemberRecord[]>(`crm-team-members-${bucket}`, []);
+    });
+
+    const combined = [...teamMembers, ...localMembers];
+    const deduped = combined.filter((member, index, array) => array.findIndex((entry) => entry.id === member.id) === index);
+
+    return roles.map((role) => ({
+      ...role,
+      members: deduped.filter((member) => member.role === role.name).length,
+    }));
+  }, [teamMembers]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -77,7 +95,7 @@ export default function RolesPage() {
 
       {/* Role cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {roles.map((r) => (
+        {members.map((r) => (
           <div key={r.name} className="rounded-xl border border-border bg-card p-5 shadow-card">
             <div className="flex items-center gap-3 mb-2">
               <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", r.color)}>
