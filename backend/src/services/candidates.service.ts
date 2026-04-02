@@ -364,12 +364,21 @@ export const candidatesService = {
     };
 
     const email = buildOfferLetterEmail(offerLetter);
-    await sendMail({
-      to: offerLetter.candidate.email,
-      subject: email.subject,
-      text: email.text,
-      html: email.html,
-    });
+    
+    try {
+      await sendMail({
+        to: offerLetter.candidate.email,
+        subject: email.subject,
+        text: email.text,
+        html: email.html,
+      });
+    } catch (error) {
+      throw new AppError(
+        "Failed to send offer letter email. Please check SMTP configuration.",
+        500,
+        "EMAIL_SEND_FAILED"
+      );
+    }
 
     await prisma.candidate.update({
       where: { id: candidateId },
