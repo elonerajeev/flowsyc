@@ -121,7 +121,9 @@ function PayrollSummaryCard({ label, value, hint, icon: Icon }: { label: string;
         <Icon className="h-5 w-5" />
       </div>
       <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-1 font-display text-2xl font-semibold text-foreground">{value}</p>
+      <p className="mt-1 font-display text-2xl font-semibold text-foreground">
+        {label === "Current payroll" ? <PrivacyValue value={value} /> : value}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </div>
   );
@@ -312,7 +314,11 @@ export default function PayrollPage() {
                     <item.icon className="h-5 w-5" />
                   </div>
                   <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
-                  <p className="mt-1 font-display text-lg font-semibold text-foreground">{item.value}</p>
+                  <p className="mt-1 font-display text-lg font-semibold text-foreground">
+                    {item.label.toLowerCase().includes("salary") || item.label === "Allowances" || item.label === "Deductions"
+                      ? <PrivacyValue value={item.value} />
+                      : item.value}
+                  </p>
                 </div>
               ))}
             </div>
@@ -464,7 +470,7 @@ export default function PayrollPage() {
             ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
-                <p className="mt-1 font-display text-lg font-semibold text-foreground">{item.value}</p>
+                <p className="mt-1 font-display text-lg font-semibold text-foreground"><PrivacyValue value={item.value} /></p>
               </div>
             ))}
           </div>

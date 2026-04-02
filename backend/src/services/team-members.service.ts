@@ -168,12 +168,18 @@ export const teamMembersService = {
     const [total, members, taskCounts, projects] = await prisma.$transaction([
       prisma.teamMember.count({ where }),
       prisma.teamMember.findMany({ where, orderBy: { createdAt: "desc" }, skip: (query.page - 1) * query.limit, take: query.limit }),
-      prisma.task.groupBy({ by: ["assignee"], where: { deletedAt: null, column: { not: "done" } }, _count: { _all: true } }),
+      prisma.task.groupBy({
+        by: ["assignee"],
+        where: { deletedAt: null, column: { not: "done" } },
+        orderBy: { assignee: "asc" },
+        _count: { assignee: true },
+      }),
       prisma.project.findMany({ where: { deletedAt: null, status: { in: ["active", "in_progress"] } }, select: { team: true } }),
     ]);
 
     // Build task count map by assignee name
-    const taskMap = new Map(taskCounts.map(t => [t.assignee.toLowerCase(), t._count._all]));
+    const groupedTaskCounts = taskCounts as Array<{ assignee: string; _count: { assignee: number | null } }>;
+    const taskMap = new Map(groupedTaskCounts.map((taskCount) => [taskCount.assignee.toLowerCase(), taskCount._count.assignee ?? 0]));
 
     // Build project count map by avatar/initials
     const projectMap = new Map<string, number>();

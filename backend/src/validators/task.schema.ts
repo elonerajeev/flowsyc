@@ -12,6 +12,7 @@ export const createTaskSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).optional(),
   valueStream: taskValueStreamSchema.optional(),
   column: taskColumnSchema.optional(),
+  projectId: z.number().int().positive().nullable().optional(),
 });
 
 export const updateTaskSchema = createTaskSchema.partial();

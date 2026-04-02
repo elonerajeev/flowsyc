@@ -13,6 +13,7 @@ import {
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -234,7 +235,7 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
                     <StatusBadge status={client.status} />
-                    <span className="text-xs text-muted-foreground">{client.revenue}</span>
+                    <span className="text-xs text-muted-foreground"><PrivacyValue value={client.revenue} /></span>
                   </div>
                 </div>
 

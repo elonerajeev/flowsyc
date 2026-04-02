@@ -15,6 +15,7 @@ export const crmKeys = {
   attendance: ["crm", "attendance"] as const,
   commands: ["crm", "commands"] as const,
   themePreviews: ["crm", "theme-previews"] as const,
+  auditLogs: ["crm", "audit-logs"] as const,
   notes: ["crm", "notes"] as const,
   jobPostings: ["crm", "job-postings"] as const,
   candidates: ["crm", "candidates"] as const,
@@ -46,11 +47,21 @@ export function useProjects() {
   });
 }
 
-export function useTasks() {
+export function useTasks(projectId?: number) {
   return useQuery({
-    queryKey: crmKeys.tasks,
-    queryFn: crmService.getTasks,
+    queryKey: [...crmKeys.tasks, projectId ?? "all"],
+    queryFn: () => crmService.getTasks(projectId),
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useAuditLogs(limit = 100) {
+  return useQuery({
+    queryKey: [...crmKeys.auditLogs, limit],
+    queryFn: () => crmService.getAuditLogs(limit),
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 60 * 2,
+    refetchIntervalInBackground: false,
   });
 }
 

@@ -47,6 +47,21 @@ model Candidate {
   @@index([source])
 }
 
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity])
+  @@index([userId])
+}
+
 model Client {
   id          Int           @id @default(autoincrement())
   name        String
@@ -180,6 +195,7 @@ model Project {
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
+  tasks       Task[]
 
   @@index([deletedAt])
   @@index([stage])
@@ -208,6 +224,8 @@ model Task {
   tags        String[]     @default([])
   valueStream String
   column      TaskColumn   @default(todo)
+  projectId   Int?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   deletedAt   DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime
@@ -215,6 +233,7 @@ model Task {
   @@index([column])
   @@index([deletedAt])
   @@index([priority])
+  @@index([projectId])
 }
 
 model TeamMember {

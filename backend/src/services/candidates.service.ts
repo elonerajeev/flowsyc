@@ -2,6 +2,7 @@ import { Prisma, type CandidateStage } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import { sendMail } from "../utils/mailer";
 
 type CandidateRecord = {
   id: number;
@@ -83,6 +84,57 @@ function isEmailUniqueConstraintError(error: unknown) {
     return target.includes("email");
   }
   return false;
+}
+
+function buildOfferLetterEmail(data: {
+  candidate: { name: string; email: string; jobTitle: string; department: string; location: string };
+  hr: { name: string; designation: string; email: string; signatureUrl: string | null };
+  offer: { joiningDate: string; offeredSalary: string; jobTitle: string; department: string; location: string; type: string; generatedAt: string };
+}) {
+  const subject = `Offer Letter for ${data.candidate.jobTitle} - ${data.candidate.name}`;
+  const text = [
+    `Hello ${data.candidate.name},`,
+    "",
+    "We are pleased to share your offer letter details.",
+    `Role: ${data.offer.jobTitle}`,
+    `Department: ${data.offer.department}`,
+    `Location: ${data.offer.location}`,
+    `Employment Type: ${data.offer.type}`,
+    `Joining Date: ${data.offer.joiningDate}`,
+    `Offered Salary: ${data.offer.offeredSalary}`,
+    "",
+    `Regards,`,
+    `${data.hr.name}`,
+    `${data.hr.designation}`,
+    data.hr.email,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+      <p>Hello ${data.candidate.name},</p>
+      <p>We are pleased to share your offer letter details.</p>
+      <table style="border-collapse: collapse; margin: 16px 0;">
+        <tbody>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Role</td><td>${data.offer.jobTitle}</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Department</td><td>${data.offer.department}</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Location</td><td>${data.offer.location}</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Employment Type</td><td>${data.offer.type}</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Joining Date</td><td>${data.offer.joiningDate}</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Offered Salary</td><td>${data.offer.offeredSalary}</td></tr>
+        </tbody>
+      </table>
+      <p>Please reply to this email if you need any clarification.</p>
+      <p style="margin-top: 20px;">
+        Regards,<br />
+        ${data.hr.name}<br />
+        ${data.hr.designation}<br />
+        <a href="mailto:${data.hr.email}">${data.hr.email}</a>
+      </p>
+      ${data.hr.signatureUrl ? `<p><img src="${data.hr.signatureUrl}" alt="HR Signature" style="max-width: 180px; height: auto;" /></p>` : ""}
+    </div>
+  `.trim();
+
+  return { subject, text, html };
 }
 
 export const candidatesService = {
@@ -286,18 +338,7 @@ export const candidatesService = {
     const hr = await prisma.user.findUnique({ where: { id: hrUserId } });
     if (!hr) throw new AppError("HR user not found", 404, "NOT_FOUND");
 
-    // Save joining date and offered salary to candidate
-    await prisma.candidate.update({
-      where: { id: candidateId },
-      data: {
-        joiningDate: input.joiningDate,
-        offeredSalary: input.offeredSalary,
-        offerLetterSent: true,
-      },
-    });
-
-    // Return all data needed to render the offer letter
-    return {
+    const offerLetter = {
       candidate: {
         name: candidate.name,
         email: candidate.email,
@@ -309,7 +350,7 @@ export const candidatesService = {
         name: hr.name,
         designation: hr.designation,
         email: hr.email,
-        signatureUrl: input.signatureUrl ?? null,
+        signatureUrl: input.signatureUrl ?? hr.signatureUrl ?? null,
       },
       offer: {
         joiningDate: input.joiningDate,
@@ -321,6 +362,34 @@ export const candidatesService = {
         generatedAt: new Date().toISOString(),
       },
     };
+
+    const email = buildOfferLetterEmail(offerLetter);
+    await sendMail({
+      to: offerLetter.candidate.email,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+    });
+
+    await prisma.candidate.update({
+      where: { id: candidateId },
+      data: {
+        joiningDate: input.joiningDate,
+        offeredSalary: input.offeredSalary,
+        offerLetterSent: true,
+      },
+    });
+
+    await (prisma as any).candidateActivity.create({
+      data: {
+        candidateId,
+        action: "offer_letter_sent",
+        detail: `Offer letter emailed to ${candidate.email}`,
+        performedBy: hr.email,
+      },
+    });
+
+    return offerLetter;
   },
 
   async reject(candidateId: number, reason?: string) {

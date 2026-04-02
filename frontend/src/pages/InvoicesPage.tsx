@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useInvoices } from "@/hooks/use-crm-data";
@@ -121,7 +122,7 @@ export default function InvoicesPage() {
                   <tr key={invoice.id} className="border-t border-border/70 transition hover:bg-secondary/18">
                     <td className="px-6 py-4 text-sm font-semibold text-primary">{invoice.id}</td>
                     <td className="px-6 py-4 text-sm text-foreground">{invoice.client}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-foreground">{invoice.amount}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-foreground"><PrivacyValue value={invoice.amount} /></td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.date}</td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.due}</td>
                     <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>

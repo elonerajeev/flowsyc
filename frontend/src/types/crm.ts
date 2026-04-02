@@ -143,6 +143,17 @@ export interface ActivityItem {
   source?: string;
 }
 
+export interface AuditLogRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  entity: string;
+  entityId?: string | null;
+  detail?: string | null;
+  createdAt: string;
+}
+
 export interface CollaboratorRecord {
   id: string;
   name: string;
@@ -200,6 +211,7 @@ export interface TaskRecord {
   dueDate: string;
   tags: string[];
   valueStream: "Growth" | "Product" | "Support";
+  projectId?: number | null;
 }
 
 export type TaskColumn = "todo" | "in-progress" | "done";

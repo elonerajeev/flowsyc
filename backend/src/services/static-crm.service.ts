@@ -22,4 +22,8 @@ export const staticCrmService = {
   async listCommandActions() {
     return [];
   },
+
+  async listThemePreviews() {
+    return {};
+  },
 };

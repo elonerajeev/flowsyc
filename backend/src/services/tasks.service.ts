@@ -13,6 +13,7 @@ type TaskRecord = {
   tags: string[];
   valueStream: "Growth" | "Product" | "Support";
   column: "todo" | "in-progress" | "done";
+  projectId?: number | null;
 };
 
 type TaskInput = {
@@ -24,6 +25,7 @@ type TaskInput = {
   valueStream?: "Growth" | "Product" | "Support";
   column?: "todo" | "in-progress" | "done";
   avatar?: string;
+  projectId?: number | null;
 };
 
 type TaskQuery = {
@@ -31,6 +33,7 @@ type TaskQuery = {
   limit: number;
   column?: TaskRecord["column"];
   priority?: TaskRecord["priority"];
+  projectId?: number;
 };
 
 function toDbPriority(priority: TaskRecord["priority"]): TaskPriority {
@@ -59,6 +62,7 @@ function mapTask(task: {
   tags: string[];
   valueStream: string;
   column: TaskColumn;
+  projectId?: number | null;
 }): TaskRecord {
   return {
     id: task.id,
@@ -70,7 +74,46 @@ function mapTask(task: {
     tags: task.tags,
     valueStream: task.valueStream as TaskRecord["valueStream"],
     column: fromDbColumn(task.column),
+    projectId: task.projectId ?? null,
   };
+}
+
+async function ensureProjectExists(projectId?: number | null) {
+  if (!projectId) {
+    return;
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, deletedAt: true },
+  });
+
+  if (!project || project.deletedAt) {
+    throw new AppError("Project not found", 404, "NOT_FOUND");
+  }
+}
+
+async function syncProjectTaskStats(projectId?: number | null) {
+  if (!projectId) {
+    return;
+  }
+
+  const [tasksTotal, tasksDone] = await prisma.$transaction([
+    prisma.task.count({
+      where: { deletedAt: null, projectId },
+    }),
+    prisma.task.count({
+      where: { deletedAt: null, projectId, column: "done" },
+    }),
+  ]);
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      tasksTotal,
+      tasksDone,
+    },
+  });
 }
 
 export const tasksService = {
@@ -87,6 +130,7 @@ export const tasksService = {
       deletedAt: null,
       ...(query.column ? { column: toDbColumn(query.column) } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
+      ...(query.projectId ? { projectId: query.projectId } : {}),
     };
 
     const tasks = await prisma.task.findMany({
@@ -103,6 +147,8 @@ export const tasksService = {
   },
 
   async create(input: TaskInput) {
+    await ensureProjectExists(input.projectId);
+
     const task = await prisma.task.create({
       data: {
         title: input.title,
@@ -113,9 +159,12 @@ export const tasksService = {
         tags: input.tags ?? [],
         valueStream: input.valueStream ?? "Growth",
         column: toDbColumn(input.column ?? "todo"),
+        projectId: input.projectId ?? null,
         updatedAt: new Date(),
       },
     });
+
+    await syncProjectTaskStats(task.projectId);
     return mapTask(task);
   },
 
@@ -123,6 +172,10 @@ export const tasksService = {
     const existing = await prisma.task.findUnique({ where: { id: taskId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Task not found", 404, "NOT_FOUND");
+    }
+
+    if (patch.projectId !== undefined) {
+      await ensureProjectExists(patch.projectId);
     }
 
     const task = await prisma.task.update({
@@ -136,8 +189,15 @@ export const tasksService = {
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         ...(patch.valueStream !== undefined ? { valueStream: patch.valueStream } : {}),
         ...(patch.column !== undefined ? { column: toDbColumn(patch.column) } : {}),
+        ...(patch.projectId !== undefined ? { projectId: patch.projectId ?? null } : {}),
       },
     });
+
+    await Promise.all([
+      syncProjectTaskStats(existing.projectId),
+      syncProjectTaskStats(task.projectId),
+    ]);
+
     return mapTask(task);
   },
 
@@ -151,5 +211,7 @@ export const tasksService = {
       where: { id: taskId },
       data: { deletedAt: new Date() },
     });
+
+    await syncProjectTaskStats(existing.projectId);
   },
 };

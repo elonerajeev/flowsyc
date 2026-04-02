@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { AppError } from "../middleware/error.middleware";
 import { projectsService } from "../services/projects.service";
+import { logAudit } from "../utils/audit";
 import { projectQuerySchema } from "../validators/query.schema";
 
 function readProjectId(request: Request) {
@@ -36,14 +37,43 @@ export const projectsController = {
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const project = await projectsService.create(req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "create",
+        entity: "Project",
+        entityId: project.id,
+        detail: `Created: ${project.name}`,
+      });
+    }
     res.status(201).json(project);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    const project = await projectsService.update(readProjectId(req), req.body);
+    const projectId = readProjectId(req);
+    const project = await projectsService.update(projectId, req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "update",
+        entity: "Project",
+        entityId: projectId,
+        detail: `Updated: ${project.name}`,
+      });
+    }
     res.status(200).json(project);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    await projectsService.delete(readProjectId(req));
+    const projectId = readProjectId(req);
+    await projectsService.delete(projectId);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "delete",
+        entity: "Project",
+        entityId: projectId,
+        detail: `Deleted project #${projectId}`,
+      });
+    }
     res.status(200).json({ message: "Project deleted successfully" });
   },
 };

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { AppError } from "../middleware/error.middleware";
 import { teamMembersService } from "../services/team-members.service";
+import { logAudit } from "../utils/audit";
 import { teamMemberQuerySchema } from "../validators/query.schema";
 
 function readMemberId(request: Request) {
@@ -36,14 +37,43 @@ export const teamMembersController = {
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const member = await teamMembersService.create(req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "create",
+        entity: "TeamMember",
+        entityId: member.id,
+        detail: `Created: ${member.name}`,
+      });
+    }
     res.status(201).json(member);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    const member = await teamMembersService.update(readMemberId(req), req.body);
+    const memberId = readMemberId(req);
+    const member = await teamMembersService.update(memberId, req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "update",
+        entity: "TeamMember",
+        entityId: memberId,
+        detail: `Updated: ${member.name}`,
+      });
+    }
     res.status(200).json(member);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    await teamMembersService.delete(readMemberId(req));
+    const memberId = readMemberId(req);
+    await teamMembersService.delete(memberId);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "delete",
+        entity: "TeamMember",
+        entityId: memberId,
+        detail: `Deleted team member #${memberId}`,
+      });
+    }
     res.status(200).json({ message: "Team member deleted successfully" });
   },
 };

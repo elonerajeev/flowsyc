@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { AppError } from "../middleware/error.middleware";
 import { tasksService } from "../services/tasks.service";
+import { logAudit } from "../utils/audit";
 import { taskQuerySchema } from "../validators/query.schema";
 
 function readTaskId(request: Request) {
@@ -36,14 +37,43 @@ export const tasksController = {
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const task = await tasksService.create(req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "create",
+        entity: "Task",
+        entityId: task.id,
+        detail: `Created: ${task.title}`,
+      });
+    }
     res.status(201).json(task);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    const task = await tasksService.update(readTaskId(req), req.body);
+    const taskId = readTaskId(req);
+    const task = await tasksService.update(taskId, req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "update",
+        entity: "Task",
+        entityId: taskId,
+        detail: `Updated: ${task.title}`,
+      });
+    }
     res.status(200).json(task);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    await tasksService.delete(readTaskId(req));
+    const taskId = readTaskId(req);
+    await tasksService.delete(taskId);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "delete",
+        entity: "Task",
+        entityId: taskId,
+        detail: `Deleted task #${taskId}`,
+      });
+    }
     res.status(200).json({ message: "Task deleted successfully" });
   },
 };

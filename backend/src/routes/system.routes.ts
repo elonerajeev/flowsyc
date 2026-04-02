@@ -1,8 +1,10 @@
 import type { Request, Response } from "express";
 import { Router } from "express";
-import { systemService } from "../services/system.service";
+
 import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth.middleware";
+import { systemService } from "../services/system.service";
+import { getAuditLogs } from "../utils/audit";
 import { asyncHandler } from "../utils/async-handler";
 
 const systemRouter = Router();
@@ -57,6 +59,12 @@ systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Re
   } catch (error) {
     res.status(500).json({ error: "Failed to persist integration", details: error instanceof Error ? error.message : "Unknown error" });
   }
+}));
+
+systemRouter.get("/audit", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 100) || 100));
+  const logs = await getAuditLogs(limit);
+  res.status(200).json({ data: logs });
 }));
 
 export { systemRouter };

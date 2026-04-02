@@ -12,6 +12,7 @@ export const projectQuerySchema = paginationQuerySchema.extend({
 export const taskQuerySchema = paginationQuerySchema.extend({
   column: z.enum(["todo", "in-progress", "done"]).optional(),
   priority: z.enum(["high", "medium", "low"]).optional(),
+  projectId: z.coerce.number().int().positive().optional(),
 });
 
 export const teamMemberQuerySchema = paginationQuerySchema.extend({

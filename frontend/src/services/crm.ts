@@ -1,5 +1,6 @@
 import { isRemoteApiEnabled, requestJson } from "@/lib/api-client";
 import type {
+  AuditLogRecord,
   CandidateRecord,
   ClientRecord,
   DashboardSnapshot,
@@ -88,7 +89,7 @@ export const crmService = {
   getDashboard: () => fetchOrMock("/dashboard", emptyDashboard),
   getClients: () => fetchCollectionOrMock<ClientRecord>("/clients", []),
   getProjects: () => fetchCollectionOrMock<ProjectRecord>("/projects", []),
-  getTasks: () => fetchOrMock("/tasks", { todo: [], "in-progress": [], done: [] }),
+  getTasks: (projectId?: number) => fetchOrMock(`/tasks${projectId ? `?projectId=${projectId}` : ""}`, { todo: [], "in-progress": [], done: [] }),
   getConversations: () => fetchCollectionOrMock("/conversations", []),
   getMessages: () => fetchCollectionOrMock("/messages", []),
   getInvoices: () => fetchCollectionOrMock<InvoiceRecord>("/invoices", []),
@@ -103,6 +104,11 @@ export const crmService = {
   },
   getCommandActions: () => fetchOrMock("/command-actions", []),
   getThemePreviews: () => fetchOrMock("/system/theme-previews", {} as Record<string, ThemePreview>),
+  getAuditLogs: async (limit = 100) => {
+    if (!isRemoteApiEnabled()) return [];
+    const payload = await requestJson<{ data: AuditLogRecord[] }>(`/system/audit?limit=${limit}`);
+    return payload.data ?? [];
+  },
   getIntegrations: () => {
     if (!isRemoteApiEnabled()) return Promise.resolve({ data: [] });
     return requestJson<{ data: Array<{ id: string; name: string; status: string; config: Record<string, unknown>; connectedAt?: string; lastSynced?: string }> }>("/system/integrations");

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { AppError } from "../middleware/error.middleware";
 import { invoicesService } from "../services/invoices.service";
+import { logAudit } from "../utils/audit";
 import { invoiceQuerySchema } from "../validators/query.schema";
 
 function readInvoiceId(request: Request) {
@@ -36,14 +37,43 @@ export const invoicesController = {
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const invoice = await invoicesService.create(req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "create",
+        entity: "Invoice",
+        entityId: invoice.id,
+        detail: `Created invoice ${invoice.id} for ${invoice.client}`,
+      });
+    }
     res.status(201).json(invoice);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    const invoice = await invoicesService.update(readInvoiceId(req), req.body);
+    const invoiceId = readInvoiceId(req);
+    const invoice = await invoicesService.update(invoiceId, req.body);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "update",
+        entity: "Invoice",
+        entityId: invoiceId,
+        detail: `Updated invoice ${invoice.id}`,
+      });
+    }
     res.status(200).json(invoice);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    await invoicesService.delete(readInvoiceId(req));
+    const invoiceId = readInvoiceId(req);
+    await invoicesService.delete(invoiceId);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "delete",
+        entity: "Invoice",
+        entityId: invoiceId,
+        detail: `Deleted invoice ${invoiceId}`,
+      });
+    }
     res.status(200).json({ message: "Invoice deleted successfully" });
   },
 };
