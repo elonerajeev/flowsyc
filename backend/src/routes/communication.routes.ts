@@ -8,3 +8,4 @@ export const communicationRouter = Router();
 
 communicationRouter.get("/conversations", requireAuth, asyncHandler(communicationController.listConversations));
 communicationRouter.get("/messages", requireAuth, asyncHandler(communicationController.listMessages));
+communicationRouter.post("/messages", requireAuth, asyncHandler(communicationController.sendMessage));

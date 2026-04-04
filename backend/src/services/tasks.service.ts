@@ -1,7 +1,9 @@
 import { Prisma, type TaskColumn, type TaskPriority } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
+import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
+import { getEmployeeAssigneeScope } from "../utils/access-control";
 
 type TaskRecord = {
   id: number;
@@ -35,6 +37,12 @@ type TaskQuery = {
   priority?: TaskRecord["priority"];
   projectId?: number;
 };
+
+type AccessScope = {
+  role: UserRole;
+  userId: string;
+  email: string;
+} | null | undefined;
 
 function toDbPriority(priority: TaskRecord["priority"]): TaskPriority {
   return priority;
@@ -117,26 +125,38 @@ async function syncProjectTaskStats(projectId?: number | null) {
 }
 
 export const tasksService = {
-  async getById(taskId: number) {
-    const task = await prisma.task.findUnique({ where: { id: taskId } });
+  async getById(taskId: number, access?: AccessScope) {
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
+    const task = employeeAssignees
+      ? await prisma.task.findFirst({
+          where: {
+            deletedAt: null,
+            id: taskId,
+            assignee: { in: employeeAssignees },
+          },
+        })
+      : await prisma.task.findUnique({ where: { id: taskId } });
     if (!task || task.deletedAt) {
       throw new AppError("Task not found", 404, "NOT_FOUND");
     }
     return mapTask(task);
   },
 
-  async list(query: TaskQuery) {
+  async list(query: TaskQuery, access?: AccessScope) {
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
     const where: Prisma.TaskWhereInput = {
       deletedAt: null,
       ...(query.column ? { column: toDbColumn(query.column) } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.projectId ? { projectId: query.projectId } : {}),
+      ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : {}),
     };
 
     const tasks = await prisma.task.findMany({
       where,
       orderBy: [{ column: "asc" }, { createdAt: "asc" }],
     });
+
     const grouped: Record<TaskRecord["column"], TaskRecord[]> = {
       todo: [],
       "in-progress": [],
@@ -168,8 +188,17 @@ export const tasksService = {
     return mapTask(task);
   },
 
-  async update(taskId: number, patch: Partial<TaskInput>) {
-    const existing = await prisma.task.findUnique({ where: { id: taskId } });
+  async update(taskId: number, patch: Partial<TaskInput>, access?: AccessScope) {
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
+    const existing = employeeAssignees
+      ? await prisma.task.findFirst({
+          where: {
+            id: taskId,
+            deletedAt: null,
+            assignee: { in: employeeAssignees },
+          },
+        })
+      : await prisma.task.findUnique({ where: { id: taskId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Task not found", 404, "NOT_FOUND");
     }
@@ -201,8 +230,17 @@ export const tasksService = {
     return mapTask(task);
   },
 
-  async delete(taskId: number) {
-    const existing = await prisma.task.findUnique({ where: { id: taskId } });
+  async delete(taskId: number, access?: AccessScope) {
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
+    const existing = employeeAssignees
+      ? await prisma.task.findFirst({
+          where: {
+            id: taskId,
+            deletedAt: null,
+            assignee: { in: employeeAssignees },
+          },
+        })
+      : await prisma.task.findUnique({ where: { id: taskId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Task not found", 404, "NOT_FOUND");
     }

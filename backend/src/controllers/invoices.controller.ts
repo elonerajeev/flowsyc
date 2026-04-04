@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { AppError } from "../middleware/error.middleware";
 import { invoicesService } from "../services/invoices.service";
 import { logAudit } from "../utils/audit";
+import { sendInvoiceReminder } from "../utils/email-templates";
 import { invoiceQuerySchema } from "../validators/query.schema";
 
 function readInvoiceId(request: Request) {
@@ -28,11 +29,11 @@ export const invoicesController = {
       return;
     }
 
-    const invoices = await invoicesService.list(parsed.data);
+    const invoices = await invoicesService.list(parsed.data, req.auth);
     res.status(200).json(invoices);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const invoice = await invoicesService.getById(readInvoiceId(req));
+    const invoice = await invoicesService.getById(readInvoiceId(req), req.auth);
     res.status(200).json(invoice);
   },
   create: async (req: Request, res: Response): Promise<void> => {
@@ -75,5 +76,31 @@ export const invoicesController = {
       });
     }
     res.status(200).json({ message: "Invoice deleted successfully" });
+  },
+  sendReminder: async (req: Request, res: Response): Promise<void> => {
+    const invoiceId = readInvoiceId(req);
+    const invoice = await invoicesService.getById(invoiceId, req.auth);
+    const recipientEmail = req.body.email as string;
+
+    if (!recipientEmail) {
+      throw new AppError("Recipient email is required", 400, "BAD_REQUEST");
+    }
+
+    await sendInvoiceReminder(
+      { id: invoice.id, client: invoice.client, amount: invoice.amount, due: invoice.due },
+      recipientEmail,
+    );
+
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "reminder",
+        entity: "Invoice",
+        entityId: invoiceId,
+        detail: `Sent invoice reminder to ${recipientEmail}`,
+      });
+    }
+
+    res.status(200).json({ message: "Invoice reminder sent", recipient: recipientEmail });
   },
 };

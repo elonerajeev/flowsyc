@@ -9,8 +9,9 @@ import { createInvoiceSchema, updateInvoiceSchema } from "../validators/invoice.
 
 export const invoicesRouter = Router();
 
-invoicesRouter.get("/", requireAuth, validateQuery(invoiceQuerySchema), asyncHandler(invoicesController.list));
-invoicesRouter.get("/:id", requireAuth, asyncHandler(invoicesController.getOne));
+invoicesRouter.get("/", requireAuth, requireRole(["admin", "manager", "client"]), validateQuery(invoiceQuerySchema), asyncHandler(invoicesController.list));
+invoicesRouter.get("/:id", requireAuth, requireRole(["admin", "manager", "client"]), asyncHandler(invoicesController.getOne));
 invoicesRouter.post("/", requireAuth, requireRole(["admin", "manager"]), validateBody(createInvoiceSchema), asyncHandler(invoicesController.create));
 invoicesRouter.patch("/:id", requireAuth, requireRole(["admin", "manager"]), validateBody(updateInvoiceSchema), asyncHandler(invoicesController.update));
 invoicesRouter.delete("/:id", requireAuth, requireRole(["admin"]), asyncHandler(invoicesController.remove));
+invoicesRouter.post("/:id/remind", requireAuth, requireRole(["admin", "manager"]), asyncHandler(invoicesController.sendReminder));

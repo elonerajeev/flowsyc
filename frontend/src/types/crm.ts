@@ -159,7 +159,7 @@ export interface CollaboratorRecord {
   name: string;
   role: string;
   avatar: string;
-  status: "online" | "idle" | "reviewing";
+  status: AttendanceStatus;
   lastSeen: string;
 }
 
@@ -211,6 +211,7 @@ export interface TaskRecord {
   dueDate: string;
   tags: string[];
   valueStream: "Growth" | "Product" | "Support";
+  column?: TaskColumn;
   projectId?: number | null;
 }
 
@@ -329,6 +330,49 @@ export interface AttendanceRecord {
   note: string;
 }
 
+export type PayrollStatus = "pending" | "processing" | "paid" | "overdue";
+
+export interface PayrollRecord {
+  id: number;
+  memberId: number;
+  name: string;
+  department: string;
+  period: string; // "YYYY-MM"
+  baseSalary: number;
+  allowances: number;
+  deductions: number;
+  netPay: number;
+  status: PayrollStatus;
+  paymentMode: string;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  member?: {
+    designation: string;
+    team: string;
+    avatar: string;
+  };
+}
+
+export interface CalendarEventRecord {
+  id: number;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  notes: string;
+  color: string;
+  repeat: "none" | "weekly" | "monthly";
+  assignmentKind: "none" | "team" | "member";
+  assigneeId: string;
+  assigneeName: string;
+  assigneeMeta: string;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface NoteRecord {
   id: number;
   title: string;
@@ -374,4 +418,23 @@ export interface CandidateRecord {
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type AlertType = "payroll_due" | "invoice_overdue" | "task_overdue" | "project_stalled";
+
+export interface AlertRecord {
+  type: AlertType;
+  severity: "warning" | "critical";
+  title: string;
+  description: string;
+  entityId?: string | number;
+  entityType: string;
+  actionUrl?: string;
+}
+
+export interface AlertsSummary {
+  total: number;
+  critical: number;
+  warning: number;
+  byType: Record<AlertType, number>;
 }

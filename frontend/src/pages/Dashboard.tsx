@@ -15,6 +15,7 @@ import ProgressRing from "@/components/shared/ProgressRing";
 import StatusBadge from "@/components/shared/StatusBadge";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import PersonalizedFocus from "@/components/dashboard/PersonalizedFocus";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useDashboardData, useProjects } from "@/hooks/use-crm-data";
@@ -34,6 +35,7 @@ const item = {
   hidden: { opacity: 0, y: 18 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
 };
+const DASHBOARD_ACTIVITY_PAGE_SIZE = 5;
 
 function LazyDashboardChartsSection({
   revenueSeries,
@@ -109,6 +111,11 @@ export default function Dashboard() {
   const dashboard = dashboardQuery.data;
   const pageError = dashboardQuery.error ?? projectsQuery.error;
   const [activityFilter, setActivityFilter] = useState<"all" | "collaboration" | "sales" | "delivery" | "finance" | "hiring" | "system">("all");
+  const [visibleActivityCount, setVisibleActivityCount] = useState(DASHBOARD_ACTIVITY_PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleActivityCount(DASHBOARD_ACTIVITY_PAGE_SIZE);
+  }, [activityFilter]);
 
   const dashboardView = useMemo(() => {
     const projects = projectsQuery.data ?? [];
@@ -357,7 +364,7 @@ export default function Dashboard() {
               ))}
             </div>
             <div className="space-y-3">
-              {dashboardView.filteredActivityFeed.map((activity) => (
+              {dashboardView.filteredActivityFeed.slice(0, visibleActivityCount).map((activity) => (
                 <div key={activity.id} className={cn("flex items-start gap-3 border border-border/70 bg-secondary/28", RADIUS.lg, SPACING.inset)}>
                   <div
                     className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
@@ -385,6 +392,15 @@ export default function Dashboard() {
                   <StatusBadge status={activity.type} />
                 </div>
               ))}
+            </div>
+            <div className="mt-4">
+              <ShowMoreButton
+                total={dashboardView.filteredActivityFeed.length}
+                visible={visibleActivityCount}
+                pageSize={DASHBOARD_ACTIVITY_PAGE_SIZE}
+                onShowMore={() => setVisibleActivityCount((current) => Math.min(current + DASHBOARD_ACTIVITY_PAGE_SIZE, dashboardView.filteredActivityFeed.length))}
+                onShowLess={() => setVisibleActivityCount(DASHBOARD_ACTIVITY_PAGE_SIZE)}
+              />
             </div>
           </div>
         </motion.section>

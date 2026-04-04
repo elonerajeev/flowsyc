@@ -1,292 +1,442 @@
-import { useMemo, useState } from "react";
-import { BadgeDollarSign, CirclePlus, Search, Target, TrendingUp, Users } from "lucide-react";
-
-import PageLoader from "@/components/shared/PageLoader";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { 
+  Plus, 
+  Filter, 
+  Search, 
+  DollarSign, 
+  TrendingUp, 
+  Users, 
+  Calendar,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  Trash2
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ErrorFallback from "@/components/shared/ErrorFallback";
-import { useLeads, useDeals } from "@/hooks/use-crm-data";
-import { TEXT } from "@/lib/design-tokens";
+import PageLoader from "@/components/shared/PageLoader";
+import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import type { Deal, Lead, SalesMetrics, Pipeline } from "@/types/crm";
 
-const ACTIVE_LEAD_STATUSES = new Set(["new", "contacted", "qualified", "proposal", "negotiation"]);
-const ACTIVE_DEAL_STAGES = new Set(["prospecting", "qualification", "proposal", "negotiation"]);
+const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
+const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
-export default function SalesPage() {
-  const { data: leads = [], isLoading: leadsLoading, error: leadsError, refetch: refetchLeads } = useLeads();
-  const { data: deals = [], isLoading: dealsLoading, error: dealsError, refetch: refetchDeals } = useDeals();
-  const [leadSearch, setLeadSearch] = useState("");
-  const [dealSearch, setDealSearch] = useState("");
+const SalesPage = () => {
+  const { role } = useTheme();
+  const { openQuickCreate, canUseQuickCreate } = useWorkspace();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<"pipeline" | "leads">("pipeline");
 
-  const activeLeads = useMemo(
-    () => leads.filter((lead) => ACTIVE_LEAD_STATUSES.has(lead.status)),
-    [leads],
-  );
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin";
 
-  const activeDeals = useMemo(
-    () => deals.filter((deal) => ACTIVE_DEAL_STAGES.has(deal.stage)),
-    [deals],
-  );
+  const { data: deals = [], isLoading: dealsLoading, error: dealsError, refetch: refetchDeals } = useQuery({
+    queryKey: ["deals"],
+    queryFn: crmService.getDeals,
+  });
 
-  const filteredLeads = useMemo(() => {
-    const q = leadSearch.toLowerCase();
-    if (!q) return activeLeads;
-    return activeLeads.filter(
-      (lead) =>
-        `${lead.firstName} ${lead.lastName}`.toLowerCase().includes(q) ||
-        (lead.company ?? "").toLowerCase().includes(q) ||
-        (lead.assignedTo ?? "").toLowerCase().includes(q),
-    );
-  }, [activeLeads, leadSearch]);
+  const { data: leads = [], isLoading: leadsLoading, error: leadsError, refetch: refetchLeads } = useQuery({
+    queryKey: ["leads"],
+    queryFn: crmService.getLeads,
+  });
 
-  const filteredDeals = useMemo(() => {
-    const q = dealSearch.toLowerCase();
-    if (!q) return activeDeals;
-    return activeDeals.filter(
-      (deal) =>
-        deal.title.toLowerCase().includes(q) ||
-        deal.assignedTo.toLowerCase().includes(q),
-    );
-  }, [activeDeals, dealSearch]);
+  const { data: metrics, error: metricsError, refetch: refetchMetrics } = useQuery({
+    queryKey: ["sales-metrics"],
+    queryFn: crmService.getSalesMetrics,
+  });
 
-  const totalPipelineValue = useMemo(
-    () => activeDeals.reduce((sum, deal) => sum + (deal.value ?? 0), 0),
-    [activeDeals],
-  );
+  const deleteDealMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeDeal(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-metrics"] });
+      toast.success("Deal removed successfully");
+    },
+    onError: () => toast.error("Failed to remove deal"),
+  });
 
-  const avgForecast = useMemo(
-    () =>
-      activeDeals.length
-        ? Math.round(activeDeals.reduce((sum, deal) => sum + deal.probability, 0) / activeDeals.length)
-        : 0,
-    [activeDeals],
-  );
+  const deleteLeadMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeLead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Lead removed successfully");
+    },
+    onError: () => toast.error("Failed to remove lead"),
+  });
 
-  if (leadsLoading || dealsLoading) return <PageLoader />;
+  const filteredDeals = deals.filter(deal => {
+    const matchesSearch = deal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         deal.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStage = stageFilter === "all" || deal.stage === stageFilter;
+    return matchesSearch && matchesStage;
+  });
 
-  if (leadsError) {
+  const filteredLeads = leads.filter(lead => {
+    const matchesSearch = `${lead.firstName} ${lead.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         lead.company?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
+  const getStageColor = (stage: string) => {
+    const colors: Record<string, string> = {
+      "prospecting": "bg-slate-100 text-slate-700",
+      "qualification": "bg-blue-100 text-blue-700",
+      "proposal": "bg-yellow-100 text-yellow-700",
+      "negotiation": "bg-orange-100 text-orange-700",
+      "closed-won": "bg-green-100 text-green-700",
+      "closed-lost": "bg-red-100 text-red-700"
+    };
+    return colors[stage] || "bg-gray-100 text-gray-700";
+  };
+
+  const getLeadStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      "new": "bg-blue-100 text-blue-700",
+      "contacted": "bg-yellow-100 text-yellow-700",
+      "qualified": "bg-green-100 text-green-700",
+      "proposal": "bg-purple-100 text-purple-700",
+      "negotiation": "bg-orange-100 text-orange-700",
+      "won": "bg-green-100 text-green-700",
+      "lost": "bg-red-100 text-red-700"
+    };
+    return colors[status] || "bg-gray-100 text-gray-700";
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const pageError = dealsError || leadsError || metricsError;
+
+  if (pageError) {
     return (
       <ErrorFallback
-        title="Leads failed to load"
-        error={leadsError}
-        description="Could not load the leads pipeline. Retry to refresh."
-        onRetry={() => refetchLeads()}
-        retryLabel="Retry leads"
+        title="Sales data failed to load"
+        error={pageError}
+        description="The pipeline view could not load deals, leads, or analytics. Retry to refresh the sales workspace."
+        onRetry={() => Promise.all([refetchDeals(), refetchLeads(), refetchMetrics()])}
+        retryLabel="Retry sales"
       />
     );
   }
 
-  if (dealsError) {
-    return (
-      <ErrorFallback
-        title="Deals failed to load"
-        error={dealsError}
-        description="Could not load the deals pipeline. Retry to refresh."
-        onRetry={() => refetchDeals()}
-        retryLabel="Retry deals"
-      />
-    );
-  }
+  if (dealsLoading || leadsLoading) return <PageLoader />;
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className={cn("inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/45 px-3 py-1 text-xs uppercase tracking-[0.22em] text-muted-foreground", TEXT.eyebrow)}>
-              <CirclePlus className="h-3.5 w-3.5 text-primary" />
-              Sales
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-6"
+    >
+      {/* Header */}
+      <motion.section variants={item} className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground text-xs uppercase tracking-[0.16em]">
+              <DollarSign className="h-3.5 w-3.5 text-primary" />
+              Sales Pipeline
             </div>
-            <h1 className="font-display text-3xl font-semibold text-foreground">Pipeline</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Consolidated leads and deals so the team focuses on routing, scoring, and closing.
-            </p>
+            <div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">Sales</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Manage your sales pipeline, track deals, and convert leads into customers.
+              </p>
+            </div>
           </div>
-          {totalPipelineValue > 0 && (
-            <div className="inline-flex items-center gap-2 rounded-2xl border border-success/40 bg-success/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-success">
-              ${totalPipelineValue.toLocaleString()} pipeline value
+          {canUseQuickCreate ? (
+            <Button 
+              onClick={openQuickCreate}
+              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition"
+            >
+              <Plus className="h-4 w-4" />
+              Add Deal
+            </Button>
+          ) : (
+            <div className="inline-flex items-center rounded-2xl border border-border bg-secondary px-5 py-3 text-sm font-semibold text-muted-foreground">
+              Read only
             </div>
           )}
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {[
-            {
-              label: "Active leads",
-              value: activeLeads.length > 0 ? String(activeLeads.length) : "None",
-              detail: "Ready for nurture",
-              icon: Users,
-            },
-            {
-              label: "Deals in motion",
-              value: activeDeals.length > 0 ? String(activeDeals.length) : "None",
-              detail: "High propensity",
-              icon: Target,
-            },
-            {
-              label: "Avg forecast",
-              value: activeDeals.length > 0 ? `${avgForecast}%` : "—",
-              detail: "Probabilistic",
-              icon: TrendingUp,
-            },
-          ].map((card) => (
-            <div key={card.label} className="rounded-2xl border border-border/60 bg-secondary/20 p-4 shadow-inner">
-              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <card.icon className="h-4 w-4" />
+        {/* Sales Metrics */}
+        {metrics && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <DollarSign className="h-5 w-5" />
               </div>
-              <p className={cn("uppercase tracking-[0.18em] text-muted-foreground", TEXT.eyebrow)}>{card.label}</p>
-              <p className="font-display text-2xl font-semibold text-foreground">{card.value}</p>
-              <p className="text-xs text-muted-foreground">{card.detail}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Pipeline Value</p>
+              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
+                {formatCurrency(metrics.pipelineValue)}
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="space-y-4">
-          {/* Leads */}
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Leads</p>
-                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Early funnel</h2>
+            <div className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <TrendingUp className="h-5 w-5" />
               </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={leadSearch}
-                  onChange={(e) => setLeadSearch(e.target.value)}
-                  placeholder="Search leads"
-                  className="h-9 rounded-2xl border border-border/70 bg-background/55 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-primary"
-                />
-              </div>
+              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Conversion Rate</p>
+              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
+                {metrics.conversionRate}%
+              </p>
             </div>
-
-            <div className="mt-4 space-y-3">
-              {filteredLeads.length > 0 ? (
-                filteredLeads.map((lead) => (
-                  <article key={lead.id} className="rounded-xl border border-border/70 bg-secondary/15 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          {lead.firstName} {lead.lastName}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {lead.company ?? "—"}
-                          {lead.assignedTo ? ` · ${lead.assignedTo}` : ""}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-border/70 bg-secondary/30 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {lead.status}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Score {lead.score}/100</span>
-                      <span className="capitalize">via {lead.source}</span>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
-                  <p className="text-sm font-semibold text-foreground">
-                    {leadSearch ? "No matching leads" : "No active leads"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {leadSearch
-                      ? "Try a different search term."
-                      : "Leads will appear here as they enter the pipeline."}
-                  </p>
-                </div>
-              )}
+            <div className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Users className="h-5 w-5" />
+              </div>
+              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Deals Won</p>
+              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
+                {metrics.dealsWon}
+              </p>
+            </div>
+            <div className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Calendar className="h-5 w-5" />
+              </div>
+              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Avg. Sales Cycle</p>
+              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
+                {metrics.salesCycle} days
+              </p>
             </div>
           </div>
+        )}
+      </motion.section>
 
-          {/* Deals */}
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Deals</p>
-                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">High-intent pipeline</h2>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={dealSearch}
-                  onChange={(e) => setDealSearch(e.target.value)}
-                  placeholder="Search deals"
-                  className="h-9 rounded-2xl border border-border/70 bg-background/55 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-primary"
-                />
-              </div>
+      {/* Tabs and Filters */}
+      <motion.section variants={item} className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <Button
+              variant={activeTab === "pipeline" ? "default" : "outline"}
+              onClick={() => setActiveTab("pipeline")}
+              className={cn(
+                "rounded-xl transition-all",
+                activeTab === "pipeline" 
+                  ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md" 
+                  : "border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+              )}
+            >
+              Pipeline
+            </Button>
+            <Button
+              variant={activeTab === "leads" ? "default" : "outline"}
+              onClick={() => setActiveTab("leads")}
+              className={cn(
+                "rounded-xl transition-all",
+                activeTab === "leads" 
+                  ? "bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md" 
+                  : "border-orange-200 text-orange-700 hover:bg-orange-50"
+              )}
+            >
+              Leads
+            </Button>
+          </div>
+          
+          <div className="flex gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder={activeTab === "pipeline" ? "Search deals..." : "Search leads..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-64"
+              />
             </div>
+            {activeTab === "pipeline" && (
+              <Select value={stageFilter} onValueChange={setStageFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="All Stages" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  <SelectItem value="prospecting">Prospecting</SelectItem>
+                  <SelectItem value="qualification">Qualification</SelectItem>
+                  <SelectItem value="proposal">Proposal</SelectItem>
+                  <SelectItem value="negotiation">Negotiation</SelectItem>
+                  <SelectItem value="closed-won">Closed Won</SelectItem>
+                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
 
-            <div className="mt-4 space-y-3">
+        {/* Pipeline View */}
+        {activeTab === "pipeline" && (
+          <div className="mt-6">
+            <div className="space-y-4">
               {filteredDeals.length > 0 ? (
                 filteredDeals.map((deal) => (
-                  <article key={deal.id} className="rounded-xl border border-border/70 bg-secondary/15 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{deal.title}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {deal.stage} · {deal.assignedTo}
-                        </p>
+                  <Card key={deal.id} className="rounded-xl border-border/50 hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold text-foreground">{deal.title}</h3>
+                            <Badge className={getStageColor(deal.stage)}>
+                              {deal.stage.replace('-', ' ')}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {deal.probability}% probability
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">{deal.description}</p>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground">
+                              {formatCurrency(deal.value)}
+                            </span>
+                            <span>Expected: {new Date(deal.expectedCloseDate).toLocaleDateString()}</span>
+                            {deal.tags.map(tag => (
+                              <Badge key={tag} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            {canEdit && (
+                            <DropdownMenuItem>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Deal
+                            </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                            <DropdownMenuItem 
+                              className="text-destructive" 
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to remove deal "${deal.title}"?`)) {
+                                  deleteDealMutation.mutate(deal.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Deal
+                            </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold text-foreground">
-                        {deal.currency} {deal.value.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Probability {deal.probability}%</span>
-                      <span>Close: {deal.expectedCloseDate}</span>
-                    </div>
-                  </article>
+                    </CardContent>
+                  </Card>
                 ))
               ) : (
-                <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
-                  <p className="text-sm font-semibold text-foreground">
-                    {dealSearch ? "No matching deals" : "No active deals"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {dealSearch
-                      ? "Try a different search term."
-                      : "Deals in progress will appear here."}
-                  </p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  <p className="text-lg font-medium text-foreground">No deals found</p>
+                  <p className="text-sm text-muted-foreground">Try adjusting your search or filters.</p>
                 </div>
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        <aside className="space-y-4">
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
-            <div className="flex items-center gap-3">
-              <BadgeDollarSign className="h-5 w-5 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Pipeline summary</p>
-            </div>
-            <div className="mt-4 space-y-2">
-              {[
-                { label: "Total leads", value: String(leads.length) },
-                { label: "Total deals", value: String(deals.length) },
-                { label: "Won deals", value: String(deals.filter((d) => d.stage === "closed-won").length) },
-                { label: "Lost deals", value: String(deals.filter((d) => d.stage === "closed-lost").length) },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/20 px-4 py-3"
-                >
-                  <p className="text-sm text-muted-foreground">{item.label}</p>
-                  <p className="font-semibold text-foreground">{item.value}</p>
+        {/* Leads View */}
+        {activeTab === "leads" && (
+          <div className="mt-6">
+            <div className="space-y-4">
+              {filteredLeads.length > 0 ? (
+                filteredLeads.map((lead) => (
+                  <Card key={lead.id} className="rounded-xl border-border/50 hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold text-foreground">
+                              {lead.firstName} {lead.lastName}
+                            </h3>
+                            <Badge className={getLeadStatusColor(lead.status)}>
+                              {lead.status}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">
+                              Score: {lead.score}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span>{lead.company}</span>
+                            <span>{lead.jobTitle}</span>
+                            <span>{lead.email}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {lead.source}
+                            </Badge>
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Lead
+                            </DropdownMenuItem>
+                            {canEdit && (
+                            <DropdownMenuItem>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Lead
+                            </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to remove lead "${lead.firstName} ${lead.lastName}"?`)) {
+                                  deleteLeadMutation.mutate(lead.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Lead
+                            </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  <p className="text-lg font-medium text-foreground">No leads found</p>
+                  <p className="text-sm text-muted-foreground">Try adjusting your search.</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
-
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
-            <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Pipeline notes</p>
-            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <p>Leads stay separate from clients so late-stage revenue doesn't blur qualification.</p>
-              <p>Stage and score fields are the ones wired to automation services first.</p>
-            </div>
-          </div>
-        </aside>
-      </section>
-    </div>
+        )}
+      </motion.section>
+    </motion.div>
   );
-}
+};
+
+export default SalesPage;

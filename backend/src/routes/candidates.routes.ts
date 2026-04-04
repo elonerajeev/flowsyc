@@ -8,13 +8,13 @@ import { createCandidateSchema, updateCandidateSchema } from "../validators/hiri
 
 export const candidatesRouter = Router();
 
-candidatesRouter.get("/", requireAuth, asyncHandler(candidatesController.list));
-candidatesRouter.get("/:id", requireAuth, asyncHandler(candidatesController.getOne));
+candidatesRouter.get("/", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.list));
+candidatesRouter.get("/:id", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.getOne));
 candidatesRouter.post("/", requireAuth, requireRole(["admin", "manager"]), validateBody(createCandidateSchema), asyncHandler(candidatesController.create));
 candidatesRouter.patch("/:id", requireAuth, requireRole(["admin", "manager"]), validateBody(updateCandidateSchema), asyncHandler(candidatesController.update));
 candidatesRouter.post("/:id/next-stage", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.moveToNextStage));
 candidatesRouter.post("/:id/reject", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.reject));
 candidatesRouter.post("/:id/offer-letter", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.generateOfferLetter));
-candidatesRouter.get("/:id/timeline", requireAuth, asyncHandler(candidatesController.getTimeline));
+candidatesRouter.get("/:id/timeline", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.getTimeline));
 candidatesRouter.post("/:id/note", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.addNote));
 candidatesRouter.delete("/:id", requireAuth, requireRole(["admin", "manager"]), asyncHandler(candidatesController.remove));

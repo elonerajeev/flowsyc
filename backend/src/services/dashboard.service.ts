@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import { getAuditLogs } from "../utils/audit";
 
 const pipelineColors = [
   { name: "Qualified", color: "hsl(211 38% 51%)" },
@@ -7,10 +8,66 @@ const pipelineColors = [
   { name: "Closed Won", color: "hsl(173 58% 39%)" },
 ];
 
+function formatRelativeTime(value: Date | string) {
+  const timestamp = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return "Unknown";
+  }
+
+  const diffMs = Date.now() - timestamp.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000));
+
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+
+  return timestamp.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function mapAuditCategory(entity: string) {
+  switch (entity) {
+    case "Client":
+      return "sales" as const;
+    case "Project":
+      return "delivery" as const;
+    case "Task":
+    case "Note":
+      return "collaboration" as const;
+    case "Invoice":
+      return "finance" as const;
+    case "Candidate":
+    case "JobPosting":
+      return "hiring" as const;
+    default:
+      return "system" as const;
+  }
+}
+
+function mapAuditType(action: string) {
+  switch (action) {
+    case "create":
+      return "active" as const;
+    case "update":
+    case "stage_change":
+    case "email_sent":
+      return "in-progress" as const;
+    case "delete":
+    case "rejected":
+      return "rejected" as const;
+    default:
+      return "completed" as const;
+  }
+}
+
 export const dashboardService = {
   async get() {
     // TODO: add 5-min cache.
-    const [clientCounts, projectCounts, taskCounts, memberCounts, invoiceCounts, invoices, members] = await Promise.all([
+    const [clientCounts, projectCounts, taskCounts, memberCounts, invoiceCounts, invoices, members, auditLogs] = await Promise.all([
       prisma.client.groupBy({
         by: ["status"],
         where: { deletedAt: null },
@@ -42,11 +99,17 @@ export const dashboardService = {
         select: { amount: true, createdAt: true, date: true },
       }),
       prisma.teamMember.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          attendance: {
+            in: ["present", "remote", "late"],
+          },
+        },
         orderBy: { updatedAt: "desc" },
-        take: 4,
-        select: { id: true, name: true, designation: true, avatar: true },
+        take: 6,
+        select: { id: true, name: true, designation: true, avatar: true, attendance: true, updatedAt: true },
       }),
+      getAuditLogs(12),
     ]);
 
     const totalClients = clientCounts.reduce((sum, entry) => sum + entry._count._all, 0);
@@ -61,6 +124,8 @@ export const dashboardService = {
 
     const totalMembers = memberCounts.reduce((sum, entry) => sum + entry._count._all, 0);
     const presentMembers = memberCounts.find((entry) => entry.attendance === "present")?._count._all ?? 0;
+    const lateMembers = memberCounts.find((entry) => entry.attendance === "late")?._count._all ?? 0;
+    const remoteMembers = memberCounts.find((entry) => entry.attendance === "remote")?._count._all ?? 0;
 
     const totalInvoices = invoiceCounts.reduce((sum, entry) => sum + entry._count._all, 0);
 
@@ -237,22 +302,19 @@ export const dashboardService = {
       revenueSeries,
       pipelineBreakdown,
       operatingCadence,
-      activityFeed: totalClients > 0 || totalProjects > 0 || totalTasks > 0 ? [
-        ...(activeProjects > 0 ? [{ id: 1, text: `${activeProjects} active projects are in progress`, time: "5 min ago", type: "active" as const, category: "delivery" as const, source: "Projects" }] : []),
-        ...(totalTasks > 0 ? [{ id: 2, text: `${totalTasks} tracked tasks in the current board`, time: "18 min ago", type: "pending" as const, category: "collaboration" as const, source: "Tasks" }] : []),
-        ...(totalMembers > 0 ? [{ id: 3, text: `${totalMembers} team members synchronized`, time: "42 min ago", type: "completed" as const, category: "system" as const, source: "People" }] : []),
-        ...(totalInvoices > 0 ? [{ id: 4, text: `${totalInvoices} invoices available`, time: "2 hours ago", type: "in-progress" as const, category: "finance" as const, source: "Billing" }] : []),
-      ] : [
-        { id: 1, text: "No activity yet. Start by adding clients or projects.", time: "now", type: "pending" as const, category: "system" as const, source: "System" },
-      ],
-      todayFocus: totalClients > 0 || totalProjects > 0 ? [
-        `${activeProjects} projects are currently active.`,
-        `${pendingClients} clients need follow-up.`,
-        `${completedTasks} tasks are already completed.`,
-      ] : [
-        "No data available yet.",
-        "Start by adding clients and projects.",
-        "Your workspace is ready to use.",
+      activityFeed: auditLogs.map((log, index) => ({
+        id: Number(log.id) || index + 1,
+        text: log.detail?.trim() || `${log.userName} ${log.action.replace(/_/g, " ")} ${log.entity}`,
+        time: formatRelativeTime(log.createdAt),
+        type: mapAuditType(log.action),
+        category: mapAuditCategory(log.entity),
+        source: log.entity,
+      })),
+      todayFocus: [
+        ...(activeProjects > 0 ? [`${activeProjects} active project${activeProjects === 1 ? "" : "s"} currently require delivery attention.`] : []),
+        ...(pendingClients > 0 ? [`${pendingClients} client${pendingClients === 1 ? "" : "s"} remain in pending follow-up state.`] : []),
+        ...(completedTasks > 0 ? [`${completedTasks} task${completedTasks === 1 ? "" : "s"} have already been completed.`] : []),
+        ...(unreadMessages > 0 ? [`${unreadMessages} unread conversation update${unreadMessages === 1 ? "" : "s"} still need review.`] : []),
       ],
       executionReadiness,
       collaborators: members.map((member) => ({
@@ -260,8 +322,8 @@ export const dashboardService = {
         name: member.name,
         role: member.designation,
         avatar: member.avatar,
-        status: "online" as const,
-        lastSeen: "now",
+        status: member.attendance,
+        lastSeen: member.updatedAt.toISOString(),
       })),
       focusClients: priorityAccounts,
       atRiskClients: atRiskAccountDetails,

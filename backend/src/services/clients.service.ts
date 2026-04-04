@@ -2,6 +2,7 @@ import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import type { UserRole } from "../config/types";
 import {
   buildClientAvatar,
   fromDbClientSegment,
@@ -11,6 +12,7 @@ import {
   toDbClientStatus,
   toDbClientTier,
 } from "../utils/client-mapping";
+import { getClientAccessEmail } from "../utils/access-control";
 
 type ClientRecord = {
   id: number;
@@ -46,6 +48,12 @@ type ClientFilters = {
   sort: "name" | "revenue" | "createdAt" | "healthScore";
   order: "asc" | "desc";
 };
+
+type AccessScope = {
+  role: UserRole;
+  email: string;
+  userId?: string;
+} | null | undefined;
 
 type ClientInput = {
   name: string;
@@ -119,8 +127,15 @@ function mapClient(client: {
   };
 }
 
-function buildWhere(filters: ClientFilters): Prisma.ClientWhereInput {
+async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<Prisma.ClientWhereInput> {
   const and: Prisma.ClientWhereInput[] = [{ deletedAt: null }];
+
+  const clientEmail = await getClientAccessEmail(access);
+  if (clientEmail) {
+    and.push({
+      email: { equals: clientEmail, mode: "insensitive" },
+    });
+  }
 
   if (filters.status) {
     and.push({ status: toDbClientStatus(filters.status) });
@@ -174,16 +189,25 @@ function isEmailUniqueConstraintError(error: unknown) {
 }
 
 export const clientsService = {
-  async getById(clientId: number) {
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
+  async getById(clientId: number, access?: AccessScope) {
+    const clientEmail = await getClientAccessEmail(access);
+    const client = clientEmail
+      ? await prisma.client.findFirst({
+          where: {
+            deletedAt: null,
+            id: clientId,
+            email: { equals: clientEmail, mode: "insensitive" },
+          },
+        })
+      : await prisma.client.findUnique({ where: { id: clientId } });
     if (!client || client.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
     }
     return mapClient(client);
   },
 
-  async list(filters: ClientFilters) {
-    const where = buildWhere(filters);
+  async list(filters: ClientFilters, access?: AccessScope) {
+    const where = await buildWhere(filters, access);
 
     const [total, clients] = await prisma.$transaction([
       prisma.client.count({ where }),
@@ -306,10 +330,14 @@ export const clientsService = {
     });
   },
 
-  async getPipeline() {
+  async getPipeline(access?: AccessScope) {
+    const where = await buildWhere(
+      { page: 1, limit: 1, sort: "createdAt", order: "desc" },
+      access,
+    );
     const clients = await prisma.client.groupBy({
       by: ["segment"],
-      where: { deletedAt: null },
+      where,
       _count: { _all: true },
     });
 

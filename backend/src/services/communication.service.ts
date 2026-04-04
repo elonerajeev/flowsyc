@@ -1,4 +1,8 @@
 import { prisma } from "../config/prisma";
+// import {
+//   conversationSeedRecords,
+//   messageSeedRecords,
+// } from "../data/crm-static";
 
 type ConversationRecord = {
   id: number;
@@ -67,6 +71,10 @@ export const communicationService = {
       orderBy: { updatedAt: "desc" },
     });
 
+    if (conversations.length === 0) {
+      return [];
+    }
+
     return conversations.map(mapConversation);
   },
 
@@ -76,6 +84,35 @@ export const communicationService = {
       orderBy: [{ conversationId: "asc" }, { createdAt: "asc" }],
     });
 
+    if (messages.length === 0) {
+      return [];
+    }
+
     return messages.map(mapMessage);
+  },
+
+  async createMessage(data: { conversationId: number; text: string; sender: string; isMe: boolean }) {
+    const message = await prisma.message.create({
+      data: {
+        conversationId: data.conversationId,
+        text: data.text,
+        sender: data.sender,
+        isMe: data.isMe,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Update conversation last message and timestamp
+    await prisma.conversation.update({
+      where: { id: data.conversationId },
+      data: {
+        lastMessage: data.text,
+        updatedAt: new Date(),
+        time: "Just now",
+      },
+    });
+
+    return mapMessage(message);
   },
 };

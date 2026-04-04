@@ -1,13 +1,17 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, ClipboardList, FolderKanban, Search, Sparkles, Users, Zap } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Building2, ClipboardList, DollarSign, FolderKanban, Search, Sparkles, UserPlus, Users, Zap } from "lucide-react";
 
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useClients, useProjects, useTasks, useTeamMembers } from "@/hooks/use-crm-data";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { cn } from "@/lib/utils";
+import { crmService } from "@/services/crm";
+import { isRemoteApiEnabled } from "@/lib/api-client";
 
-type EntryType = "action" | "client" | "project" | "task" | "member";
+type EntryType = "action" | "client" | "project" | "task" | "member" | "invoice" | "job";
 
 interface SearchEntry {
   id: string;
@@ -19,26 +23,53 @@ interface SearchEntry {
 }
 
 const typeConfig: Record<EntryType, { icon: React.ComponentType<{ className?: string }>; color: string; label: string }> = {
-  action:  { icon: Sparkles,     color: "text-primary bg-primary/10",     label: "Action" },
-  client:  { icon: Building2,    color: "text-blue-500 bg-blue-500/10",   label: "Client" },
+  action:  { icon: Sparkles,     color: "text-primary bg-primary/10",       label: "Action" },
+  client:  { icon: Building2,    color: "text-blue-500 bg-blue-500/10",     label: "Client" },
   project: { icon: FolderKanban, color: "text-violet-500 bg-violet-500/10", label: "Project" },
   task:    { icon: ClipboardList, color: "text-emerald-500 bg-emerald-500/10", label: "Task" },
   member:  { icon: Users,        color: "text-orange-500 bg-orange-500/10", label: "Member" },
+  invoice: { icon: DollarSign,   color: "text-yellow-600 bg-yellow-600/10", label: "Invoice" },
+  job:     { icon: UserPlus,     color: "text-pink-500 bg-pink-500/10",     label: "Job" },
+};
+
+const remoteTypeMap: Record<string, EntryType> = {
+  client: "client",
+  project: "project",
+  task: "task",
+  "team-member": "member",
+  invoice: "invoice",
+  job: "job",
 };
 
 export default function CommandPalette() {
   const { commandOpen, closeCommandPalette, openQuickCreate, canUseQuickCreate } = useWorkspace();
+  const { role } = useTheme();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
+  const useRemote = isRemoteApiEnabled();
 
-  // Only fetch when open - enabled flag
-  const { data: clients = [] }     = useClients();
-  const { data: projects = [] }    = useProjects();
-  const { data: tasks = { todo: [], "in-progress": [], done: [] } } = useTasks();
-  const { data: teamMembers = [] } = useTeamMembers();
+  const canSeeClients = role === "admin" || role === "manager" || role === "client";
+  const canSeeProjects = role === "admin" || role === "manager" || role === "employee";
+  const canSeeTasks = canSeeProjects;
+  const canSeeTeam = role === "admin" || role === "manager";
 
-  const allEntries = useMemo<SearchEntry[]>(() => {
+  // Local data hooks (used for initial display and as fallback)
+  const { data: clients = [] } = useClients({ enabled: commandOpen && canSeeClients && !useRemote });
+  const { data: projects = [] } = useProjects({ enabled: commandOpen && canSeeProjects && !useRemote });
+  const { data: tasks = { todo: [], "in-progress": [], done: [] } } = useTasks(undefined, { enabled: commandOpen && canSeeTasks && !useRemote });
+  const { data: teamMembers = [] } = useTeamMembers({ enabled: commandOpen && canSeeTeam && !useRemote });
+
+  // Backend search (debounced via React Query)
+  const { data: remoteResults = [] } = useQuery({
+    queryKey: ["global-search", deferredQuery],
+    queryFn: () => crmService.globalSearch(deferredQuery),
+    enabled: commandOpen && useRemote && deferredQuery.trim().length >= 2,
+    staleTime: 1000 * 30,
+  });
+
+  // Local entries for fallback / initial display
+  const localEntries = useMemo<SearchEntry[]>(() => {
     const entries: SearchEntry[] = [];
 
     if (canUseQuickCreate) {
@@ -53,13 +84,34 @@ export default function CommandPalette() {
     return entries;
   }, [canUseQuickCreate, clients, projects, tasks, teamMembers]);
 
+  // Merge remote results into entries when searching
+  const allEntries = useMemo<SearchEntry[]>(() => {
+    if (useRemote && deferredQuery.trim().length >= 2) {
+      const remoteEntries: SearchEntry[] = remoteResults.map(r => ({
+        id: `remote-${r.type}-${r.id}`,
+        title: r.title,
+        description: r.subtitle,
+        type: remoteTypeMap[r.type] ?? "action",
+        route: r.url,
+      }));
+      // Add quick create action at top
+      const actions: SearchEntry[] = canUseQuickCreate
+        ? [{ id: "quick-create", title: "Quick Create", description: "New client, project, task, or invoice", type: "action", intent: "open-quick-create" }]
+        : [];
+      return [...actions, ...remoteEntries];
+    }
+    return localEntries;
+  }, [useRemote, deferredQuery, remoteResults, localEntries, canUseQuickCreate]);
+
   const filtered = useMemo(() => {
     if (!deferredQuery.trim()) return allEntries.slice(0, 10);
+    // When using remote, results are already filtered
+    if (useRemote && deferredQuery.trim().length >= 2) return allEntries.slice(0, 15);
     const q = deferredQuery.toLowerCase();
     return allEntries.filter(e =>
       e.title.toLowerCase().includes(q) || e.description.toLowerCase().includes(q)
     ).slice(0, 8);
-  }, [allEntries, deferredQuery]);
+  }, [allEntries, deferredQuery, useRemote]);
 
   // Group by type when no query
   const grouped = useMemo(() => {
@@ -110,7 +162,9 @@ export default function CommandPalette() {
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Global Search</p>
-            <p className="text-[11px] text-muted-foreground">{allEntries.length} items indexed</p>
+            <p className="text-[11px] text-muted-foreground">
+              {useRemote ? "Searching across all entities" : `${allEntries.length} items indexed`}
+            </p>
           </div>
         </div>
 

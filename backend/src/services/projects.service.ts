@@ -1,7 +1,9 @@
 import { Prisma, type ProjectStage, type ProjectStatus } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
+import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
+import { getEmployeeProjectScope } from "../utils/access-control";
 
 type ProjectRecord = {
   id: number;
@@ -34,6 +36,12 @@ type ProjectQuery = {
   limit: number;
   status?: ProjectRecord["status"];
 };
+
+type AccessScope = {
+  role: UserRole;
+  userId: string;
+  email: string;
+} | null | undefined;
 
 function toDbStatus(status: ProjectRecord["status"]): ProjectStatus {
   return status === "in-progress" ? "in_progress" : status;
@@ -81,18 +89,30 @@ function mapProject(project: {
 }
 
 export const projectsService = {
-  async getById(projectId: number) {
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+  async getById(projectId: number, access?: AccessScope) {
+    const employeeTeamMarker = await getEmployeeProjectScope(access);
+    const project = employeeTeamMarker
+      ? await prisma.project.findFirst({
+          where: {
+            deletedAt: null,
+            id: projectId,
+            team: { has: employeeTeamMarker },
+          },
+        })
+      : await prisma.project.findUnique({ where: { id: projectId } });
+    
     if (!project || project.deletedAt) {
       throw new AppError("Project not found", 404, "NOT_FOUND");
     }
     return mapProject(project);
   },
 
-  async list(query: ProjectQuery) {
+  async list(query: ProjectQuery, access?: AccessScope) {
+    const employeeTeamMarker = await getEmployeeProjectScope(access);
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       ...(query.status ? { status: toDbStatus(query.status) } : {}),
+      ...(employeeTeamMarker ? { team: { has: employeeTeamMarker } } : {}),
     };
 
     const [total, projects] = await prisma.$transaction([

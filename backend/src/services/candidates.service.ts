@@ -138,13 +138,29 @@ function buildOfferLetterEmail(data: {
 }
 
 export const candidatesService = {
-  async list() {
-    const candidates = await prisma.candidate.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      include: { JobPosting: { select: { title: true } } },
-    });
-    return { data: candidates.map(mapCandidate) };
+  async list(query?: { page?: number; limit?: number; stage?: string; jobId?: number }) {
+    const page = query?.page ?? 1;
+    const limit = Math.min(query?.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    const where: { deletedAt: null; stage?: string; jobId?: number } = { deletedAt: null };
+    if (query?.stage) where.stage = query.stage as any;
+    if (query?.jobId) where.jobId = query.jobId;
+
+    const [candidates, total] = await Promise.all([
+      prisma.candidate.findMany({
+        where: where as any,
+        orderBy: { createdAt: "desc" },
+        include: { JobPosting: { select: { title: true } } },
+        skip,
+        take: limit,
+      }),
+      prisma.candidate.count({ where: where as any }),
+    ]);
+    return {
+      data: candidates.map(mapCandidate),
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
   },
 
   async getById(candidateId: number) {

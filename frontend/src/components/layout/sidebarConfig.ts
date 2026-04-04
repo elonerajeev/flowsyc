@@ -24,6 +24,7 @@ import {
   PlugZap,
   ReceiptText,
   UsersRound,
+  Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -88,7 +89,7 @@ export const sidebarSections: SidebarSection[] = [
     icon: BadgeDollarSign,
     items: [
       { to: "/sales/clients", icon: UserCheck, label: "Clients", roles: ["admin", "manager", "client"] },
-      { to: "/sales", icon: PieChart, label: "Pipeline", roles: ["admin", "manager", "employee"], badge: "New" },
+      { to: "/sales/pipelines", icon: PieChart, label: "Pipelines", roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -131,6 +132,7 @@ export const sidebarSections: SidebarSection[] = [
       { to: "/system/settings", icon: Settings, label: "Settings", roles: ["admin", "manager", "employee", "client"] },
       { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager", "employee", "client"] },
       { to: "/system/integrations", icon: PlugZap, label: "Integrations", roles: ["admin", "manager"], badge: "New" },
+      { to: "/system/audit", icon: Shield, label: "Audit Logs", roles: ["admin", "manager"] },
       { to: "/system/billing", icon: CreditCard, label: "Billing", roles: ["admin", "manager", "client"] },
     ],
   },

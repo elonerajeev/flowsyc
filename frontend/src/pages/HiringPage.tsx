@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight, Edit2, Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useCandidates, useJobPostings, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type CandidateStage = "applied" | "screening" | "interview" | "offer" | "hired" | "rejected";
 type JobPriority = "urgent" | "high" | "normal" | "low";
@@ -52,6 +53,10 @@ export default function HiringPage() {
     refetch: refetchCandidates,
   } = useCandidates();
 
+  const { role } = useTheme();
+  const canManageHiring = role === "admin" || role === "manager";
+  const canDeleteHiring = role === "admin" || role === "manager"; // Matches backend routes for candidates
+
   const [expandedJobs, setExpandedJobs] = useState<Set<number>>(new Set());
   const [activeStage, setActiveStage] = useState<CandidateStage | null>(null);
   const queryClient = useQueryClient();
@@ -66,6 +71,15 @@ export default function HiringPage() {
     mutationFn: (jobId: number) => crmService.cloneJob(jobId),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: crmKeys.jobPostings }); toast.success("Job cloned as draft"); },
     onError: () => toast.error("Failed to clone job"),
+  });
+
+  const deleteCandidateMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeCandidate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.candidates });
+      toast.success("Candidate removed");
+    },
+    onError: () => toast.error("Failed to remove candidate"),
   });
 
   const toggleJobExpanded = (jobId: number) => {
@@ -215,7 +229,7 @@ export default function HiringPage() {
                             initial={{ opacity: 0, x: -12 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between rounded-xl bg-background/40 px-3 py-2"
+                            className="flex items-center justify-between rounded-xl bg-background/40 px-3 py-2 group"
                           >
                             <div className="flex items-center gap-2">
                               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background/60 text-[10px] font-bold">
@@ -226,9 +240,33 @@ export default function HiringPage() {
                                 <p className="text-[10px] opacity-70">{c.jobTitle}</p>
                               </div>
                             </div>
-                            {c.rating !== undefined && c.rating > 0 && (
-                              <span className="text-[10px] opacity-80">{"★".repeat(c.rating)}</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {canManageHiring && (
+                                <button
+                                  onClick={() => toast.info("Edit mode coming via Hiring extension")}
+                                  className="p-1 rounded-full hover:bg-background/60 text-muted-foreground hover:text-primary transition opacity-0 group-hover:opacity-100"
+                                  title="Edit candidate"
+                                >
+                                  <Edit2 className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                              {canDeleteHiring && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Are you sure you want to remove ${c.name}?`)) {
+                                      deleteCandidateMutation.mutate(c.id);
+                                    }
+                                  }}
+                                  className="p-1 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
+                                  title="Delete candidate"
+                                >
+                                  <Trash2 className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                              {c.rating !== undefined && c.rating > 0 && (
+                                <span className="text-[10px] opacity-80">{"★".repeat(c.rating)}</span>
+                              )}
+                            </div>
                           </motion.div>
                         ))
                       )}

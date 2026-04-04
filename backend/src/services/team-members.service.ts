@@ -3,6 +3,7 @@ import { Prisma, type PaymentMode } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
+import { logger } from "../utils/logger";
 
 type TeamMemberRecord = {
   id: number;
@@ -202,9 +203,14 @@ export const teamMembersService = {
     });
 
     // Persist updated workloads back to DB (fire and forget)
-    Promise.all(membersWithWorkload.map(m =>
+    Promise.allSettled(membersWithWorkload.map(m =>
       prisma.teamMember.update({ where: { id: m.id }, data: { workload: m.workload } })
-    )).catch(() => {});
+    )).then(results => {
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failures.length > 0) {
+        logger.warn("Some workload updates failed", { failures: failures.map(f => f.reason) });
+      }
+    });
 
     return {
       data: membersWithWorkload.map(mapMember),

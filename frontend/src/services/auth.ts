@@ -1,4 +1,4 @@
-import { readStoredJSON, readStoredString, writeStoredJSON, writeStoredString, removeStoredValue } from "@/lib/preferences";
+import { readStoredJSON, writeStoredJSON, removeStoredValue } from "@/lib/preferences";
 import { isRemoteApiEnabled, requestJson } from "@/lib/api-client";
 import type { UserRole } from "@/contexts/ThemeContext";
 import type { PaymentMode } from "@/types/crm";
@@ -35,13 +35,12 @@ export type AuthUser = {
 
 export type AuthSession = {
   user: AuthUser;
-  accessToken: string;
+  // Tokens are now in httpOnly cookies, but we keep the type for mock mode
+  accessToken?: string;
   refreshToken?: string;
 };
 
 const AUTH_USER_KEY = "crm-auth-user";
-const AUTH_TOKEN_KEY = "crm-auth-token";
-const AUTH_REFRESH_KEY = "crm-auth-refresh-token";
 
 function getMockProfile(role: UserRole): Omit<AuthUser, "id" | "name" | "email" | "role"> {
   switch (role) {
@@ -142,38 +141,23 @@ function createMockSession(credentials: AuthCredentials): AuthSession {
   };
 }
 
-function persistSession(session: AuthSession | null) {
-  if (!session) {
+function persistUser(user: AuthUser | null) {
+  if (!user) {
     removeStoredValue(AUTH_USER_KEY);
-    removeStoredValue(AUTH_TOKEN_KEY);
-    removeStoredValue(AUTH_REFRESH_KEY);
     return;
   }
-
-  writeStoredJSON(AUTH_USER_KEY, session.user);
-  writeStoredString(AUTH_TOKEN_KEY, session.accessToken);
-  if (session.refreshToken) {
-    writeStoredString(AUTH_REFRESH_KEY, session.refreshToken);
-  }
+  writeStoredJSON(AUTH_USER_KEY, user);
 }
 
 export function getStoredAuthUser() {
   return readStoredJSON<AuthUser | null>(AUTH_USER_KEY, null);
 }
 
-export function getStoredAuthToken() {
-  return readStoredString(AUTH_TOKEN_KEY, "");
-}
-
-export function getStoredRefreshToken() {
-  return readStoredString(AUTH_REFRESH_KEY, "");
-}
-
 export const authService = {
   async login(credentials: AuthCredentials): Promise<AuthSession> {
     if (!isRemoteApiEnabled()) {
       const session = createMockSession(credentials);
-      persistSession(session);
+      persistUser(session.user);
       return session;
     }
 
@@ -181,14 +165,14 @@ export const authService = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-    persistSession(session);
+    persistUser(session.user);
     return session;
   },
 
   async signup(credentials: AuthCredentials): Promise<AuthSession> {
     if (!isRemoteApiEnabled()) {
       const session = createMockSession({ ...credentials, role: credentials.role ?? "employee" });
-      persistSession(session);
+      persistUser(session.user);
       return session;
     }
 
@@ -196,64 +180,50 @@ export const authService = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-    persistSession(session);
+    persistUser(session.user);
     return session;
   },
 
   async me(): Promise<AuthSession | null> {
-    const token = getStoredAuthToken();
     const storedUser = getStoredAuthUser();
-    if (!token || !storedUser) {
-      return null;
+    
+    // In remote mode, we check cookies by calling /me
+    if (isRemoteApiEnabled()) {
+      try {
+        const { user } = await requestJson<{ user: AuthUser }>("/auth/me");
+        persistUser(user);
+        return { user };
+      } catch {
+        persistUser(null);
+        return null;
+      }
     }
 
-    if (!isRemoteApiEnabled()) {
-      return { user: storedUser, accessToken: token, refreshToken: getStoredRefreshToken() || undefined };
-    }
-
-    try {
-      const session = await requestJson<AuthSession>("/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      persistSession(session);
-      return session;
-    } catch {
-      // Token is invalid or user no longer exists — clear everything
-      persistSession(null);
-      return null;
-    }
+    // Mock mode
+    if (!storedUser) return null;
+    return { user: storedUser };
   },
+
   async updateProfile(input: Partial<Pick<AuthUser, "name" | "department" | "team" | "designation" | "manager" | "workingHours" | "officeLocation" | "timeZone" | "location">>): Promise<AuthUser> {
     const stored = getStoredAuthUser();
     if (!isRemoteApiEnabled()) {
       const updated = { ...stored!, ...input };
-      writeStoredJSON(AUTH_USER_KEY, updated);
+      persistUser(updated);
       return updated;
     }
     const { user } = await requestJson<{ user: AuthUser }>("/auth/me", {
       method: "PATCH",
       body: JSON.stringify(input),
     });
-    const merged = { ...stored!, ...user };
-    writeStoredJSON(AUTH_USER_KEY, merged);
-    return merged;
+    persistUser(user);
+    return user;
   },
 
-  /**
-   * Verify current session is valid, then switch to targetRole.
-   * Admin can switch to any role without re-authentication.
-   * Other roles must re-authenticate to switch roles.
-   */
   async switchRole(targetRole: UserRole): Promise<AuthUser> {
-    const token = getStoredAuthToken();
     const stored = getStoredAuthUser();
-
-    if (!token || !stored) {
-      throw new Error("NO_SESSION");
-    }
+    if (!stored) throw new Error("NO_SESSION");
 
     if (!isRemoteApiEnabled()) {
-      // Mock mode: admin can switch freely, others need to match their role
       if (stored.role === "admin") {
         const updated: AuthUser = {
           ...stored,
@@ -263,52 +233,32 @@ export const authService = {
           name: stored.name,
           email: stored.email,
         };
-        writeStoredJSON(AUTH_USER_KEY, updated);
+        persistUser(updated);
         return updated;
       }
-      
-      // Non-admin users can only "switch" to their own role (no actual switch)
-      if (stored.role !== targetRole) {
-        throw new Error("ROLE_MISMATCH");
-      }
+      if (stored.role !== targetRole) throw new Error("ROLE_MISMATCH");
       return stored;
     }
 
-    // Real API: call backend switch-role endpoint
     try {
       const { user } = await requestJson<{ user: AuthUser }>("/auth/switch-role", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: JSON.stringify({ targetRole }),
       });
-
-      // Update stored user with new role
-      const updated = { ...stored, ...user };
-      writeStoredJSON(AUTH_USER_KEY, updated);
-      return updated;
-    } catch (err: unknown) {
-      // Check if it's a 403 (forbidden) - means user doesn't have permission
-      if (err && typeof err === "object" && "status" in err && err.status === 403) {
-        throw new Error("ROLE_MISMATCH");
-      }
+      persistUser(user);
+      return user;
+    } catch (err: any) {
+      if (err?.status === 403) throw new Error("ROLE_MISMATCH");
       throw new Error("NO_SESSION");
     }
   },
 
   async logout(): Promise<void> {
-    if (isRemoteApiEnabled() && getStoredAuthToken()) {
+    if (isRemoteApiEnabled()) {
       try {
-        await requestJson("/auth/logout", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${getStoredAuthToken()}`,
-          },
-        });
-      } catch {
-        // Local logout should still succeed.
-      }
+        await requestJson("/auth/logout", { method: "POST" });
+      } catch { /* ignore logout errors */ }
     }
-
-    persistSession(null);
+    persistUser(null);
   },
 };

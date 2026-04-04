@@ -43,6 +43,7 @@ const IntegrationsPage = lazy(() => import("@/pages/IntegrationsPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,7 +114,7 @@ const App = () => {
                               <Route path="/workspace/notes" element={<RouteAccessGuard><NotesPage /></RouteAccessGuard>} />
 
                               <Route path="/sales/clients" element={<RouteAccessGuard><ClientsPage /></RouteAccessGuard>} />
-                              <Route path="/sales" element={<RouteAccessGuard><SalesPage /></RouteAccessGuard>} />
+                              <Route path="/sales/pipelines" element={<RouteAccessGuard><SalesPage /></RouteAccessGuard>} />
 
                               <Route path="/finance/invoices" element={<RouteAccessGuard><InvoicesPage /></RouteAccessGuard>} />
                               <Route path="/finance" element={<RouteAccessGuard><FinancePage /></RouteAccessGuard>} />
@@ -133,13 +134,15 @@ const App = () => {
                               <Route path="/system/settings" element={<RouteAccessGuard><SettingsPage /></RouteAccessGuard>} />
                               <Route path="/system/integrations" element={<RouteAccessGuard><IntegrationsPage /></RouteAccessGuard>} />
                               <Route path="/system/billing" element={<RouteAccessGuard><BillingPage /></RouteAccessGuard>} />
+                              <Route path="/system/audit" element={<RouteAccessGuard><AuditLogPage /></RouteAccessGuard>} />
 
                               <Route path="/activity" element={<Navigate to="/overview/activity" replace />} />
                               <Route path="/team" element={<Navigate to="/people/team" replace />} />
                               <Route path="/employees" element={<Navigate to="/people/employees" replace />} />
                               <Route path="/clients" element={<Navigate to="/sales/clients" replace />} />
-                              <Route path="/leads" element={<Navigate to="/sales" replace />} />
-                              <Route path="/deals" element={<Navigate to="/sales" replace />} />
+                              <Route path="/leads" element={<Navigate to="/sales/pipelines" replace />} />
+                              <Route path="/deals" element={<Navigate to="/sales/pipelines" replace />} />
+                              <Route path="/sales" element={<Navigate to="/sales/pipelines" replace />} />
                               <Route path="/attendance" element={<Navigate to="/people/attendance" replace />} />
                               <Route path="/tasks" element={<Navigate to="/workspace/tasks" replace />} />
                               <Route path="/projects" element={<Navigate to="/workspace/projects" replace />} />

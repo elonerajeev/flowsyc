@@ -28,11 +28,11 @@ export const tasksController = {
       return;
     }
 
-    const tasks = await tasksService.list(parsed.data);
+    const tasks = await tasksService.list(parsed.data, req.auth);
     res.status(200).json(tasks);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const task = await tasksService.getById(readTaskId(req));
+    const task = await tasksService.getById(readTaskId(req), req.auth);
     res.status(200).json(task);
   },
   create: async (req: Request, res: Response): Promise<void> => {
@@ -50,7 +50,7 @@ export const tasksController = {
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const taskId = readTaskId(req);
-    const task = await tasksService.update(taskId, req.body);
+    const task = await tasksService.update(taskId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -64,7 +64,7 @@ export const tasksController = {
   },
   remove: async (req: Request, res: Response): Promise<void> => {
     const taskId = readTaskId(req);
-    await tasksService.delete(taskId);
+    await tasksService.delete(taskId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,

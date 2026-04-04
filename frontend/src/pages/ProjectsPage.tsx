@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, CheckCircle2, FolderKanban, FolderOpen, Gauge, Pin, Wallet } from "lucide-react";
+import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useProjects } from "@/hooks/use-crm-data";
+import { useProjects, useTasks, crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { cn } from "@/lib/utils";
+import { crmService } from "@/services/crm";
 
 type ProjectStage = "Discovery" | "Build" | "Review" | "Launch";
 
@@ -37,8 +40,23 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transiti
 export default function ProjectsPage() {
   const { data: projects = [], isLoading, error: projectsError, refetch } = useProjects();
   const { role } = useTheme();
+  const queryClient = useQueryClient();
   const [visibleCount, setVisibleCount] = useState(5);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const PAGE_SIZE = 5;
+
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin";
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeProject(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.projects });
+      toast.success("Project removed successfully");
+    },
+    onError: () => toast.error("Failed to remove project"),
+  });
+
   const { orderedItems: preferredProjects, pinnedIds, togglePin } = useListPreferences(
     `crm-projects-preferences-${role}`,
     projects,
@@ -54,6 +72,20 @@ export default function ProjectsPage() {
       return s + (Number.isFinite(n) ? n : 0);
     }, 0),
   }), [projects]);
+
+  useEffect(() => {
+    setSelectedProjectId((current) => current ?? preferredProjects[0]?.id ?? null);
+  }, [preferredProjects]);
+
+  const selectedProject = useMemo(
+    () => preferredProjects.find((project) => project.id === selectedProjectId) ?? preferredProjects[0] ?? null,
+    [preferredProjects, selectedProjectId],
+  );
+  const { data: selectedProjectTasks = { todo: [], "in-progress": [], done: [] } } = useTasks(selectedProject?.id, { enabled: Boolean(selectedProject?.id) });
+  const relatedTasks = useMemo(
+    () => [...selectedProjectTasks.todo, ...selectedProjectTasks["in-progress"], ...selectedProjectTasks.done],
+    [selectedProjectTasks],
+  );
 
   if (isLoading) return <PageLoader />;
   if (projectsError) return (
@@ -76,25 +108,27 @@ export default function ProjectsPage() {
             </p>
           </div>
 
-          {/* Summary stats */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:flex lg:gap-3">
-            {[
-              { label: "Active", value: summary.active, icon: FolderKanban, color: "text-primary bg-primary/10" },
-              { label: "Done", value: summary.completed, icon: CheckCircle2, color: "text-success bg-success/10" },
-              { label: "Avg Progress", value: `${summary.avgProgress}%`, icon: Gauge, color: "text-warning bg-warning/10" },
-              { label: "Total Budget", value: summary.totalBudget >= 1000 ? `$${(summary.totalBudget/1000).toFixed(0)}K` : `$${summary.totalBudget}`, icon: Wallet, color: "text-accent bg-accent/10" },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-secondary/20 px-4 py-3 min-w-[110px]">
-                <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color)}>
-                  <Icon className="h-4 w-4" />
+          {/* Summary stats - hide for employees with no projects */}
+          {(role !== "employee" || preferredProjects.length > 0) && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:flex lg:gap-3">
+              {[
+                { label: "Active", value: summary.active, icon: FolderKanban, color: "text-primary bg-primary/10" },
+                { label: "Done", value: summary.completed, icon: CheckCircle2, color: "text-success bg-success/10" },
+                { label: "Avg Progress", value: `${summary.avgProgress}%`, icon: Gauge, color: "text-warning bg-warning/10" },
+                { label: "Total Budget", value: summary.totalBudget >= 1000 ? `$${(summary.totalBudget/1000).toFixed(0)}K` : `$${summary.totalBudget}`, icon: Wallet, color: "text-accent bg-accent/10" },
+              ].map(({ label, value, icon: Icon, color }) => (
+                <div key={label} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-secondary/20 px-4 py-3 min-w-[110px]">
+                  <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color)}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                    <p className="font-display text-lg font-bold text-foreground">{value}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-                  <p className="font-display text-lg font-bold text-foreground">{value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </motion.section>
 
@@ -103,8 +137,12 @@ export default function ProjectsPage() {
         {preferredProjects.length === 0 ? (
           <div className="rounded-[1.5rem] border border-dashed border-border/60 bg-secondary/10 p-12 text-center">
             <FolderOpen className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="font-semibold text-foreground">No projects yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">Add a project to start tracking delivery.</p>
+            <p className="font-semibold text-foreground">No projects to show</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {role === "employee"
+                ? "You do not yet have delivery programs assigned. Contact your manager for access to additional projects."
+                : "Add a project to start tracking delivery."}
+            </p>
           </div>
         ) : (
           preferredProjects.slice(0, visibleCount).map((project, idx) => {
@@ -143,6 +181,28 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {canEdit && (
+                        <button
+                          onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+                          className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+                          title="Edit project"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to remove ${project.name}?`)) {
+                              deleteMutation.mutate(project.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
+                          title="Delete project"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase flex items-center gap-1", stageCfg.bg)}>
                         <span className={cn("h-1.5 w-1.5 rounded-full", stageCfg.dot)} />
                         {stage}
@@ -195,6 +255,20 @@ export default function ProjectsPage() {
                     </p>
                   </div>
                 </div>
+                <div className="border-t border-border/30 px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProjectId(project.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                      selectedProject?.id === project.id
+                        ? "border-primary/30 bg-primary/10 text-primary"
+                        : "border-border/60 bg-secondary/25 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    View related tasks
+                  </button>
+                </div>
               </motion.article>
             );
           })
@@ -208,6 +282,67 @@ export default function ProjectsPage() {
           onShowLess={() => setVisibleCount(PAGE_SIZE)}
         />
       </motion.div>
+
+      {selectedProject && (
+        <motion.section variants={item} className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected Project</p>
+                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">{selectedProject.name}</h2>
+              </div>
+              <FolderOpen className="h-5 w-5 text-primary" />
+            </div>
+            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+              <p>{selectedProject.description || "No project description added yet."}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Linked tasks</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{relatedTasks.length}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Delivery stage</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{selectedProject.stage}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Project Tasks</p>
+                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Execution linked to {selectedProject.name}</h2>
+              </div>
+              <ClipboardList className="h-5 w-5 text-primary" />
+            </div>
+
+            {relatedTasks.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {relatedTasks.map((task) => (
+                  <article key={task.id} className="rounded-2xl border border-border/70 bg-secondary/15 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">{task.title}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{task.assignee} · Due {task.dueDate}</p>
+                      </div>
+                      <span className="rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] font-semibold capitalize text-foreground">
+                        {task.column}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-border/60 bg-secondary/10 p-8 text-center">
+                <ClipboardList className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
+                <p className="text-sm font-semibold text-foreground">No linked tasks yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">Create tasks against this project from Quick Create or the task board.</p>
+              </div>
+            )}
+          </div>
+        </motion.section>
+      )}
     </motion.div>
   );
 }

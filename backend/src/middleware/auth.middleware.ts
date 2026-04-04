@@ -5,12 +5,13 @@ import { verifyAccessToken } from "../utils/jwt";
 import type { UserRole } from "../config/types";
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return next(new AppError("Missing bearer token", 401, "UNAUTHORIZED"));
-  }
+  // 1. Try to get token from cookie
+  // 2. Fallback to Authorization header
+  const token = req.cookies?.accessToken || req.headers.authorization?.slice("Bearer ".length);
 
-  const token = header.slice("Bearer ".length);
+  if (!token) {
+    return next(new AppError("Missing auth token", 401, "UNAUTHORIZED"));
+  }
 
   try {
     const payload = verifyAccessToken(token);

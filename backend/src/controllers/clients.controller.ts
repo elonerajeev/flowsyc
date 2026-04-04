@@ -34,13 +34,13 @@ export const clientsController = {
       return;
     }
 
-    const clients = await clientsService.list(parsed.data);
+    const clients = await clientsService.list(parsed.data, req.auth);
     res.status(200).json(clients);
   },
 
   getOne: async (req: Request, res: Response): Promise<void> => {
     const clientId = readClientId(req);
-    const client = await clientsService.getById(clientId);
+    const client = await clientsService.getById(clientId, req.auth);
     res.status(200).json(client);
   },
 
@@ -70,8 +70,8 @@ export const clientsController = {
     res.status(200).json({ message: "Client deleted successfully" });
   },
 
-  getPipeline: async (_req: Request, res: Response): Promise<void> => {
-    const pipeline = await clientsService.getPipeline();
+  getPipeline: async (req: Request, res: Response): Promise<void> => {
+    const pipeline = await clientsService.getPipeline(req.auth);
     res.status(200).json(pipeline);
   },
 };

@@ -9,8 +9,8 @@ import { createTeamMemberSchema, updateTeamMemberSchema } from "../validators/te
 
 export const teamMembersRouter = Router();
 
-teamMembersRouter.get("/", requireAuth, validateQuery(teamMemberQuerySchema), asyncHandler(teamMembersController.list));
-teamMembersRouter.get("/:id", requireAuth, asyncHandler(teamMembersController.getOne));
+teamMembersRouter.get("/", requireAuth, requireRole(["admin", "manager"]), validateQuery(teamMemberQuerySchema), asyncHandler(teamMembersController.list));
+teamMembersRouter.get("/:id", requireAuth, requireRole(["admin", "manager"]), asyncHandler(teamMembersController.getOne));
 teamMembersRouter.post("/", requireAuth, requireRole(["admin", "manager"]), validateBody(createTeamMemberSchema), asyncHandler(teamMembersController.create));
 teamMembersRouter.patch("/:id", requireAuth, requireRole(["admin", "manager"]), validateBody(updateTeamMemberSchema), asyncHandler(teamMembersController.update));
 teamMembersRouter.delete("/:id", requireAuth, requireRole(["admin"]), asyncHandler(teamMembersController.remove));

@@ -1,14 +1,18 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, Search } from "lucide-react";
+import { Download, Plus, Search, Edit2, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
-import { useInvoices } from "@/hooks/use-crm-data";
+import { useInvoices, crmKeys } from "@/hooks/use-crm-data";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { crmService } from "@/services/crm";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -16,9 +20,23 @@ const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 export default function InvoicesPage() {
   const { data: invoices = [], isLoading, error: invoicesError, refetch } = useInvoices();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
+  const { role } = useTheme();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(8);
   const PAGE_SIZE = 8;
+
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin";
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => crmService.removeInvoice(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.invoices });
+      toast.success("Invoice removed successfully");
+    },
+    onError: () => toast.error("Failed to remove invoice"),
+  });
 
   const filteredInvoices = useMemo(
     () =>
@@ -127,10 +145,34 @@ export default function InvoicesPage() {
                     <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.due}</td>
                     <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
                     <td className="px-6 py-4">
-                      <button type="button" className="inline-flex items-center gap-2 rounded-full border border-border/70 px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary">
-                        <Download className="h-3.5 w-3.5" />
-                        PDF
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {canEdit && (
+                          <button
+                            onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+                            className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+                            title="Edit invoice"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to remove invoice ${invoice.id}?`)) {
+                                deleteMutation.mutate(invoice.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
+                            title="Delete invoice"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button type="button" className="inline-flex items-center gap-2 rounded-full border border-border/70 px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary">
+                          <Download className="h-3.5 w-3.5" />
+                          PDF
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

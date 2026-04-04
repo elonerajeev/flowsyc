@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BadgeCheck, Clock3, FileText, GripVertical, Pin, Search, Shield, UserPlus, UserRoundCheck } from "lucide-react";
+import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { useTeamMembers } from "@/hooks/use-crm-data";
+import { useTeamMembers, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { useListPreferences } from "@/hooks/use-list-preferences";
-import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
 import { normalizeTeamMember } from "@/lib/team-roster";
 import type { TeamMemberRecord } from "@/types/crm";
 
@@ -92,17 +93,40 @@ function normalizeMember(member: TeamMemberRecord): TeamMemberRecord {
 export default function TeamPage() {
   const { data: members = [], isLoading, error: teamError, refetch: refetchTeamMembers } = useTeamMembers();
   const { role } = useTheme();
+  const queryClient = useQueryClient();
   const canEditTeam = role === "admin" || role === "manager";
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [localMembers, setLocalMembers] = useState<TeamMemberRecord[]>([]);
+  const normalizedMembers = useMemo(() => members.map(normalizeMember), [members]);
+  
   const [draggedMemberId, setDraggedMemberId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const [memberNotes, setMemberNotes] = useState<Record<number, string>>({});
   const PAGE_SIZE = 6;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [noteDraft, setNoteDraft] = useState("");
+  
+  const updateMemberMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Partial<TeamMemberRecord> }) => 
+      crmService.updateTeamMember(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.teamMembers });
+      toast.success("Team member updated");
+    },
+    onError: () => toast.error("Failed to update team member"),
+  });
+
+  const createMemberMutation = useMutation({
+    mutationFn: (member: Omit<TeamMemberRecord, "id">) => 
+      crmService.createTeamMember(member),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.teamMembers });
+      toast.success("Team member added");
+      setShowAddForm(false);
+    },
+    onError: () => toast.error("Failed to add team member"),
+  });
+
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
@@ -121,25 +145,14 @@ export default function TeamPage() {
     attendance: "present" as TeamMemberRecord["attendance"],
     location: "",
   });
+
+  const getMemberId = useCallback((member: TeamMemberRecord) => String(member.id), []);
+
   const { orderedItems: preferredMembers, pinnedIds, togglePin, move } = useListPreferences(
     `crm-team-preferences-${role}`,
-    localMembers,
-    (member) => String(member.id),
+    normalizedMembers,
+    getMemberId,
   );
-
-  useEffect(() => {
-    // Always use API data from DB — no localStorage fallback.
-    setLocalMembers(members.map(normalizeMember));
-    setMemberNotes(readStoredJSON<Record<number, string>>(`crm-team-notes-${role}`, {}));
-  }, [members, role]);
-
-  // Local members track state while UI reflects actions before refetch
-  // No longer syncs to localStorage
-
-
-  useEffect(() => {
-    writeStoredJSON(`crm-team-notes-${role}`, memberNotes);
-  }, [memberNotes, role]);
 
   const filtered = useMemo(() => {
     return preferredMembers.filter((member) =>
@@ -162,16 +175,16 @@ export default function TeamPage() {
 
   const summary = useMemo(() => {
     return {
-      active: localMembers.filter((member) => member.status === "active").length,
-      admins: localMembers.filter((member) => member.role === "Admin").length,
-      remote: localMembers.filter((member) => member.attendance === "remote").length,
-      absent: localMembers.filter((member) => member.attendance === "absent").length,
+      active: normalizedMembers.filter((member) => member.status === "active").length,
+      admins: normalizedMembers.filter((member) => member.role === "Admin").length,
+      remote: normalizedMembers.filter((member) => member.attendance === "remote").length,
+      absent: normalizedMembers.filter((member) => member.attendance === "absent").length,
     };
-  }, [localMembers]);
+  }, [normalizedMembers]);
 
-  const updateSelected = (updater: (member: TeamMemberRecord) => TeamMemberRecord) => {
+  const updateSelected = async (patch: Partial<TeamMemberRecord>) => {
     if (!selectedMember) return;
-    setLocalMembers((current) => current.map((member) => (member.id === selectedMember.id ? updater(member) : member)));
+    updateMemberMutation.mutate({ id: selectedMember.id, patch });
   };
 
   const canTerminateSelected = Boolean(
@@ -220,11 +233,8 @@ export default function TeamPage() {
       workload: 40,
     });
 
-    // Save to DB via API, then refetch to get the real DB-assigned ID
-    await crmService.createTeamMember(payload);
-    await refetchTeamMembers();
-
-    setShowAddForm(false);
+    createMemberMutation.mutate(payload);
+    
     setNewMember({
       name: "",
       email: "",
@@ -245,12 +255,13 @@ export default function TeamPage() {
     });
   };
 
-  const saveNote = () => {
+  const saveNote = async () => {
     if (!selectedMember || !noteDraft.trim() || !canEditTeam) return;
-    setMemberNotes((current) => ({
-      ...current,
-      [selectedMember.id]: noteDraft.trim(),
-    }));
+
+    const currentNote = selectedMember.separationNote ?? "";
+    const updatedNote = currentNote ? `${currentNote}\n\n[${new Date().toLocaleDateString()}] ${noteDraft.trim()}` : noteDraft.trim();
+
+    updateSelected({ separationNote: updatedNote });
     setNoteDraft("");
   };
 
@@ -259,68 +270,62 @@ export default function TeamPage() {
       {
         label: "Warning",
         onClick: () =>
-          updateSelected((member) => ({
-            ...member,
-            warningCount: (member.warningCount ?? 0) + 1,
-            separationNote: member.separationNote || "Warning issued. Review performance and conduct.",
-          })),
+          updateSelected({
+            warningCount: (selectedMember?.warningCount ?? 0) + 1,
+            separationNote: selectedMember?.separationNote || "Warning issued. Review performance and conduct.",
+          }),
         className: "border-warning/25 bg-warning/10 text-foreground hover:border-warning/40",
       },
       {
         label: "Suspend",
-        onClick: () =>
-          updateSelected((member) => {
-            const today = getTodayIso();
-            return {
-              ...member,
-              status: "pending",
-              suspendedAt: today,
-              terminationEligibleAt: addDaysIso(today, 7),
-              handoverCompletedAt: null,
-              separationNote: "Suspended for review before any termination decision.",
-            };
-          }),
+        onClick: () => {
+          const today = getTodayIso();
+          updateSelected({
+            status: "pending",
+            suspendedAt: today,
+            terminationEligibleAt: addDaysIso(today, 7),
+            handoverCompletedAt: null,
+            separationNote: "Suspended for review before any termination decision.",
+          });
+        },
         className: "border-warning/25 bg-warning/10 text-foreground hover:border-warning/40",
       },
       {
         label: "Mark Handover",
         onClick: () =>
-          updateSelected((member) => ({
-            ...member,
+          updateSelected({
             handoverCompletedAt: getTodayIso(),
             separationNote: "Work handover completed and recorded for review.",
-          })),
+          }),
         className: "border-border/70 bg-secondary/20 text-foreground hover:border-border",
       },
       {
         label: "Promote",
-        onClick: () => updateSelected((member) => ({ ...member, role: "Admin", status: "active" })),
+        onClick: () => updateSelected({ role: "Admin", status: "active" }),
         className: "border-border/70 bg-secondary/20 text-foreground hover:border-border",
       },
       {
         label: "Reset Access",
         onClick: () =>
-          updateSelected((member) => ({
-            ...member,
+          updateSelected({
             status: "active",
             suspendedAt: null,
             terminationEligibleAt: null,
             handoverCompletedAt: null,
             terminatedAt: null,
             separationNote: "Access restored.",
-          })),
+          }),
         className: "border-border/70 bg-secondary/20 text-foreground hover:border-border",
       },
       {
         label: "Terminate",
         onClick: () =>
           canTerminateSelected &&
-          updateSelected((member) => ({
-            ...member,
+          updateSelected({
             status: "rejected",
             terminatedAt: getTodayIso(),
             separationNote: "Termination approved after suspension and warning review.",
-          })),
+          }),
         className: canTerminateSelected
           ? "border-destructive/20 bg-destructive/10 text-foreground hover:border-destructive/40"
           : "border-border/70 bg-secondary/20 text-muted-foreground cursor-not-allowed",
@@ -330,27 +335,24 @@ export default function TeamPage() {
       {
         label: "Warning",
         onClick: () =>
-          updateSelected((member) => ({
-            ...member,
-            warningCount: (member.warningCount ?? 0) + 1,
-            separationNote: member.separationNote || "Warning issued by manager.",
-          })),
+          updateSelected({
+            warningCount: (selectedMember?.warningCount ?? 0) + 1,
+            separationNote: selectedMember?.separationNote || "Warning issued by manager.",
+          }),
         className: "border-warning/25 bg-warning/10 text-foreground hover:border-warning/40",
       },
       {
         label: "Suspend",
-        onClick: () =>
-          updateSelected((member) => {
-            const today = getTodayIso();
-            return {
-              ...member,
-              status: "pending",
-              suspendedAt: today,
-              terminationEligibleAt: addDaysIso(today, 7),
-              handoverCompletedAt: null,
-              separationNote: "Manager suspension started. HR review required for termination.",
-            };
-          }),
+        onClick: () => {
+          const today = getTodayIso();
+          updateSelected({
+            status: "pending",
+            suspendedAt: today,
+            terminationEligibleAt: addDaysIso(today, 7),
+            handoverCompletedAt: null,
+            separationNote: "Manager suspension started. HR review required for termination.",
+          });
+        },
         className: "border-warning/25 bg-warning/10 text-foreground hover:border-warning/40",
       },
     ],
@@ -809,7 +811,7 @@ export default function TeamPage() {
                       <p className="text-xs font-semibold text-foreground">HR Note</p>
                     </div>
                     <p className="text-xs text-muted-foreground mb-3">
-                      {memberNotes[selectedMember.id] ?? "No note yet."}
+                      {selectedMember.separationNote ?? "No note yet."}
                     </p>
                     <div className="flex gap-2">
                       <input

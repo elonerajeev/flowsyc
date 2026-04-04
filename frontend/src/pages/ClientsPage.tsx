@@ -9,7 +9,11 @@ import {
   Pin,
   ShieldCheck,
   Sparkles,
+  Edit2,
+  Trash2,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -18,10 +22,11 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useClients } from "@/hooks/use-crm-data";
+import { useClients, crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
+import { crmService } from "@/services/crm";
 
 const segmentOptions = ["all", "Expansion", "Renewal", "New Business"] as const;
 
@@ -29,6 +34,7 @@ export default function ClientsPage() {
   const { data: clients = [], isLoading, error: clientsError, refetch } = useClients();
   const { role } = useTheme();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [segment, setSegment] = useState<(typeof segmentOptions)[number]>("all");
@@ -36,6 +42,19 @@ export default function ClientsPage() {
   const [visibleCount, setVisibleCount] = useState(6);
   const PAGE_SIZE = 6;
   const deferredSearch = useDeferredValue(search);
+  
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin";
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeClient(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.clients });
+      toast.success("Client removed successfully");
+    },
+    onError: () => toast.error("Failed to remove client"),
+  });
+
   const { orderedItems: preferredClients, pinnedIds, togglePin, move } = useListPreferences(
     `crm-clients-preferences-${role}`,
     clients,
@@ -234,7 +253,31 @@ export default function ClientsPage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
-                    <StatusBadge status={client.status} />
+                    <div className="flex items-center gap-2">
+                      {canEdit && (
+                        <button
+                          onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+                          className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+                          title="Edit client"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to remove ${client.name}?`)) {
+                              deleteMutation.mutate(client.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
+                          title="Delete client"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <StatusBadge status={client.status} />
+                    </div>
                     <span className="text-xs text-muted-foreground"><PrivacyValue value={client.revenue} /></span>
                   </div>
                 </div>

@@ -10,6 +10,7 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url().or(z.string().startsWith("http://localhost")).default("http://localhost:8080"),
+  COOKIE_SECRET: z.string().min(32),
 });
 
 const parsed = envSchema.safeParse(process.env);

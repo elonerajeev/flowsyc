@@ -7,6 +7,7 @@ import { buildProfile } from "../utils/employee-profile";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
 import { comparePassword, hashPassword } from "../utils/password";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken, type TokenPayload } from "../utils/jwt";
+import { sendWelcomeEmail } from "../utils/email-templates";
 import type { AuthUser } from "../config/types";
 
 type AuthResponse = {
@@ -93,6 +94,10 @@ export const authService = {
     });
 
     const session = await createSession(user.id, user.email, user.role);
+
+    // Fire-and-forget welcome email
+    sendWelcomeEmail({ name: user.name, email: user.email, role: user.role }).catch(() => {});
+
     return {
       user: toAuthUser(user),
       ...session,
