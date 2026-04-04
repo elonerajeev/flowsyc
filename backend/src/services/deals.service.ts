@@ -83,8 +83,14 @@ export const dealsService = {
   async create(input: DealInput) {
     const deal = await prisma.deal.create({
       data: {
-        ...input,
-        updatedAt: new Date(),
+        title: input.title,
+        value: input.value ?? 0,
+        ...(input.currency !== undefined && { currency: input.currency }),
+        ...(input.stage !== undefined && { stage: input.stage }),
+        ...(input.probability !== undefined && { probability: input.probability }),
+        ...(input.expectedCloseDate !== undefined && { expectedClose: new Date(input.expectedCloseDate) }),
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.assignedTo !== undefined && { assignedTo: input.assignedTo }),
       },
     });
     return mapDeal(deal);

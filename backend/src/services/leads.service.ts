@@ -102,8 +102,16 @@ export const leadsService = {
   async create(input: LeadInput) {
     const lead = await prisma.lead.create({
       data: {
-        ...input,
-        updatedAt: new Date(),
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        company: input.company ?? "",
+        ...(input.jobTitle !== undefined && { jobTitle: input.jobTitle }),
+        ...(input.source !== undefined && { source: input.source }),
+        ...(input.status !== undefined && { status: input.status }),
+        ...(input.score !== undefined && { score: input.score }),
+        ...(input.assignedTo !== undefined && { assignedTo: input.assignedTo }),
+        ...(input.notes !== undefined && { notes: input.notes }),
       },
     });
     return mapLead(lead);

@@ -57,7 +57,7 @@ export const sidebarSections: SidebarSection[] = [
     items: [
       { to: "/overview", icon: Home, label: "Dashboard", roles: ["admin", "manager", "employee", "client"] },
       { to: "/overview/activity", icon: Inbox, label: "Activity", roles: ["admin", "manager", "employee", "client"], badge: "New" },
-      { to: "/overview/messages", icon: MessageSquare, label: "Messages", roles: ["admin", "manager", "employee", "client"], badge: "3" },
+      { to: "/overview/messages", icon: MessageSquare, label: "Messages", roles: ["admin", "manager"], badge: "3" },
     ],
   },
   {
@@ -130,7 +130,7 @@ export const sidebarSections: SidebarSection[] = [
     icon: Settings2,
     items: [
       { to: "/system/settings", icon: Settings, label: "Settings", roles: ["admin", "manager", "employee", "client"] },
-      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager", "employee", "client"] },
+      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager"] },
       { to: "/system/integrations", icon: PlugZap, label: "Integrations", roles: ["admin", "manager"], badge: "New" },
       { to: "/system/audit", icon: Shield, label: "Audit Logs", roles: ["admin", "manager"] },
       { to: "/system/billing", icon: CreditCard, label: "Billing", roles: ["admin", "manager", "client"] },

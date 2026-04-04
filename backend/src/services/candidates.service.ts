@@ -41,9 +41,9 @@ function mapCandidate(candidate: {
   email: string;
   jobId: number;
   stage: CandidateStage;
-  source: string;
+  source: string | null;
   phone: string | null;
-  rating: number;
+  rating: number | null;
   interviewDate: Date | null;
   interviewers: string[];
   resume: string | null;
@@ -59,9 +59,9 @@ function mapCandidate(candidate: {
     jobId: candidate.jobId,
     jobTitle: candidate.JobPosting.title,
     stage: mapStage(candidate.stage),
-    source: candidate.source,
+    source: candidate.source ?? undefined,
     phone: candidate.phone ?? undefined,
-    rating: candidate.rating,
+    rating: candidate.rating ?? undefined,
     interviewDate: candidate.interviewDate?.toISOString() ?? undefined,
     interviewers: candidate.interviewers,
     resume: candidate.resume ?? undefined,

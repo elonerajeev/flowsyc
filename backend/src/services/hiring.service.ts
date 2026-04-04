@@ -43,10 +43,10 @@ function mapJob(job: {
   type: string;
   status: JobStatus;
   description: string;
-  salary: string;
-  experience: string;
+  salary: string | null;
+  experience: string | null;
   skills: string[];
-  priority: string;
+  priority: string | null;
   deadline: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -59,8 +59,8 @@ function mapJob(job: {
     type: job.type,
     status: job.status,
     description: job.description,
-    salary: job.salary,
-    experience: job.experience,
+    salary: job.salary ?? "Competitive",
+    experience: job.experience ?? "2-5 years",
     skills: job.skills,
     priority: (job.priority as JobRecord["priority"]) ?? "normal",
     deadline: job.deadline,

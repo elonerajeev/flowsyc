@@ -169,7 +169,7 @@ export default function TasksPage() {
   const [doneVisible, setDoneVisible] = useState(5);
   const DONE_PAGE = 5;
 
-  const canEdit = role === "admin" || role === "manager" || role === "employee";
+  const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin" || role === "manager";
 
   useEffect(() => {

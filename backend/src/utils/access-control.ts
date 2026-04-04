@@ -20,34 +20,46 @@ function deriveInitials(value: string) {
     .toUpperCase();
 }
 
+function normalizeScopes(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
 export async function getEmployeeAssigneeScope(actor: AccessActor) {
   if (!actor || actor.role !== "employee") {
     return null;
   }
 
-  const [user, member] = await Promise.all([
-    actor.userId
-      ? prisma.user.findUnique({
-          where: { id: actor.userId },
-          select: { name: true },
-        })
-      : Promise.resolve(null),
-    prisma.teamMember.findFirst({
-      where: {
-        deletedAt: null,
-        email: { equals: actor.email, mode: "insensitive" },
-      },
-      select: { name: true, team: true },
-    }),
-  ]);
+  const user = actor.userId
+    ? await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } })
+    : null;
 
-  const scopes = Array.from(
-    new Set(
-      [member?.name, user?.name, member?.team, actor.email]
-        .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  );
+  // Try matching TeamMember by email first, then by name
+  const member = await prisma.teamMember.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { email: { equals: actor.email, mode: "insensitive" } },
+        ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
+      ],
+    },
+    select: { name: true, avatar: true },
+  });
+
+  const scopes = normalizeScopes([
+    member?.name,
+    member?.avatar,
+    user?.name,
+    actor.email,
+    deriveInitials(member?.name?.trim() || user?.name?.trim() || actor.email),
+    // also include first name to match partial assignee entries like "Rajeev"
+    (member?.name || user?.name)?.split(" ")[0],
+  ]);
   return scopes.length > 0 ? scopes : null;
 }
 
@@ -56,24 +68,32 @@ export async function getEmployeeProjectScope(actor: AccessActor) {
     return null;
   }
 
-  const [user, member] = await Promise.all([
-    actor.userId
-      ? prisma.user.findUnique({
-          where: { id: actor.userId },
-          select: { name: true },
-        })
-      : Promise.resolve(null),
-    prisma.teamMember.findFirst({
-      where: {
-        deletedAt: null,
-        email: { equals: actor.email, mode: "insensitive" },
-      },
-      select: { avatar: true },
-    }),
-  ]);
+  const user = actor.userId
+    ? await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true, team: true } })
+    : null;
 
-  const teamMarker = member?.avatar?.trim() || deriveInitials(user?.name?.trim() || actor.email);
-  return teamMarker || null;
+  // Try matching TeamMember by email first, then by name
+  const member = await prisma.teamMember.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { email: { equals: actor.email, mode: "insensitive" } },
+        ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
+      ],
+    },
+    select: { avatar: true, name: true, team: true },
+  });
+
+  const scopes = normalizeScopes([
+    member?.avatar,
+    member?.name,
+    member?.team,
+    user?.name,
+    user?.team,
+    actor.email,
+    deriveInitials(member?.name?.trim() || user?.name?.trim() || actor.email),
+  ]);
+  return scopes.length > 0 ? scopes : null;
 }
 
 export async function getEmployeeMemberRecord(actor: AccessActor) {

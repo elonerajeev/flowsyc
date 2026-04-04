@@ -45,6 +45,13 @@ const EnhancedReportsPage = () => {
     }).format(amount);
   };
 
+  const openDealsCount = deals.filter((deal) => !["closed-won", "closed-lost"].includes(deal.stage)).length;
+  const wonDealsCount = deals.filter((deal) => deal.stage === "closed-won").length;
+  const activeLeadsCount = leads.filter((lead) => !["won", "lost"].includes(lead.status)).length;
+  const forecastCoverage = metrics && metrics.pipelineValue > 0
+    ? Math.round((metrics.forecastedRevenue / metrics.pipelineValue) * 100)
+    : 0;
+
   // Calculate pipeline distribution
   const pipelineDistribution = deals.reduce((acc, deal) => {
     acc[deal.stage] = (acc[deal.stage] || 0) + 1;
@@ -115,7 +122,7 @@ const EnhancedReportsPage = () => {
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(metrics.totalRevenue)}</div>
               <p className="text-xs text-muted-foreground">
-                +12.3% from last month
+                from recorded invoices
               </p>
             </CardContent>
           </Card>
@@ -128,7 +135,7 @@ const EnhancedReportsPage = () => {
             <CardContent>
               <div className="text-2xl font-bold">{metrics.conversionRate}%</div>
               <p className="text-xs text-muted-foreground">
-                +2.1% from last month
+                based on current client statuses
               </p>
             </CardContent>
           </Card>
@@ -141,7 +148,7 @@ const EnhancedReportsPage = () => {
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(metrics.averageDealSize)}</div>
               <p className="text-xs text-muted-foreground">
-                +8.7% from last month
+                average invoice amount
               </p>
             </CardContent>
           </Card>
@@ -154,7 +161,7 @@ const EnhancedReportsPage = () => {
             <CardContent>
               <div className="text-2xl font-bold">{metrics.salesCycle} days</div>
               <p className="text-xs text-muted-foreground">
-                -3 days from last month
+                from client created date to first invoice
               </p>
             </CardContent>
           </Card>
@@ -249,21 +256,21 @@ const EnhancedReportsPage = () => {
 
         <Card className="rounded-xl border-border/50">
           <CardHeader>
-            <CardTitle>Top Performers</CardTitle>
+            <CardTitle>Pipeline Snapshot</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-3">
+            <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Sarah Johnson</span>
-                <Badge className="bg-green-100 text-green-700">3 deals won</Badge>
+                <span>Open deals</span>
+                <Badge variant="secondary">{openDealsCount}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Mike Chen</span>
-                <Badge className="bg-blue-100 text-blue-700">2 deals won</Badge>
+                <span>Won deals</span>
+                <Badge variant="secondary">{wonDealsCount}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Emily Davis</span>
-                <Badge className="bg-purple-100 text-purple-700">1 deal won</Badge>
+                <span>Active leads</span>
+                <Badge variant="secondary">{activeLeadsCount}</Badge>
               </div>
             </div>
           </CardContent>
@@ -286,7 +293,9 @@ const EnhancedReportsPage = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Confidence</span>
-                  <Badge className="bg-green-100 text-green-700">High</Badge>
+                  <Badge variant={forecastCoverage >= 70 ? "default" : "secondary"}>
+                    {metrics.pipelineValue > 0 ? `${forecastCoverage}% backed by pending invoices` : "No open pipeline"}
+                  </Badge>
                 </div>
               </>
             )}

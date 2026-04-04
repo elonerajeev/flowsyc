@@ -3,7 +3,7 @@ import { Prisma, type ProjectStage, type ProjectStatus } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
-import { getEmployeeProjectScope } from "../utils/access-control";
+import { getEmployeeAssigneeScope, getEmployeeProjectScope } from "../utils/access-control";
 
 type ProjectRecord = {
   id: number;
@@ -73,7 +73,7 @@ function mapProject(project: {
   tasksTotal: number;
   createdAt: Date;
   updatedAt: Date;
-}): ProjectRecord {
+}, role?: UserRole): ProjectRecord {
   return {
     id: project.id,
     name: project.name,
@@ -83,20 +83,26 @@ function mapProject(project: {
     team: project.team,
     dueDate: project.dueDate,
     stage: fromDbStage(project.stage),
-    budget: project.budget,
+    budget: role === "employee" ? "Restricted" : project.budget,
     tasks: { done: project.tasksDone, total: project.tasksTotal },
   };
 }
 
 export const projectsService = {
   async getById(projectId: number, access?: AccessScope) {
-    const employeeTeamMarker = await getEmployeeProjectScope(access);
-    const project = employeeTeamMarker
+    const [employeeProjectScopes, employeeAssignees] = await Promise.all([
+      getEmployeeProjectScope(access),
+      getEmployeeAssigneeScope(access),
+    ]);
+    const project = employeeProjectScopes || employeeAssignees
       ? await prisma.project.findFirst({
           where: {
             deletedAt: null,
             id: projectId,
-            team: { has: employeeTeamMarker },
+            OR: [
+              ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+              ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+            ],
           },
         })
       : await prisma.project.findUnique({ where: { id: projectId } });
@@ -104,15 +110,27 @@ export const projectsService = {
     if (!project || project.deletedAt) {
       throw new AppError("Project not found", 404, "NOT_FOUND");
     }
-    return mapProject(project);
+    return mapProject(project, access?.role);
   },
 
   async list(query: ProjectQuery, access?: AccessScope) {
-    const employeeTeamMarker = await getEmployeeProjectScope(access);
+    const [employeeProjectScopes, employeeAssignees] = await Promise.all([
+      getEmployeeProjectScope(access),
+      getEmployeeAssigneeScope(access),
+    ]);
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       ...(query.status ? { status: toDbStatus(query.status) } : {}),
-      ...(employeeTeamMarker ? { team: { has: employeeTeamMarker } } : {}),
+      ...(
+        employeeProjectScopes || employeeAssignees
+          ? {
+              OR: [
+                ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+                ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+              ],
+            }
+          : {}
+      ),
     };
 
     const [total, projects] = await prisma.$transaction([
@@ -126,7 +144,7 @@ export const projectsService = {
     ]);
 
     return {
-      data: projects.map(mapProject),
+      data: projects.map((project) => mapProject(project, access?.role)),
       pagination: {
         page: query.page,
         limit: query.limit,

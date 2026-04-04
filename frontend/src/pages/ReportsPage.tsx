@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowUpRight, FileText, Sparkles, TrendingUp } from "lucide-
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import AdminOnly from "@/components/shared/AdminOnly";
 import { useReports } from "@/hooks/use-crm-data";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,10 @@ const badgeColors: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  return <AdminOnly><ReportsPageInner /></AdminOnly>;
+}
+
+function ReportsPageInner() {
   const { data: reports = [], isLoading, error: reportsError, refetch } = useReports();
   const [selectedReport, setSelectedReport] = useState<(typeof reports)[0] | null>(null);
 

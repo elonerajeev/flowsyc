@@ -154,6 +154,21 @@ export interface AuditLogRecord {
   createdAt: string;
 }
 
+export interface AuditLogQueryParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  action?: string;
+  entity?: string;
+}
+
+export interface AuditLogListResponse {
+  data: AuditLogRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CollaboratorRecord {
   id: string;
   name: string;
@@ -334,16 +349,16 @@ export type PayrollStatus = "pending" | "processing" | "paid" | "overdue";
 
 export interface PayrollRecord {
   id: number;
-  memberId: number;
-  name: string;
-  department: string;
+  memberId: string;
+  memberName: string;
   period: string; // "YYYY-MM"
   baseSalary: number;
   allowances: number;
   deductions: number;
   netPay: number;
   status: PayrollStatus;
-  paymentMode: string;
+  paymentMode: PaymentMode;
+  dueDate: string;
   paidAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -351,7 +366,7 @@ export interface PayrollRecord {
     designation: string;
     team: string;
     avatar: string;
-  };
+  } | null;
 }
 
 export interface CalendarEventRecord {

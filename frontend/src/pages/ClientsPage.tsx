@@ -45,6 +45,7 @@ export default function ClientsPage() {
   
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
+  const canViewCommercialInsights = role === "admin" || role === "manager";
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.removeClient(id),
@@ -66,14 +67,24 @@ export default function ClientsPage() {
       const searchMatch =
         client.name.toLowerCase().includes(deferredSearch.toLowerCase()) ||
         client.industry.toLowerCase().includes(deferredSearch.toLowerCase()) ||
-        client.manager.toLowerCase().includes(deferredSearch.toLowerCase());
+        client.company.toLowerCase().includes(deferredSearch.toLowerCase()) ||
+        (canViewCommercialInsights && client.manager.toLowerCase().includes(deferredSearch.toLowerCase()));
       const statusMatch = statusFilter === "all" || client.status === statusFilter;
       const segmentMatch = segment === "all" || client.segment === segment;
       return searchMatch && statusMatch && segmentMatch;
     });
-  }, [deferredSearch, preferredClients, segment, statusFilter]);
+  }, [canViewCommercialInsights, deferredSearch, preferredClients, segment, statusFilter]);
 
   const overview = useMemo(() => {
+    if (!canViewCommercialInsights) {
+      return {
+        total: clients.length,
+        enterprise: clients.filter((client) => client.status === "active").length,
+        avgHealth: clients.filter((client) => client.status === "pending").length,
+        expansion: new Set(clients.map((client) => client.location)).size,
+      };
+    }
+
     const enterprise = clients.filter((client) => client.tier === "Enterprise" || client.tier === "Strategic").length;
     const avgHealth = clients.length
       ? Math.round(clients.reduce((sum, client) => sum + client.healthScore, 0) / clients.length)
@@ -86,7 +97,7 @@ export default function ClientsPage() {
       avgHealth,
       expansion,
     };
-  }, [clients]);
+  }, [canViewCommercialInsights, clients]);
 
   if (isLoading) {
     return <PageLoader />;
@@ -116,6 +127,7 @@ export default function ClientsPage() {
               <h1 className="font-display text-3xl font-semibold text-foreground">Clients</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 A clean relationship view for account health, ownership, and next actions.
+                {!canViewCommercialInsights ? " Your client view is limited to account-safe details only." : ""}
               </p>
             </div>
           </div>
@@ -138,10 +150,18 @@ export default function ClientsPage() {
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "Total Accounts", value: String(overview.total), icon: Building2 },
-            { label: "Enterprise Tier", value: String(overview.enterprise), icon: ShieldCheck },
-            { label: "Average Health", value: `${overview.avgHealth}/100`, icon: HeartPulse },
-            { label: "Expansion Plays", value: String(overview.expansion), icon: ArrowUpRight },
+            canViewCommercialInsights
+              ? { label: "Total Accounts", value: String(overview.total), icon: Building2 }
+              : { label: "My Accounts", value: String(overview.total), icon: Building2 },
+            canViewCommercialInsights
+              ? { label: "Enterprise Tier", value: String(overview.enterprise), icon: ShieldCheck }
+              : { label: "Active Accounts", value: String(overview.enterprise), icon: ShieldCheck },
+            canViewCommercialInsights
+              ? { label: "Average Health", value: `${overview.avgHealth}/100`, icon: HeartPulse }
+              : { label: "Pending Updates", value: String(overview.avgHealth), icon: HeartPulse },
+            canViewCommercialInsights
+              ? { label: "Expansion Plays", value: String(overview.expansion), icon: ArrowUpRight }
+              : { label: "Locations", value: String(overview.expansion), icon: MapPin },
           ].map((item) => (
             <div key={item.label} className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -249,7 +269,9 @@ export default function ClientsPage() {
                     <div>
                       <h2 className="font-display text-base font-semibold text-foreground">{client.name}</h2>
                       <p className="text-xs text-muted-foreground">{client.industry} · {client.tier}</p>
-                      <p className="text-xs text-muted-foreground/60">{client.manager}</p>
+                      <p className="text-xs text-muted-foreground/60">
+                        {canViewCommercialInsights ? client.manager : `${client.company} · ${client.location}`}
+                      </p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
@@ -278,30 +300,38 @@ export default function ClientsPage() {
                       )}
                       <StatusBadge status={client.status} />
                     </div>
-                    <span className="text-xs text-muted-foreground"><PrivacyValue value={client.revenue} /></span>
+                    {canViewCommercialInsights ? (
+                      <span className="text-xs text-muted-foreground"><PrivacyValue value={client.revenue} /></span>
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Health score bar */}
-                <div className="mt-4 space-y-1.5">
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>Health Score</span>
-                    <span className={cn("font-semibold",
-                      client.healthScore >= 80 ? "text-success" :
-                      client.healthScore >= 60 ? "text-warning" : "text-destructive"
-                    )}>{client.healthScore}/100</span>
+                {canViewCommercialInsights ? (
+                  <div className="mt-4 space-y-1.5">
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>Health Score</span>
+                      <span className={cn("font-semibold",
+                        client.healthScore >= 80 ? "text-success" :
+                        client.healthScore >= 60 ? "text-warning" : "text-destructive"
+                      )}>{client.healthScore}/100</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/40">
+                      <div
+                        className={cn("h-full rounded-full transition-all",
+                          client.healthScore >= 80 ? "bg-success/70" :
+                          client.healthScore >= 60 ? "bg-warning/70" : "bg-destructive/70"
+                        )}
+                        style={{ width: `${client.healthScore}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Next: {client.nextAction}</p>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/40">
-                    <div
-                      className={cn("h-full rounded-full transition-all",
-                        client.healthScore >= 80 ? "bg-success/70" :
-                        client.healthScore >= 60 ? "bg-warning/70" : "bg-destructive/70"
-                      )}
-                      style={{ width: `${client.healthScore}%` }}
-                    />
+                ) : (
+                  <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                    <div className="rounded-xl border border-border/70 bg-secondary/15 px-3 py-2">{client.email}</div>
+                    <div className="rounded-xl border border-border/70 bg-secondary/15 px-3 py-2">{client.phone}</div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Next: {client.nextAction}</p>
-                </div>
+                )}
               </article>
             ))
           )}
@@ -321,9 +351,19 @@ export default function ClientsPage() {
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">What matters here</h2>
             </div>
             <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-              <p>Health score is the primary risk signal for renewals and customer success follow-up.</p>
-              <p>Segment keeps revenue operations and CS routing clean when automation hooks are added.</p>
-              <p>Tier separates enterprise accounts from lighter-touch clients without changing the UI contract.</p>
+              {canViewCommercialInsights ? (
+                <>
+                  <p>Health score is the primary risk signal for renewals and customer success follow-up.</p>
+                  <p>Segment keeps revenue operations and CS routing clean when automation hooks are added.</p>
+                  <p>Tier separates enterprise accounts from lighter-touch clients without changing the UI contract.</p>
+                </>
+              ) : (
+                <>
+                  <p>Your client view is intentionally limited to account-safe details tied to your login.</p>
+                  <p>Internal ownership, revenue, and health scoring stay hidden outside admin and manager roles.</p>
+                  <p>Use this page to review your active accounts and contact details without exposing internal CRM metadata.</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -339,11 +379,17 @@ export default function ClientsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-foreground">{client.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{client.nextAction}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {canViewCommercialInsights ? client.nextAction : `${client.email} · ${client.phone}`}
+                        </p>
                       </div>
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                        {client.healthScore}
-                      </span>
+                      {canViewCommercialInsights ? (
+                        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                          {client.healthScore}
+                        </span>
+                      ) : (
+                        <StatusBadge status={client.status} />
+                      )}
                     </div>
                   </div>
                 ))

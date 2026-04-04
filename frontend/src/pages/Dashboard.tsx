@@ -17,6 +17,7 @@ import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import PersonalizedFocus from "@/components/dashboard/PersonalizedFocus";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useDashboardData, useProjects } from "@/hooks/use-crm-data";
 import { useMonitoring, usePerformanceTrace } from "@/hooks/use-monitoring";
@@ -102,14 +103,17 @@ function LazyDashboardChartsSection({
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { role } = useTheme();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const dashboardQuery = useDashboardData();
-  const projectsQuery = useProjects();
+  const projectsQuery = useProjects({ enabled: role !== "client" });
+  const canSeeCommercialInsights = role === "admin" || role === "manager";
+  const canSeeProjectBudget = role !== "employee";
 
-  const loading = dashboardQuery.isLoading || projectsQuery.isLoading;
+  const loading = dashboardQuery.isLoading || (role !== "client" && projectsQuery.isLoading);
 
   const dashboard = dashboardQuery.data;
-  const pageError = dashboardQuery.error ?? projectsQuery.error;
+  const pageError = dashboardQuery.error ?? (role !== "client" ? projectsQuery.error : null);
   const [activityFilter, setActivityFilter] = useState<"all" | "collaboration" | "sales" | "delivery" | "finance" | "hiring" | "system">("all");
   const [visibleActivityCount, setVisibleActivityCount] = useState(DASHBOARD_ACTIVITY_PAGE_SIZE);
 
@@ -118,7 +122,7 @@ export default function Dashboard() {
   }, [activityFilter]);
 
   const dashboardView = useMemo(() => {
-    const projects = projectsQuery.data ?? [];
+    const projects = role === "client" ? [] : (projectsQuery.data ?? []);
     const revenueSeries = dashboard?.revenueSeries ?? [];
     const focusClients = dashboard?.focusClients ?? [];
     const atRiskClients = dashboard?.atRiskClients ?? [];
@@ -142,7 +146,7 @@ export default function Dashboard() {
         (activity) => activityFilter === "all" || activity.category === activityFilter,
       ),
     };
-  }, [activityFilter, dashboard, projectsQuery.data]);
+  }, [activityFilter, dashboard, projectsQuery.data, role]);
 
   if (pageError) {
     return (
@@ -150,8 +154,8 @@ export default function Dashboard() {
         <ErrorFallback
           title="Dashboard data failed to load"
           error={pageError}
-          description="The overview could not fetch its data. Retry to reload the dashboard, clients, and projects."
-          onRetry={() => Promise.all([dashboardQuery.refetch(), clientsQuery.refetch(), projectsQuery.refetch()])}
+          description="The overview could not fetch its data. Retry to reload the dashboard and project portfolio."
+          onRetry={() => Promise.all([dashboardQuery.refetch(), projectsQuery.refetch()])}
           retryLabel="Retry dashboard"
         />
       </div>
@@ -302,7 +306,7 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Budget</p>
-                        <p className="mt-1 font-semibold text-foreground">{project.budget}</p>
+                        <p className="mt-1 font-semibold text-foreground">{canSeeProjectBudget ? project.budget : "Restricted"}</p>
                       </div>
                       <div>
                         <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Tasks</p>
@@ -409,7 +413,9 @@ export default function Dashboard() {
   ];
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      {widgetDefinitions.map((widget) => (
+      {widgetDefinitions
+        .filter((widget) => canSeeCommercialInsights || widget.id !== "charts")
+        .map((widget) => (
         <div key={widget.id}>{widget.node}</div>
       ))}
     </motion.div>

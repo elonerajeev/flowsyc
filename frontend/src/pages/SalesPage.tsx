@@ -27,6 +27,7 @@ import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import AdminOnly from "@/components/shared/AdminOnly";
 import type { Deal, Lead, SalesMetrics, Pipeline } from "@/types/crm";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
@@ -439,4 +440,5 @@ const SalesPage = () => {
   );
 };
 
-export default SalesPage;
+const SalesPageWrapped = () => <AdminOnly><SalesPage /></AdminOnly>;
+export default SalesPageWrapped;

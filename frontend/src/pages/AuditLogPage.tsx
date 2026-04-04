@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Filter, RefreshCw, Search, Shield, User } from "lucide-react";
 import { crmService } from "@/services/crm";
@@ -69,44 +69,38 @@ export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [entityFilter, setEntityFilter] = useState<string>("all");
   const [visibleLimit, setVisibleLimit] = useState(AUDIT_PAGE_SIZE);
+  const deferredSearch = useDeferredValue(search.trim());
 
-  const { data: logs = [], isLoading, refetch } = useQuery({
-    queryKey: ["audit-logs", visibleLimit],
-    queryFn: () => crmService.getAuditLogs(visibleLimit),
+  useEffect(() => {
+    setVisibleLimit(AUDIT_PAGE_SIZE);
+  }, [deferredSearch, actionFilter, entityFilter]);
+
+  const metaQuery = useQuery({
+    queryKey: ["audit-logs-meta"],
+    queryFn: () => crmService.getAuditLogsPage({ limit: 200 }),
   });
 
-  const filteredLogs = useMemo(() => {
-    let filtered = logs;
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(
-        (log) =>
-          log.userName.toLowerCase().includes(q) ||
-          log.action.toLowerCase().includes(q) ||
-          log.entity.toLowerCase().includes(q) ||
-          (log.detail && log.detail.toLowerCase().includes(q))
-      );
-    }
-
-    if (actionFilter !== "all") {
-      filtered = filtered.filter((log) => log.action === actionFilter);
-    }
-
-    if (entityFilter !== "all") {
-      filtered = filtered.filter((log) => log.entity === entityFilter);
-    }
-
-    return filtered;
-  }, [logs, search, actionFilter, entityFilter]);
+  const { data: auditPage, isLoading, refetch } = useQuery({
+    queryKey: ["audit-logs", visibleLimit, deferredSearch, actionFilter, entityFilter],
+    queryFn: () =>
+      crmService.getAuditLogsPage({
+        limit: visibleLimit,
+        offset: 0,
+        search: deferredSearch || undefined,
+        action: actionFilter !== "all" ? actionFilter : undefined,
+        entity: entityFilter !== "all" ? entityFilter : undefined,
+      }),
+  });
+  const logs = auditPage?.data ?? [];
+  const total = auditPage?.total ?? 0;
 
   const uniqueActions = useMemo(
-    () => [...new Set(logs.map((l) => l.action))].sort(),
-    [logs]
+    () => [...new Set((metaQuery.data?.data ?? []).map((l) => l.action))].sort(),
+    [metaQuery.data?.data]
   );
   const uniqueEntities = useMemo(
-    () => [...new Set(logs.map((l) => l.entity))].sort(),
-    [logs]
+    () => [...new Set((metaQuery.data?.data ?? []).map((l) => l.entity))].sort(),
+    [metaQuery.data?.data]
   );
 
   if (isLoading) {
@@ -175,7 +169,7 @@ export default function AuditLogPage() {
           </SelectContent>
         </Select>
 
-        <Badge variant="secondary">{filteredLogs.length} results</Badge>
+        <Badge variant="secondary">{total} results</Badge>
         <Badge variant="outline">Loaded {logs.length}</Badge>
       </div>
 
@@ -192,7 +186,7 @@ export default function AuditLogPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredLogs.length === 0 ? (
+            {logs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-40 text-center">
                   <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
@@ -200,7 +194,7 @@ export default function AuditLogPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLogs.map((log) => (
+              logs.map((log) => (
                 <TableRow key={log.id} className="hover:bg-secondary/20">
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(log.createdAt)}
@@ -249,8 +243,8 @@ export default function AuditLogPage() {
       </div>
 
       <ShowMoreButton
-        total={logs.length < visibleLimit ? logs.length : visibleLimit + AUDIT_PAGE_SIZE}
-        visible={Math.min(visibleLimit, logs.length)}
+        total={total}
+        visible={logs.length}
         pageSize={AUDIT_PAGE_SIZE}
         onShowMore={() => setVisibleLimit((current) => current + AUDIT_PAGE_SIZE)}
         onShowLess={() => setVisibleLimit(AUDIT_PAGE_SIZE)}

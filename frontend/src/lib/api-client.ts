@@ -45,6 +45,7 @@ function buildUrl(endpoint: string) {
 export async function requestJson<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const authToken = getStoredAuthToken();
   const response = await fetch(buildUrl(endpoint), {
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -74,6 +75,7 @@ export async function uploadFile<T>(endpoint: string, file: File, fieldName = "f
 
   const response = await fetch(buildUrl(endpoint), {
     method: "POST",
+    credentials: "include",
     headers: {
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },

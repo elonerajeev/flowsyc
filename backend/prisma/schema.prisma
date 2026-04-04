@@ -285,17 +285,91 @@ model UserPreference {
   @@index([userId])
 }
 
-/// We could not retrieve columns for the underlying table. Either it has none or you are missing rights to see them. Please check your privileges.
-// model AuditLog {
-// }
+model Lead {
+  id         Int        @id @default(autoincrement())
+  firstName  String
+  lastName   String
+  email      String     @unique
+  company    String
+  jobTitle   String?
+  status     LeadStatus @default(new)
+  source     LeadSource @default(website)
+  score      Int        @default(50)
+  assignedTo String?
+  notes      String?
+  deletedAt  DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
-/// We could not retrieve columns for the underlying table. Either it has none or you are missing rights to see them. Please check your privileges.
-// model CandidateActivity {
-// }
+  @@index([deletedAt])
+  @@index([status])
+  @@index([source])
+}
 
-/// We could not retrieve columns for the underlying table. Either it has none or you are missing rights to see them. Please check your privileges.
-// model Integration {
-// }
+model Deal {
+  id           Int            @id @default(autoincrement())
+  title        String
+  value        Int
+  stage        DealStage      @default(prospecting)
+  probability  Int            @default(50)
+  assignedTo   String?
+  expectedClose DateTime?
+  description  String?
+  deletedAt    DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  activities   DealActivity[]
+
+  @@index([deletedAt])
+  @@index([stage])
+}
+
+model DealActivity {
+  id        Int      @id @default(autoincrement())
+  dealId    Int
+  type      String
+  content   String
+  timestamp DateTime @default(now())
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  userName  String
+  action    String
+  entity    String
+  entityId  String
+  detail    String?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([timestamp])
+}
+
+model CandidateActivity {
+  id          Int      @id @default(autoincrement())
+  candidateId Int
+  action      String
+  detail      String
+  performedBy String
+  timestamp   DateTime @default(now())
+
+  @@index([candidateId])
+}
+
+model Integration {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      String
+  status    String   @default("active")
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
 enum UserRole {
   admin
@@ -375,6 +449,33 @@ enum CandidateStage {
   rejected
 }
 
+enum LeadStatus {
+  new
+  contacted
+  qualified
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+enum LeadSource {
+  website
+  referral
+  social
+  email
+  other
+}
+
+enum DealStage {
+  prospecting
+  qualification
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
 model CalendarEvent {
   id             Int            @id @default(autoincrement())
   title          String
@@ -404,12 +505,14 @@ model Payroll {
   id          Int          @id @default(autoincrement())
   memberId    String
   memberName  String
+  department  String       @default("")
   period     String
   baseSalary Int
   allowances Int
   deductions Int
   netPay     Int
   status     PayrollStatus @default(pending)
+  paymentMode PaymentMode  @default(bank_transfer)
   paidAt     DateTime?
   deletedAt  DateTime?
   createdAt  DateTime     @default(now())

@@ -10,6 +10,7 @@ import {
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import AdminOnly from "@/components/shared/AdminOnly";
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
@@ -23,6 +24,10 @@ function parseAmount(raw: string): number {
 }
 
 export default function FinancePage() {
+  return <AdminOnly><FinancePageInner /></AdminOnly>;
+}
+
+function FinancePageInner() {
   const { data: invoices = [], isLoading, error, refetch } = useInvoices();
   const [visibleCount, setVisibleCount] = useState(5);
   const PAGE_SIZE = 5;

@@ -59,7 +59,11 @@ export default function CandidatesPage() {
   const [joiningDate, setJoiningDate] = useState("");
   const [offeredSalary, setOfferedSalary] = useState("");
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
-  const [offerLetterData, setOfferLetterData] = useState<any>(null);
+  const [offerLetterData, setOfferLetterData] = useState<{
+    candidate: { name: string; email: string; jobTitle: string; department: string; location: string };
+    hr: { name: string; designation: string | null; email: string; signatureUrl: string | null };
+    offer: { joiningDate: string; offeredSalary: string; jobTitle: string; department: string; location: string; type: string; generatedAt: string };
+  } | null>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
   const offerLetterRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();

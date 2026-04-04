@@ -104,19 +104,19 @@ function getMockProfile(role: UserRole): Omit<AuthUser, "id" | "name" | "email" 
     case "client":
       return {
         employeeId: "CLT-4408",
-        department: "Client Success",
-        team: "Account Care",
+        department: "Client",
+        team: "",
         designation: "Client Contact",
-        manager: "Account Owner",
-        workingHours: "09:00 - 17:00",
-        officeLocation: "External",
+        manager: "Account Team",
+        workingHours: "",
+        officeLocation: "",
         timeZone: "Asia/Calcutta",
         baseSalary: 0,
         allowances: 0,
         deductions: 0,
         paymentMode: "upi",
-        payrollCycle: "Mar 2026",
-        payrollDueDate: "Apr 05, 2026",
+        payrollCycle: "",
+        payrollDueDate: "",
         joinedAt: "2025-02-20",
         location: "External",
       };
@@ -144,9 +144,17 @@ function createMockSession(credentials: AuthCredentials): AuthSession {
 function persistUser(user: AuthUser | null) {
   if (!user) {
     removeStoredValue(AUTH_USER_KEY);
+    localStorage.removeItem("crm-auth-token");
     return;
   }
   writeStoredJSON(AUTH_USER_KEY, user);
+}
+
+function persistSession(session: AuthSession) {
+  persistUser(session.user);
+  if (session.accessToken) {
+    localStorage.setItem("crm-auth-token", session.accessToken);
+  }
 }
 
 export function getStoredAuthUser() {
@@ -157,7 +165,7 @@ export const authService = {
   async login(credentials: AuthCredentials): Promise<AuthSession> {
     if (!isRemoteApiEnabled()) {
       const session = createMockSession(credentials);
-      persistUser(session.user);
+      persistSession(session);
       return session;
     }
 
@@ -165,14 +173,14 @@ export const authService = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-    persistUser(session.user);
+    persistSession(session);
     return session;
   },
 
   async signup(credentials: AuthCredentials): Promise<AuthSession> {
     if (!isRemoteApiEnabled()) {
       const session = createMockSession({ ...credentials, role: credentials.role ?? "employee" });
-      persistUser(session.user);
+      persistSession(session);
       return session;
     }
 
@@ -180,7 +188,7 @@ export const authService = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-    persistUser(session.user);
+    persistSession(session);
     return session;
   },
 
@@ -247,8 +255,9 @@ export const authService = {
       });
       persistUser(user);
       return user;
-    } catch (err: any) {
-      if (err?.status === 403) throw new Error("ROLE_MISMATCH");
+    } catch (err: unknown) {
+      const status = typeof err === "object" && err && "status" in err ? (err as { status?: number }).status : undefined;
+      if (status === 403) throw new Error("ROLE_MISMATCH");
       throw new Error("NO_SESSION");
     }
   },

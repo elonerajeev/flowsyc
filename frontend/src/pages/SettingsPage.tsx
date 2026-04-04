@@ -64,6 +64,7 @@ const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { st
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 type ProfileKey =
+  | "name"
   | "employeeId"
   | "department"
   | "team"
@@ -86,6 +87,7 @@ export default function SettingsPage() {
   const { canUseQuickCreate } = useWorkspace();
   const { mode, toggleMode, color, setColor, background, setBackground, role } = useTheme();
   const sharedTeamMembers = useSharedTeamMembers();
+  const canEditOrgProfile = role === "admin" || role === "manager";
   const { data: themePreviews, isLoading, error: themeError, refetch } = useThemePreviews();
   const currentBackground = backgroundSwatches.find((swatch) => swatch.value === background) ?? backgroundSwatches[0];
   const currentTheme = themePreviews?.[color];
@@ -93,6 +95,7 @@ export default function SettingsPage() {
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [profileDraft, setProfileDraft] = useState<Record<ProfileKey, string>>({
+    name: user?.name ?? "",
     employeeId: user?.employeeId ?? "EMP-0000",
     department: user?.department ?? "Operations",
     team: user?.team ?? "Platform Ops",
@@ -107,6 +110,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setProfileDraft({
+      name: user?.name ?? "",
       employeeId: user?.employeeId ?? "EMP-0000",
       department: user?.department ?? "Operations",
       team: user?.team ?? "Platform Ops",
@@ -123,16 +127,25 @@ export default function SettingsPage() {
   const handleProfileSave = async () => {
     setIsSaving(true);
     try {
-      await updateProfile({
-        department: profileDraft.department,
-        team: profileDraft.team,
-        designation: profileDraft.designation,
-        manager: profileDraft.manager,
-        workingHours: profileDraft.workingHours,
-        officeLocation: profileDraft.officeLocation,
-        timeZone: profileDraft.timeZone,
-        location: profileDraft.location,
-      });
+      await updateProfile(
+        canEditOrgProfile
+          ? {
+              name: profileDraft.name,
+              department: profileDraft.department,
+              team: profileDraft.team,
+              designation: profileDraft.designation,
+              manager: profileDraft.manager,
+              workingHours: profileDraft.workingHours,
+              officeLocation: profileDraft.officeLocation,
+              timeZone: profileDraft.timeZone,
+              location: profileDraft.location,
+            }
+          : {
+              name: profileDraft.name,
+              timeZone: profileDraft.timeZone,
+              location: profileDraft.location,
+            },
+      );
       setIsProfileEditing(false);
     } finally {
       setIsSaving(false);
@@ -146,18 +159,19 @@ export default function SettingsPage() {
       { label: "Theme palette", value: currentTheme?.label ?? "Theme" },
       { label: "Backdrop", value: currentBackground.label },
       {
-        label: "Employment status",
-        value:
-          liveEmployeeRecord?.terminatedAt
+        label: canEditOrgProfile ? "Employment status" : "Access level",
+        value: canEditOrgProfile
+          ? liveEmployeeRecord?.terminatedAt
             ? "Terminated"
             : liveEmployeeRecord?.suspendedAt
               ? "Suspended"
               : liveEmployeeRecord?.status
                 ? liveEmployeeRecord.status.charAt(0).toUpperCase() + liveEmployeeRecord.status.slice(1)
-                : "Active",
+                : "Active"
+          : role.charAt(0).toUpperCase() + role.slice(1),
       },
     ],
-    [canUseQuickCreate, currentBackground.label, currentTheme?.label, liveEmployeeRecord, user],
+    [canEditOrgProfile, canUseQuickCreate, currentBackground.label, currentTheme?.label, liveEmployeeRecord, role, user],
   );
 
   const profileSections: Array<{
@@ -260,7 +274,7 @@ export default function SettingsPage() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase text-primary">{role}</span>
                 <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{mode} mode</span>
-                {liveEmployeeRecord && (
+                {canEditOrgProfile && liveEmployeeRecord && (
                   <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase",
                     liveEmployeeRecord.terminatedAt ? "border-destructive/25 bg-destructive/10 text-destructive" :
                     liveEmployeeRecord.suspendedAt ? "border-warning/25 bg-warning/10 text-warning" :
@@ -276,16 +290,19 @@ export default function SettingsPage() {
           {/* All profile fields in one clean grid */}
           <div className="grid gap-3 sm:grid-cols-2">
             {[
-              { label: "Employee ID", key: "employeeId" as ProfileKey },
-              { label: "Department", key: "department" as ProfileKey },
-              { label: "Team", key: "team" as ProfileKey },
-              { label: "Designation", key: "designation" as ProfileKey },
-              { label: "Manager", key: "manager" as ProfileKey },
-              { label: "Office", key: "officeLocation" as ProfileKey },
-              { label: "Working Hours", key: "workingHours" as ProfileKey },
+              { label: "Name", key: "name" as ProfileKey },
+              ...(canEditOrgProfile ? [
+                { label: "Employee ID", key: "employeeId" as ProfileKey },
+                { label: "Department", key: "department" as ProfileKey },
+                { label: "Team", key: "team" as ProfileKey },
+                { label: "Designation", key: "designation" as ProfileKey },
+                { label: "Manager", key: "manager" as ProfileKey },
+                { label: "Office", key: "officeLocation" as ProfileKey },
+                { label: "Working Hours", key: "workingHours" as ProfileKey },
+              ] : []),
               { label: "Timezone", key: "timeZone" as ProfileKey },
               { label: "Location", key: "location" as ProfileKey },
-              { label: "Joined", key: "joinedAt" as ProfileKey },
+              ...(canEditOrgProfile ? [{ label: "Joined", key: "joinedAt" as ProfileKey }] : []),
             ].map((field) => (
               <div key={field.key}>
                 <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{field.label}</p>
@@ -303,7 +320,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Employment notice - only if flagged */}
-          {liveEmployeeRecord && (liveEmployeeRecord.suspendedAt || liveEmployeeRecord.terminatedAt || (liveEmployeeRecord.warningCount ?? 0) > 0) && (
+          {canEditOrgProfile && liveEmployeeRecord && (liveEmployeeRecord.suspendedAt || liveEmployeeRecord.terminatedAt || (liveEmployeeRecord.warningCount ?? 0) > 0) && (
             <div className={cn("mt-4 rounded-2xl border p-4",
               liveEmployeeRecord.terminatedAt ? "border-destructive/20 bg-destructive/5" : "border-warning/20 bg-warning/5"
             )}>
@@ -472,7 +489,7 @@ export default function SettingsPage() {
                       {currentTheme?.label ?? "Theme"}
                     </div>
                     <div className="rounded-full bg-card/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground backdrop-blur">
-                      {profileDraft.officeLocation}
+                      {canEditOrgProfile ? profileDraft.officeLocation : profileDraft.location}
                     </div>
                   </div>
 
@@ -492,7 +509,7 @@ export default function SettingsPage() {
                 {[
                   { label: "Theme", value: currentTheme?.label ?? "Theme" },
                   { label: "Background", value: currentBackground.label },
-                  { label: "Office", value: profileDraft.officeLocation },
+                  { label: canEditOrgProfile ? "Office" : "Location", value: canEditOrgProfile ? profileDraft.officeLocation : profileDraft.location },
                   { label: "Mode", value: mode },
                   { label: "Role", value: role },
                 ].map((item) => (

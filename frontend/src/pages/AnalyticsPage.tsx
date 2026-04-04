@@ -4,6 +4,7 @@ import { TrendingUp, Users, DollarSign, FolderOpen, BarChart2 } from "lucide-rea
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import AdminOnly from "@/components/shared/AdminOnly";
 import { useClients, useProjects, useInvoices, useTeamMembers } from "@/hooks/use-crm-data";
 
 function parseAmount(raw: string): number {
@@ -15,6 +16,10 @@ const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { st
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function AnalyticsPage() {
+  return <AdminOnly><AnalyticsPageInner /></AdminOnly>;
+}
+
+function AnalyticsPageInner() {
   const { data: clients = [], isLoading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();

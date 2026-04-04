@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import type { AccessActor } from "../utils/access-control";
 
 type AttendanceRecord = {
   id: number;
@@ -13,9 +14,16 @@ type AttendanceRecord = {
 };
 
 export const attendanceService = {
-  async list() {
+  async list(actor?: AccessActor) {
     const members = await prisma.teamMember.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(actor?.role === "employee"
+          ? {
+              email: { equals: actor.email, mode: "insensitive" },
+            }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
     });
 

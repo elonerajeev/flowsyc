@@ -8,7 +8,7 @@ export const createProjectSchema = z.object({
   description: z.string().max(1000).optional(),
   progress: z.coerce.number().int().min(0).max(100).optional(),
   status: projectStatusSchema.optional(),
-  team: z.array(z.string().min(1).max(8)).optional(),
+  team: z.array(z.string().min(1).max(100)).optional(),
   dueDate: z.string().min(1).max(32).optional(),
   stage: projectStageSchema.optional(),
   budget: z.string().min(1).max(80).optional(),

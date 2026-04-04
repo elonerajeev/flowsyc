@@ -64,13 +64,14 @@ export function useTasks(projectId?: number, options?: QueryToggle) {
   });
 }
 
-export function useAuditLogs(limit = 100) {
+export function useAuditLogs(limit = 100, options?: QueryToggle) {
   return useQuery({
     queryKey: [...crmKeys.auditLogs, limit],
     queryFn: () => crmService.getAuditLogs(limit),
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 60 * 2,
     refetchIntervalInBackground: false,
+    enabled: options?.enabled,
   });
 }
 

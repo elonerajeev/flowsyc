@@ -2,34 +2,34 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { AccessActor } from "../utils/access-control";
 
+async function buildCalendarWhere(actor: AccessActor) {
+  const where: any = { deletedAt: null };
+
+  if (actor?.role === "employee") {
+    const member = await prisma.teamMember.findFirst({
+      where: { email: { equals: actor.email, mode: "insensitive" }, deletedAt: null },
+      select: { name: true, team: true },
+    });
+
+    where.OR = [
+      { authorId: actor.userId },
+      { AND: [{ assignmentKind: "member" }, { assigneeId: actor.email }] },
+      ...(member?.name ? [{ AND: [{ assignmentKind: "member" }, { assigneeId: member.name }] }] : []),
+      ...(member?.team ? [{ AND: [{ assignmentKind: "team" }, { assigneeId: member.team }] }] : []),
+    ];
+  } else if (actor?.role === "client") {
+    where.OR = [
+      { authorId: actor.userId },
+      { assigneeId: actor.email },
+    ];
+  }
+
+  return where;
+}
+
 export const calendarService = {
   async list(actor: AccessActor) {
-    const where: any = { deletedAt: null };
-
-    if (actor?.role === "employee") {
-      // Employees see:
-      // 1. Events they created
-      // 2. Events assigned to them specifically (member)
-      // 3. Events assigned to their team
-      
-      const member = await prisma.teamMember.findFirst({
-        where: { email: { equals: actor.email, mode: "insensitive" }, deletedAt: null },
-        select: { name: true, team: true },
-      });
-
-      where.OR = [
-        { authorId: actor?.userId },
-        { AND: [{ assignmentKind: "member" }, { assigneeId: actor.email }] },
-        ...(member?.name ? [{ AND: [{ assignmentKind: "member" }, { assigneeId: member.name }] }] : []),
-        ...(member?.team ? [{ AND: [{ assignmentKind: "team" }, { assigneeId: member.team }] }] : []),
-      ] as any;
-    } else if (actor?.role === "client") {
-      // Clients only see events they created or assigned to them
-      where.OR = [
-        { authorId: actor?.userId },
-        { assigneeId: actor.email },
-      ];
-    }
+    const where = await buildCalendarWhere(actor);
 
     const events = await (prisma as any).calendarEvent.findMany({
       where,
@@ -39,10 +39,18 @@ export const calendarService = {
     return events;
   },
 
-  async getById(id: number, _actor: AccessActor) {
-    const event = await (prisma as any).calendarEvent.findUnique({
-      where: { id },
+  async getById(id: number, actor: AccessActor) {
+    const where = await buildCalendarWhere(actor);
+    const event = await (prisma as any).calendarEvent.findFirst({
+      where: {
+        ...where,
+        id,
+      },
     });
+
+    if (!event) {
+      throw new AppError("Event not found", 404, "NOT_FOUND");
+    }
 
     return event;
   },

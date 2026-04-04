@@ -77,7 +77,8 @@ type ClientInput = {
   tags?: string[];
 };
 
-function mapClient(client: {
+function mapClient(
+  client: {
   id: number;
   name: string;
   industry: string;
@@ -100,19 +101,23 @@ function mapClient(client: {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
-}): ClientRecord {
+},
+  role?: UserRole,
+): ClientRecord {
+  const isClientView = role === "client";
+
   return {
     id: client.id,
     name: client.name,
     industry: client.industry,
-    manager: client.manager,
+    manager: isClientView ? "Account team" : client.manager,
     status: fromDbClientStatus(client.status),
-    revenue: client.revenue,
+    revenue: isClientView ? "Private" : client.revenue,
     location: client.location,
     avatar: client.avatar,
     tier: fromDbClientTier(client.tier),
-    healthScore: client.healthScore,
-    nextAction: client.nextAction,
+    healthScore: isClientView ? 0 : client.healthScore,
+    nextAction: isClientView ? "Contact your account team for the next update." : client.nextAction,
     segment: fromDbClientSegment(client.segment),
     email: client.email,
     phone: client.phone,
@@ -120,8 +125,8 @@ function mapClient(client: {
     companyId: client.companyId ?? undefined,
     jobTitle: client.jobTitle ?? undefined,
     source: client.source ?? undefined,
-    assignedTo: client.assignedTo ?? undefined,
-    tags: client.tags,
+    assignedTo: isClientView ? undefined : client.assignedTo ?? undefined,
+    tags: isClientView ? [] : client.tags,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
@@ -203,7 +208,7 @@ export const clientsService = {
     if (!client || client.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
     }
-    return mapClient(client);
+    return mapClient(client, access?.role);
   },
 
   async list(filters: ClientFilters, access?: AccessScope) {
@@ -220,7 +225,7 @@ export const clientsService = {
     ]);
 
     return {
-      data: clients.map(mapClient),
+      data: clients.map((client) => mapClient(client, access?.role)),
       pagination: {
         page: filters.page,
         limit: filters.limit,

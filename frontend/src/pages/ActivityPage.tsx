@@ -6,6 +6,7 @@ import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ProgressRing from "@/components/shared/ProgressRing";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAuditLogs, useDashboardData } from "@/hooks/use-crm-data";
 import { cn } from "@/lib/utils";
 
@@ -73,8 +74,10 @@ function formatCategoryLabel(value: string) {
 }
 
 export default function ActivityPage() {
+  const { role } = useTheme();
+  const canSeeAuditTrail = role === "admin" || role === "manager";
   const { data: dashboard, isLoading, error: dashboardError, refetch } = useDashboardData();
-  const { data: auditLogs = [] } = useAuditLogs(8);
+  const { data: auditLogs = [] } = useAuditLogs(8, { enabled: canSeeAuditTrail });
   const [selectedHeatCell, setSelectedHeatCell] = useState<number | null>(null);
   const [activityFilter, setActivityFilter] = useState<FilterId>("all");
   const [visibleAuditCount, setVisibleAuditCount] = useState(AUDIT_PAGE_SIZE);
@@ -447,7 +450,8 @@ export default function ActivityPage() {
             </div>
           </motion.section>
 
-          <motion.section variants={item} className="rounded-[1.7rem] border border-border/70 bg-card/90 p-5 shadow-card">
+          {canSeeAuditTrail ? (
+            <motion.section variants={item} className="rounded-[1.7rem] border border-border/70 bg-card/90 p-5 shadow-card">
             <div className="mb-4 flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />
               <div>
@@ -501,7 +505,8 @@ export default function ActivityPage() {
                 No audit entries yet. Create, update, or delete records to start tracking changes here.
               </div>
             )}
-          </motion.section>
+            </motion.section>
+          ) : null}
         </div>
       </div>
     </motion.div>

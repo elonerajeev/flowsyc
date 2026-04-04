@@ -44,14 +44,14 @@ export const authController = {
       detail: `Signed up: ${session.user.email}`,
     });
     setAuthCookies(res, session.accessToken!, session.refreshToken!);
-    res.status(201).json({ user: session.user });
+    res.status(201).json({ user: session.user, accessToken: session.accessToken });
   },
 
   login: async (req: Request, res: Response): Promise<void> => {
     const session = await authService.login(req.body);
     await logAudit({ userId: session.user.id, userName: session.user.name, action: "login", entity: "Auth", detail: "Login" });
     setAuthCookies(res, session.accessToken!, session.refreshToken!);
-    res.status(200).json({ user: session.user });
+    res.status(200).json({ user: session.user, accessToken: session.accessToken });
   },
 
   me: async (req: Request, res: Response): Promise<void> => {
@@ -86,7 +86,7 @@ export const authController = {
       res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing session" } });
       return;
     }
-    const user = await authService.updateProfile(req.auth.userId, req.body);
+    const user = await authService.updateProfile(req.auth.userId, req.auth.role, req.body);
     await logAudit({
       userId: req.auth.userId,
       userName: user.name,

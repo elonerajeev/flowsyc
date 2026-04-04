@@ -80,8 +80,8 @@ export default function PayrollPage() {
   // Get current user's payroll record if they are an employee
   const currentUserRecord = useMemo(() => {
     if (role !== "employee") return null;
-    return records.find(r => r.memberId === user?.id) ?? null;
-  }, [records, user?.id, role]);
+    return records[0] ?? null;
+  }, [records, role]);
 
   useEffect(() => {
     if (records.length > 0) {
@@ -99,6 +99,15 @@ export default function PayrollPage() {
       };
     }
 
+    if (!canManagePayroll && role === "employee" && user) {
+      return {
+        payrollTotal: user.baseSalary + user.allowances - user.deductions,
+        paid: 0,
+        pending: 0,
+        overdue: 0,
+      };
+    }
+
     const currentPeriod = getMonthKey(new Date());
     const currentRecords = records.filter(r => r.period === currentPeriod);
 
@@ -108,7 +117,7 @@ export default function PayrollPage() {
       pending: currentRecords.filter(r => r.status === "pending").length,
       overdue: currentRecords.filter(r => r.status === "overdue").length,
     };
-  }, [canManagePayroll, currentUserRecord, records]);
+  }, [canManagePayroll, currentUserRecord, records, role, user]);
 
   const selectedRecord = useMemo(() => {
     if (!canManagePayroll) return currentUserRecord;
@@ -186,12 +195,12 @@ export default function PayrollPage() {
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {[
-                { label: "Base salary", value: formatCurrency(currentUserRecord?.baseSalary ?? 0), icon: CircleDollarSign },
-                { label: "Allowances", value: formatCurrency(currentUserRecord?.allowances), icon: Banknote },
-                { label: "Deductions", value: formatCurrency(currentUserRecord?.deductions), icon: ReceiptText },
-                { label: "Net salary", value: formatCurrency(currentUserRecord?.netPay), icon: Wallet },
-                { label: "Payment mode", value: currentUserRecord ? "Bank Transfer" : "-", icon: HandCoins },
-                { label: "Payroll cycle", value: currentUserRecord ? currentUserRecord.period : "-", icon: CalendarDays },
+                { label: "Base salary", value: formatCurrency(currentUserRecord?.baseSalary ?? user?.baseSalary ?? 0), icon: CircleDollarSign },
+                { label: "Allowances", value: formatCurrency(currentUserRecord?.allowances ?? user?.allowances), icon: Banknote },
+                { label: "Deductions", value: formatCurrency(currentUserRecord?.deductions ?? user?.deductions), icon: ReceiptText },
+                { label: "Net salary", value: formatCurrency(currentUserRecord?.netPay ?? ((user?.baseSalary ?? 0) + (user?.allowances ?? 0) - (user?.deductions ?? 0))), icon: Wallet },
+                { label: "Payment mode", value: currentUserRecord ? modeLabel[currentUserRecord.paymentMode] : user?.paymentMode ? modeLabel[user.paymentMode] : "-", icon: HandCoins },
+                { label: "Payroll cycle", value: currentUserRecord?.period ?? user?.payrollCycle ?? "-", icon: CalendarDays },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
                   <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -314,8 +323,13 @@ export default function PayrollPage() {
               </p>
               <div className="mt-4 rounded-2xl border border-border/70 bg-card/70 p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Due date</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{currentUserRecord?.createdAt ? new Date(currentUserRecord.createdAt).toLocaleDateString() : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{currentUserRecord?.dueDate ?? user?.payrollDueDate ?? "-"}</p>
               </div>
+              {!currentUserRecord && (
+                <div className="mt-4 rounded-2xl border border-dashed border-border/70 bg-secondary/15 p-4 text-sm text-muted-foreground">
+                  No payroll record has been generated for your account yet. Your salary profile is still visible above.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -326,9 +340,9 @@ export default function PayrollPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected payroll</p>
-              <h2 className="mt-1 font-display text-xl font-semibold text-foreground">{selectedRecord.name}</h2>
+              <h2 className="mt-1 font-display text-xl font-semibold text-foreground">{selectedRecord.memberName}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {selectedRecord.member?.designation} · {selectedRecord.member?.team} · {selectedRecord.period}
+                {selectedRecord.member?.designation ?? "Team member"} · {selectedRecord.member?.team ?? "Unassigned"} · {selectedRecord.period}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

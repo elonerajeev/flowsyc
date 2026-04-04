@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, CheckCircle2, ClipboardList, CreditCard, FolderKanban, Zap, Users, BriefcaseBusiness } from "lucide-react";
 
@@ -29,11 +29,18 @@ const projectStageOptions = ["Discovery", "Build", "Review", "Launch"];
 const priorityOptions = ["high", "medium", "low"];
 
 export default function QuickCreateDialog() {
-  const { quickCreateOpen, closeQuickCreate, canUseQuickCreate } = useWorkspace();
+  const { quickCreateOpen, closeQuickCreate, canUseQuickCreate, workflowToOpen } = useWorkspace();
   const sharedTeamMembers = useSharedTeamMembers();
   const queryClient = useQueryClient();
   
   const [selected, setSelected] = useState(workflows[0].id);
+
+  // Sync with workflowToOpen when dialog opens
+  useEffect(() => {
+    if (quickCreateOpen && workflowToOpen) {
+      setSelected(workflowToOpen);
+    }
+  }, [quickCreateOpen, workflowToOpen]);
   
   // Common fields
   const [name, setName] = useState("");
@@ -134,7 +141,7 @@ export default function QuickCreateDialog() {
             progress: 0,
             status: projectStatus,
             team: projectTeam.length > 0 ? projectTeam : ["OW"],
-            dueDate: dueDate || "",
+            ...(dueDate ? { dueDate } : {}),
             stage: projectStage,
             budget: budget || "$0",
           });
@@ -145,10 +152,10 @@ export default function QuickCreateDialog() {
             title: name.trim() || "New Task",
             assignee,
             avatar: assignee.slice(0, 2).toUpperCase(),
-            priority: (priority === "normal" ? "medium" : priority) as any,
-            dueDate: dueDate || new Date().toISOString().slice(0, 10),
+            priority: (priority === "normal" ? "medium" : priority) as "high" | "medium" | "low",
+            ...(dueDate ? { dueDate } : {}),
             tags: tags ? tags.split(",").map(t => t.trim()) : ["Quick Create"],
-            valueStream: valueStream as any,
+            valueStream: valueStream as "Growth" | "Product" | "Support",
             projectId: taskProjectId === "none" ? null : Number(taskProjectId),
           });
         }
@@ -158,7 +165,7 @@ export default function QuickCreateDialog() {
             client: selectedClient?.name || name.trim() || "New Client",
             amount: `$${Number(amount || 0).toLocaleString()}`,
             date: invoiceDate,
-            due: invoiceDue || invoiceDate,
+            ...(invoiceDue ? { due: invoiceDue } : {}),
             status: invoiceStatus,
           });
         }
@@ -180,7 +187,7 @@ export default function QuickCreateDialog() {
       }
     },
     onSuccess: async (_, workflowId) => {
-      const keyMap: Record<string, any> = { 
+      const keyMap: Record<string, unknown[]> = { 
         client: crmKeys.clients, 
         lead: ["leads"],
         project: crmKeys.projects, 
@@ -296,7 +303,7 @@ export default function QuickCreateDialog() {
                     <>
                       <label className="space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tier</span>
-                        <Select value={tier} onValueChange={v => setTier(v as any)}>
+                        <Select value={tier} onValueChange={v => setTier(v as "Growth" | "Enterprise" | "Strategic")}>
                           <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {tierOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -305,7 +312,7 @@ export default function QuickCreateDialog() {
                       </label>
                       <label className="space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Segment</span>
-                        <Select value={segment} onValueChange={v => setSegment(v as any)}>
+                        <Select value={segment} onValueChange={v => setSegment(v as "New Business" | "Renewal" | "Expansion")}>
                           <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {segmentOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -314,7 +321,7 @@ export default function QuickCreateDialog() {
                       </label>
                       <label className="space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</span>
-                        <Select value={status} onValueChange={v => setStatus(v as any)}>
+                        <Select value={status} onValueChange={v => setStatus(v as "active" | "pending" | "completed")}>
                           <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -347,7 +354,7 @@ export default function QuickCreateDialog() {
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</span>
-                    <Select value={priority} onValueChange={v => setPriority(v as any)}>
+                    <Select value={priority} onValueChange={v => setPriority(v as "urgent" | "high" | "normal" | "low")}>
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="urgent">Urgent</SelectItem>
@@ -373,7 +380,7 @@ export default function QuickCreateDialog() {
                 <>
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</span>
-                    <Select value={projectStatus} onValueChange={v => setProjectStatus(v as any)}>
+                    <Select value={projectStatus} onValueChange={v => setProjectStatus(v as "active" | "pending" | "completed")}>
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {projectStatusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -382,7 +389,7 @@ export default function QuickCreateDialog() {
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stage</span>
-                    <Select value={projectStage} onValueChange={v => setProjectStage(v as any)}>
+                    <Select value={projectStage} onValueChange={v => setProjectStage(v as "Discovery" | "Build" | "Review" | "Launch")}>
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {projectStageOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -435,7 +442,7 @@ export default function QuickCreateDialog() {
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</span>
-                    <Select value={priority as any} onValueChange={v => setPriority(v as any)}>
+                    <Select value={priority} onValueChange={v => setPriority(v as "urgent" | "high" | "normal" | "low")}>
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="high">High</SelectItem>
@@ -506,7 +513,7 @@ export default function QuickCreateDialog() {
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</span>
-                    <Select value={invoiceStatus} onValueChange={v => setInvoiceStatus(v as any)}>
+                    <Select value={invoiceStatus} onValueChange={v => setInvoiceStatus(v as "pending" | "paid" | "overdue")}>
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="pending">Pending</SelectItem>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2 } from "lucide-react";
+import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -12,6 +12,7 @@ import { useProjects, useTasks, crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { cn } from "@/lib/utils";
 import { crmService } from "@/services/crm";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 type ProjectStage = "Discovery" | "Build" | "Review" | "Launch";
 
@@ -40,6 +41,7 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transiti
 export default function ProjectsPage() {
   const { data: projects = [], isLoading, error: projectsError, refetch } = useProjects();
   const { role } = useTheme();
+  const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const queryClient = useQueryClient();
   const [visibleCount, setVisibleCount] = useState(5);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -47,6 +49,7 @@ export default function ProjectsPage() {
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
+  const canViewBudget = role !== "employee";
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.removeProject(id),
@@ -102,9 +105,23 @@ export default function ProjectsPage() {
               <FolderKanban className="h-3.5 w-3.5 text-primary" />
               Program Delivery
             </div>
-            <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
+              {canUseQuickCreate && (
+                <button
+                  type="button"
+                  onClick={() => openQuickCreate("project")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg active:scale-95"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Project
+                </button>
+              )}
+            </div>
             <p className="max-w-xl text-sm text-muted-foreground">
-              Track delivery stages, budgets, and progress across all active programs.
+              {canViewBudget
+                ? "Track delivery stages, budgets, and progress across all active programs."
+                : "Track the projects assigned to you without exposing portfolio budget details."}
             </p>
           </div>
 
@@ -115,7 +132,9 @@ export default function ProjectsPage() {
                 { label: "Active", value: summary.active, icon: FolderKanban, color: "text-primary bg-primary/10" },
                 { label: "Done", value: summary.completed, icon: CheckCircle2, color: "text-success bg-success/10" },
                 { label: "Avg Progress", value: `${summary.avgProgress}%`, icon: Gauge, color: "text-warning bg-warning/10" },
-                { label: "Total Budget", value: summary.totalBudget >= 1000 ? `$${(summary.totalBudget/1000).toFixed(0)}K` : `$${summary.totalBudget}`, icon: Wallet, color: "text-accent bg-accent/10" },
+                canViewBudget
+                  ? { label: "Total Budget", value: summary.totalBudget >= 1000 ? `$${(summary.totalBudget/1000).toFixed(0)}K` : `$${summary.totalBudget}`, icon: Wallet, color: "text-accent bg-accent/10" }
+                  : { label: "Assigned", value: String(preferredProjects.length), icon: Wallet, color: "text-accent bg-accent/10" },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div key={label} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-secondary/20 px-4 py-3 min-w-[110px]">
                   <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color)}>
@@ -143,6 +162,16 @@ export default function ProjectsPage() {
                 ? "You do not yet have delivery programs assigned. Contact your manager for access to additional projects."
                 : "Add a project to start tracking delivery."}
             </p>
+            {canUseQuickCreate && (
+              <button
+                type="button"
+                onClick={() => openQuickCreate("project")}
+                className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                Create First Project
+              </button>
+            )}
           </div>
         ) : (
           preferredProjects.slice(0, visibleCount).map((project, idx) => {
@@ -234,7 +263,7 @@ export default function ProjectsPage() {
                 <div className="grid grid-cols-3 divide-x divide-border/40 border-t border-border/30">
                   <div className="px-5 py-3">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Budget</p>
-                    <p className="mt-0.5 text-sm font-semibold text-foreground">{project.budget}</p>
+                    <p className="mt-0.5 text-sm font-semibold text-foreground">{canViewBudget ? project.budget : "Restricted"}</p>
                   </div>
                   <div className="px-5 py-3">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Tasks</p>
