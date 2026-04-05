@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
@@ -12,6 +13,7 @@ import { crmKeys, useProjects, useTasks } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import type { TaskColumn, TaskRecord } from "@/types/crm";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
 
 const priorityConfig = {
@@ -57,6 +59,8 @@ function TaskCard({
   onDragStart: (taskId: number) => void;
   onDropCard: (taskId: number, targetColumn: TaskColumn) => void;
 }) {
+  const { openQuickCreate } = useWorkspace();
+
   return (
     <article
       draggable
@@ -80,7 +84,10 @@ function TaskCard({
         <div className="flex items-center gap-1.5">
           {canEdit && (
             <button
-              onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+              onClick={() => {
+                toast.info("Edit mode coming via Quick Create extension");
+                openQuickCreate("task", task);
+              }}
               className="p-1 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
               title="Edit task"
             >
@@ -166,8 +173,17 @@ export default function TasksPage() {
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   const pinnedKey = `crm-task-pins-${role}`;
   const [pinnedTaskIds, setPinnedTaskIds] = useState<string[]>([]);
-  const [doneVisible, setDoneVisible] = useState(5);
-  const DONE_PAGE = 5;
+  const TASK_PAGE_SIZE = 4;
+  const [todoVisible, setTodoVisible] = useState(4);
+  const [inProgressVisible, setInProgressVisible] = useState(4);
+  const [doneVisible, setDoneVisible] = useState(4);
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin" || role === "manager";
@@ -178,7 +194,9 @@ export default function TasksPage() {
 
   useEffect(() => {
     setBoard(null);
-    setDoneVisible(DONE_PAGE);
+    setTodoVisible(TASK_PAGE_SIZE);
+    setInProgressVisible(TASK_PAGE_SIZE);
+    setDoneVisible(TASK_PAGE_SIZE);
   }, [data, activeProjectId]);
 
   const effectiveBoard = board ?? data ?? null;
@@ -312,17 +330,43 @@ export default function TasksPage() {
             </div>
           </div>
           {canUseQuickCreate ? (
-            <button
-              type="button"
-              onClick={openQuickCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
-            >
-              <Plus className="h-4 w-4" />
-              New Task
-            </button>
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Board"}
+                </Button>
+              </motion.div>
+              <button
+                type="button"
+                onClick={openQuickCreate}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+              >
+                <Plus className="h-4 w-4" />
+                New Task
+              </button>
+            </div>
           ) : (
-            <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
-              Read only
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Board"}
+                </Button>
+              </motion.div>
+              <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
+                Read only
+              </div>
             </div>
           )}
         </div>
@@ -377,33 +421,36 @@ export default function TasksPage() {
             </div>
             <div className="space-y-2.5 p-3">
               {filteredBoard[column].length > 0 ? (
-                (column === "done" ? filteredBoard[column].slice(0, doneVisible) : filteredBoard[column]).map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    column={column}
-                    projectName={task.projectId ? projectNameById.get(task.projectId) : undefined}
-                    pinned={pinnedTaskIds.includes(String(task.id))}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    onMove={(taskId, direction) => {
-                      const sourceColumn = orderedColumns.find((entry) => (effectiveBoard?.[entry] ?? []).some((task) => task.id === taskId));
-                      if (!sourceColumn) return;
-                      const currentIndex = orderedColumns.indexOf(sourceColumn);
-                      const nextColumn = direction === "left" ? orderedColumns[currentIndex - 1] : orderedColumns[currentIndex + 1];
-                      if (!nextColumn) return;
-                      updateTaskColumn(taskId, nextColumn);
-                    }}
-                    onPin={togglePin}
-                    onDelete={(id) => {
-                      if (window.confirm("Are you sure you want to delete this task?")) {
-                        deleteMutation.mutate(id);
-                      }
-                    }}
-                    onDragStart={(taskId) => setDraggedTaskId(taskId)}
-                    onDropCard={handleDropToColumn}
-                  />
-                ))
+                (() => {
+                  const visibleLimit = column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible;
+                  return filteredBoard[column].slice(0, visibleLimit).map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      column={column}
+                      projectName={task.projectId ? projectNameById.get(task.projectId) : undefined}
+                      pinned={pinnedTaskIds.includes(String(task.id))}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      onMove={(taskId, direction) => {
+                        const sourceColumn = orderedColumns.find((entry) => (effectiveBoard?.[entry] ?? []).some((task) => task.id === taskId));
+                        if (!sourceColumn) return;
+                        const currentIndex = orderedColumns.indexOf(sourceColumn);
+                        const nextColumn = direction === "left" ? orderedColumns[currentIndex - 1] : orderedColumns[currentIndex + 1];
+                        if (!nextColumn) return;
+                        updateTaskColumn(taskId, nextColumn);
+                      }}
+                      onPin={togglePin}
+                      onDelete={(id) => {
+                        if (window.confirm("Are you sure you want to delete this task?")) {
+                          deleteMutation.mutate(id);
+                        }
+                      }}
+                      onDragStart={(taskId) => setDraggedTaskId(taskId)}
+                      onDropCard={handleDropToColumn}
+                    />
+                  ));
+                })()
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
                   <p className="text-sm font-semibold text-foreground">
@@ -418,15 +465,22 @@ export default function TasksPage() {
                   </p>
                 </div>
               )}
-              {column === "done" && (
-                <ShowMoreButton
-                  total={filteredBoard[column].length}
-                  visible={doneVisible}
-                  pageSize={DONE_PAGE}
-                  onShowMore={() => setDoneVisible(v => Math.min(v + DONE_PAGE, filteredBoard[column].length))}
-                  onShowLess={() => setDoneVisible(DONE_PAGE)}
-                />
-              )}
+              {/* Show More */}
+              <ShowMoreButton
+                total={filteredBoard[column].length}
+                visible={column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible}
+                pageSize={TASK_PAGE_SIZE}
+                onShowMore={() => {
+                  if (column === "todo") setTodoVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                  else if (column === "in-progress") setInProgressVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                  else setDoneVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                }}
+                onShowLess={() => {
+                  if (column === "todo") setTodoVisible(TASK_PAGE_SIZE);
+                  else if (column === "in-progress") setInProgressVisible(TASK_PAGE_SIZE);
+                  else setDoneVisible(TASK_PAGE_SIZE);
+                }}
+              />
             </div>
           </div>
         ))}

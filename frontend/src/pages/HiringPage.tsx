@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight, Edit2, Trash2 } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight, Edit2, Trash2, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { Button } from "@/components/ui/button";
 import { useCandidates, useJobPostings, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
@@ -59,7 +60,18 @@ export default function HiringPage() {
 
   const [expandedJobs, setExpandedJobs] = useState<Set<number>>(new Set());
   const [activeStage, setActiveStage] = useState<CandidateStage | null>(null);
+  const [visibleJobCount, setVisibleJobCount] = useState(4);
+  const JOB_PAGE_SIZE = 4;
   const queryClient = useQueryClient();
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await Promise.all([refetchJobs(), refetchCandidates()]);
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const isRefreshing = jobsLoading || candidatesLoading;
 
   const toggleStatusMutation = useMutation({
     mutationFn: (jobId: number) => crmService.toggleJobStatus(jobId),
@@ -131,10 +143,25 @@ export default function HiringPage() {
             <BriefcaseBusiness className="h-3.5 w-3.5 text-primary" />
             Hiring
           </div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">Hiring pipeline</h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Open roles, stage counts, and where candidates sit in the recruitment process.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="font-display text-3xl font-semibold text-foreground">Hiring pipeline</h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                Open roles, stage counts, and where candidates sit in the recruitment process.
+              </p>
+            </div>
+            <motion.div whileTap={{ scale: 0.94 }}>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+              >
+                <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                {isRefreshing ? "Refreshing..." : "Refresh Pipeline"}
+              </Button>
+            </motion.div>
+          </div>
         </div>
       </section>
 
@@ -346,7 +373,7 @@ export default function HiringPage() {
 
           {jobPostings.length > 0 ? (
             <div className="space-y-3">
-              {jobPostings.map((job) => {
+              {jobPostings.slice(0, visibleJobCount).map((job) => {
                 const isExpanded = expandedJobs.has(job.id);
                 const jobCandidates = candidates.filter(c => c.jobId === job.id);
                 const priority = (job.priority ?? "normal") as JobPriority;
@@ -455,6 +482,13 @@ export default function HiringPage() {
                   </div>
                 );
               })}
+              <ShowMoreButton
+                total={jobPostings.length}
+                visible={visibleJobCount}
+                pageSize={JOB_PAGE_SIZE}
+                onShowMore={() => setVisibleJobCount(v => Math.min(v + JOB_PAGE_SIZE, jobPostings.length))}
+                onShowLess={() => setVisibleJobCount(JOB_PAGE_SIZE)}
+              />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">

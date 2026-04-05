@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { BookText, FileText, NotepadText, Sparkles, Trash2 } from "lucide-react";
+import { BookText, FileText, NotepadText, Sparkles, Trash2, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -37,8 +39,15 @@ export default function NotesPage() {
   const [content, setContent] = useState("");
   const [color, setColor] = useState("default");
   const [saving, setSaving] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(9);
-  const PAGE_SIZE = 9;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
 
   const addNote = async () => {
     const trimTitle = title.trim();
@@ -84,10 +93,25 @@ export default function NotesPage() {
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             Workspace
           </div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">Notes</h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Lightweight notes for client context, internal decisions, and project memory.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="font-display text-3xl font-semibold text-foreground">Notes</h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                Lightweight notes for client context, internal decisions, and project memory.
+              </p>
+            </div>
+            <motion.div whileTap={{ scale: 0.94 }}>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+              >
+                <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                {isLoading ? "Refreshing..." : "Refresh Notes"}
+              </Button>
+            </motion.div>
+          </div>
         </div>
       </section>
 

@@ -1,4 +1,4 @@
-import { readStoredJSON, writeStoredJSON, removeStoredValue } from "@/lib/preferences";
+import { readStoredJSON, writeStoredJSON, removeStoredValue, readStoredString, writeStoredString } from "@/lib/preferences";
 import { isRemoteApiEnabled, requestJson } from "@/lib/api-client";
 import type { UserRole } from "@/contexts/ThemeContext";
 import type { PaymentMode } from "@/types/crm";
@@ -144,7 +144,7 @@ function createMockSession(credentials: AuthCredentials): AuthSession {
 function persistUser(user: AuthUser | null) {
   if (!user) {
     removeStoredValue(AUTH_USER_KEY);
-    localStorage.removeItem("crm-auth-token");
+    removeStoredValue("crm-auth-token");
     return;
   }
   writeStoredJSON(AUTH_USER_KEY, user);
@@ -153,7 +153,7 @@ function persistUser(user: AuthUser | null) {
 function persistSession(session: AuthSession) {
   persistUser(session.user);
   if (session.accessToken) {
-    localStorage.setItem("crm-auth-token", session.accessToken);
+    writeStoredString("crm-auth-token", session.accessToken);
   }
 }
 

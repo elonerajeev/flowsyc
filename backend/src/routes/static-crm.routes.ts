@@ -6,8 +6,6 @@ import { asyncHandler } from "../utils/async-handler";
 
 export const staticCrmRouter = Router();
 
-staticCrmRouter.get("/leads", requireAuth, asyncHandler(staticCrmController.listLeads));
-staticCrmRouter.get("/deals", requireAuth, asyncHandler(staticCrmController.listDeals));
 staticCrmRouter.get("/companies", requireAuth, asyncHandler(staticCrmController.listCompanies));
 staticCrmRouter.get("/sales-metrics", requireAuth, asyncHandler(staticCrmController.getSalesMetrics));
 staticCrmRouter.get("/command-actions", requireAuth, asyncHandler(staticCrmController.listCommandActions));

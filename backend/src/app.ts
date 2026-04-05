@@ -62,11 +62,11 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRouter);
-  app.use("/api", communicationRouter);
-  app.use("/api", staticCrmRouter);
   app.use("/api/leads", leadsRouter);
   app.use("/api/deals", dealsRouter);
   app.use("/api/clients", clientsRouter);
+  app.use("/api", communicationRouter);
+  app.use("/api", staticCrmRouter);
   app.use("/api/attendance", attendanceRouter);
   app.use("/api/notes", notesRouter);
   app.use("/api/preferences", preferencesRouter);

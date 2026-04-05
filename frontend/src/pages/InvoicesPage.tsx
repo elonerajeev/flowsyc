@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, Search, Edit2, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Edit2, Trash2, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -23,8 +24,15 @@ export default function InvoicesPage() {
   const { role } = useTheme();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(8);
-  const PAGE_SIZE = 8;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
@@ -55,6 +63,29 @@ export default function InvoicesPage() {
     return { total: invoices.length, completed, pending, rejected };
   }, [invoices]);
 
+  const handleExportCSV = () => {
+    if (!invoices.length) return;
+    const headers = ["Invoice ID", "Client", "Amount", "Date", "Due", "Status"];
+    const rows = invoices.map(inv => [
+      inv.id,
+      inv.client,
+      inv.amount,
+      inv.date,
+      inv.due || "-",
+      inv.status,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(r => r.map(v => String(v).replace(/,/g, "")).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `crm_invoices_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Invoice CSV export started");
+  };
+
   if (isLoading) {
     return <PageLoader />;
   }
@@ -81,17 +112,69 @@ export default function InvoicesPage() {
             </p>
           </div>
           {canUseQuickCreate ? (
-            <button
-              type="button"
-              onClick={openQuickCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
-            >
-              <Plus className="h-4 w-4" />
-              Invoice Draft
-            </button>
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Billing"}
+                </Button>
+              </motion.div>
+
+              {(role === "admin" || role === "manager") && (
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                  >
+                    <Download className="h-4 w-4 text-primary" />
+                    Export CSV
+                  </Button>
+                </motion.div>
+              )}
+              <button
+                type="button"
+                onClick={openQuickCreate}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+              >
+                <Plus className="h-4 w-4" />
+                Invoice Draft
+              </button>
+            </div>
           ) : (
-            <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
-              Read only
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Billing"}
+                </Button>
+              </motion.div>
+
+              {(role === "admin" || role === "manager") && (
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                  >
+                    <Download className="h-4 w-4 text-primary" />
+                    Export CSV
+                  </Button>
+                </motion.div>
+              )}
+              <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
+                Read only
+              </div>
             </div>
           )}
         </div>
@@ -146,15 +229,18 @@ export default function InvoicesPage() {
                     <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        {canEdit && (
-                          <button
-                            onClick={() => toast.info("Edit mode coming via Quick Create extension")}
-                            className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
-                            title="Edit invoice"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                          {canEdit && (
+                            <button
+                              onClick={() => {
+                                toast.info("Edit mode coming via Quick Create extension");
+                                openQuickCreate("invoice", invoice);
+                              }}
+                              className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+                              title="Edit invoice"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         {canDelete && (
                           <button
                             onClick={() => {

@@ -11,9 +11,13 @@ import {
   Sparkles,
   Edit2,
   Trash2,
+  RefreshCw,
+  Download,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -39,8 +43,17 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [segment, setSegment] = useState<(typeof segmentOptions)[number]>("all");
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(6);
-  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const [visibleActionCount, setVisibleActionCount] = useState(4);
+  const PAGE_SIZE = 4;
+  const ACTION_PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
   const deferredSearch = useDeferredValue(search);
   
   const canEdit = role === "admin" || role === "manager";
@@ -98,6 +111,31 @@ export default function ClientsPage() {
       expansion,
     };
   }, [canViewCommercialInsights, clients]);
+  
+  const handleExportCSV = () => {
+    if (!clients.length) return;
+    const headers = ["Name", "Company", "Industry", "Email", "Tier", "Status", "Revenue", "Manager"];
+    const rows = clients.map(client => [
+      client.name,
+      client.company,
+      client.industry,
+      client.email,
+      client.tier,
+      client.status,
+      client.revenue,
+      client.manager,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(r => r.map(v => String(v).replace(/,/g, "")).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `crm_clients_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV export started");
+  };
 
   if (isLoading) {
     return <PageLoader />;
@@ -117,35 +155,63 @@ export default function ClientsPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className={cn("inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground", TEXT.eyebrow)}>
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Client Portfolio
-            </div>
-            <div>
+        <div className="flex flex-col gap-5">
+          <div className={cn("inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground", TEXT.eyebrow)}>
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Client Portfolio
+          </div>
+
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1">
               <h1 className="font-display text-3xl font-semibold text-foreground">Clients</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
                 A clean relationship view for account health, ownership, and next actions.
                 {!canViewCommercialInsights ? " Your client view is limited to account-safe details only." : ""}
               </p>
             </div>
-          </div>
 
-          {canUseQuickCreate ? (
-            <button
-              type="button"
-              onClick={openQuickCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition"
-            >
-              <Plus className="h-4 w-4" />
-              Add Client
-            </button>
-          ) : (
-            <div className="inline-flex items-center rounded-2xl border border-border bg-secondary px-5 py-3 text-sm font-semibold text-muted-foreground">
-              Read only
+            <div className="flex items-center gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Portfolio"}
+                </Button>
+              </motion.div>
+
+              {(role === "admin" || role === "manager") && (
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+                  >
+                    <Download className="h-4 w-4 text-primary" />
+                    Export CSV
+                  </Button>
+                </motion.div>
+              )}
+              
+              {canUseQuickCreate ? (
+                <button
+                  type="button"
+                  onClick={() => openQuickCreate("client")}
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 px-5 text-sm font-semibold text-white shadow-lg transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Client
+                </button>
+              ) : (
+                <div className="inline-flex h-11 items-center rounded-2xl border border-border bg-secondary px-5 text-sm font-semibold text-muted-foreground">
+                  Read only
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -278,7 +344,10 @@ export default function ClientsPage() {
                     <div className="flex items-center gap-2">
                       {canEdit && (
                         <button
-                          onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+                          onClick={() => {
+                            toast.info("Edit mode coming via Quick Create extension");
+                            openQuickCreate("client", client);
+                          }}
                           className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
                           title="Edit client"
                         >
@@ -373,8 +442,9 @@ export default function ClientsPage() {
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Top follow-ups</h2>
             </div>
             <div className="space-y-3">
-              {filtered.slice(0, 4).length > 0 ? (
-                filtered.slice(0, 4).map((client) => (
+              {filtered.length > 0 ? (
+                <>
+                {filtered.slice(0, visibleActionCount).map((client) => (
                   <div key={client.id} className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -392,7 +462,15 @@ export default function ClientsPage() {
                       )}
                     </div>
                   </div>
-                ))
+                ))}
+                <ShowMoreButton
+                  total={filtered.length}
+                  visible={visibleActionCount}
+                  pageSize={ACTION_PAGE_SIZE}
+                  onShowMore={() => setVisibleActionCount(v => Math.min(v + ACTION_PAGE_SIZE, filtered.length))}
+                  onShowLess={() => setVisibleActionCount(ACTION_PAGE_SIZE)}
+                />
+                </>
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-4 text-center">
                   <p className="text-sm text-muted-foreground">

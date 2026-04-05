@@ -6,10 +6,12 @@ import {
   Building2,
   CircleDollarSign,
   MoveRight,
+  RefreshCw,
   Target,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
+import { Button } from "@/components/ui/button";
 import StatCard from "@/components/shared/StatCard";
 import ProgressRing from "@/components/shared/ProgressRing";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -36,7 +38,8 @@ const item = {
   hidden: { opacity: 0, y: 18 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
 };
-const DASHBOARD_ACTIVITY_PAGE_SIZE = 5;
+const DASHBOARD_ACTIVITY_PAGE_SIZE = 4;
+const PORTFOLIO_PAGE_SIZE = 4;
 
 function LazyDashboardChartsSection({
   revenueSeries,
@@ -115,7 +118,21 @@ export default function Dashboard() {
   const dashboard = dashboardQuery.data;
   const pageError = dashboardQuery.error ?? (role !== "client" ? projectsQuery.error : null);
   const [activityFilter, setActivityFilter] = useState<"all" | "collaboration" | "sales" | "delivery" | "finance" | "hiring" | "system">("all");
-  const [visibleActivityCount, setVisibleActivityCount] = useState(DASHBOARD_ACTIVITY_PAGE_SIZE);
+  const [visibleActivityCount, setVisibleActivityCount] = useState(4);
+  const [visibleProjectCount, setVisibleProjectCount] = useState(4);
+
+  const handleRefresh = async () => {
+    // Add a minimum duration for the animation to feel real
+    const startTime = Date.now();
+    await Promise.all([
+      dashboardQuery.refetch(),
+      role !== "client" ? projectsQuery.refetch() : Promise.resolve(),
+    ]);
+    const duration = Date.now() - startTime;
+    if (duration < 600) {
+      await new Promise(resolve => setTimeout(resolve, 600 - duration));
+    }
+  };
 
   useEffect(() => {
     setVisibleActivityCount(DASHBOARD_ACTIVITY_PAGE_SIZE);
@@ -138,7 +155,7 @@ export default function Dashboard() {
     return {
       focusClients,
       atRiskClients,
-      featuredProjects: projects.filter((project) => project.status !== "completed").slice(0, 3),
+      featuredProjects: projects.filter((project) => project.status !== "completed"),
       revenueSeries,
       metricSparklines,
       executionReadiness: dashboard?.executionReadiness ?? 0,
@@ -192,7 +209,7 @@ export default function Dashboard() {
                 {canUseQuickCreate ? (
                   <button
                     type="button"
-                    onClick={openQuickCreate}
+                    onClick={() => openQuickCreate()}
                     className={cn("premium-hover inline-flex items-center gap-2 bg-primary font-semibold text-primary-foreground shadow-lg transition hover:brightness-105", RADIUS.lg, SPACING.button, TEXT.body)}
                   >
                     Launch Quick Create
@@ -203,10 +220,24 @@ export default function Dashboard() {
                     Limited access
                   </div>
                 )}
+                <motion.div whileTap={{ scale: 0.94 }} className="inline-block">
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className={cn(
+                      "premium-hover flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition",
+                      RADIUS.lg, SPACING.button, TEXT.body
+                    )}
+                  >
+                    <RefreshCw className={cn("h-4 w-4 text-primary", loading && "animate-spin")} />
+                    {loading ? "Refreshing..." : "Refresh Overview"}
+                  </Button>
+                </motion.div>
               </div>
             </div>
           </div>
-          
+
           <PersonalizedFocus />
         </motion.section>
       ),
@@ -249,13 +280,13 @@ export default function Dashboard() {
       title: "Analytics",
       description: "Revenue curve, pipeline mix, and operating cadence",
       node: (
-          <LazyDashboardChartsSection
-            revenueSeries={dashboardView.revenueSeries}
-            pipelineBreakdown={dashboard.pipelineBreakdown}
-            operatingCadence={dashboard.operatingCadence}
-            focusClients={dashboardView.focusClients}
-            atRiskClients={dashboardView.atRiskClients}
-          />
+        <LazyDashboardChartsSection
+          revenueSeries={dashboardView.revenueSeries}
+          pipelineBreakdown={dashboard.pipelineBreakdown}
+          operatingCadence={dashboard.operatingCadence}
+          focusClients={dashboardView.focusClients}
+          atRiskClients={dashboardView.atRiskClients}
+        />
       ),
     },
     {
@@ -270,8 +301,8 @@ export default function Dashboard() {
                 <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Delivery Programs</p>
                 <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Execution portfolio</h2>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => navigate("/projects")}
                 className={cn("premium-hover inline-flex items-center gap-1 font-semibold text-primary", TEXT.meta)}
               >
@@ -281,46 +312,55 @@ export default function Dashboard() {
             </div>
             <div className="space-y-4">
               {dashboardView.featuredProjects.length > 0 ? (
-                dashboardView.featuredProjects.map((project) => (
-                  <div key={project.id} className={cn("border border-border/50 bg-secondary/20 transition-colors hover:bg-secondary/40", RADIUS.lg, SPACING.cardCompact)}>
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="font-display text-lg font-semibold text-foreground">{project.name}</p>
-                        <p className={cn("mt-1 text-muted-foreground", TEXT.body)}>{project.description}</p>
+                <>
+                  {dashboardView.featuredProjects.slice(0, visibleProjectCount).map((project) => (
+                    <div key={project.id} className={cn("border border-border/50 bg-secondary/20 transition-colors hover:bg-secondary/40", RADIUS.lg, SPACING.cardCompact)}>
+                      <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="font-display text-lg font-semibold text-foreground">{project.name}</p>
+                          <p className={cn("mt-1 text-muted-foreground", TEXT.body)}>{project.description}</p>
+                        </div>
+                        <StatusBadge status={project.status} />
                       </div>
-                      <StatusBadge status={project.status} />
+                      <div className="mb-4 h-2 overflow-hidden rounded-full bg-secondary/60">
+                        <div
+                          className="h-2 rounded-full transition-all duration-700"
+                          style={{
+                            width: `${project.progress}%`,
+                            background: `linear-gradient(90deg, hsl(213 55% 52%), hsl(173 58% 44%))`,
+                          }}
+                        />
+                      </div>
+                      <div className="grid gap-3 text-sm md:grid-cols-4">
+                        <div>
+                          <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Stage</p>
+                          <p className="mt-1 font-semibold text-foreground">{project.stage}</p>
+                        </div>
+                        <div>
+                          <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Budget</p>
+                          <p className="mt-1 font-semibold text-foreground">{canSeeProjectBudget ? project.budget : "Restricted"}</p>
+                        </div>
+                        <div>
+                          <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Tasks</p>
+                          <p className="mt-1 font-semibold text-foreground">
+                            {project.tasks.done}/{project.tasks.total}
+                          </p>
+                        </div>
+                        <div>
+                          <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Due</p>
+                          <p className="mt-1 font-semibold text-foreground">{project.dueDate}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mb-4 h-2 overflow-hidden rounded-full bg-secondary/60">
-                      <div
-                        className="h-2 rounded-full transition-all duration-700"
-                        style={{
-                          width: `${project.progress}%`,
-                          background: `linear-gradient(90deg, hsl(213 55% 52%), hsl(173 58% 44%))`,
-                        }}
-                      />
-                    </div>
-                    <div className="grid gap-3 text-sm md:grid-cols-4">
-                      <div>
-                        <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Stage</p>
-                        <p className="mt-1 font-semibold text-foreground">{project.stage}</p>
-                      </div>
-                      <div>
-                        <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Budget</p>
-                        <p className="mt-1 font-semibold text-foreground">{canSeeProjectBudget ? project.budget : "Restricted"}</p>
-                      </div>
-                      <div>
-                        <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Tasks</p>
-                        <p className="mt-1 font-semibold text-foreground">
-                          {project.tasks.done}/{project.tasks.total}
-                        </p>
-                      </div>
-                      <div>
-                        <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Due</p>
-                        <p className="mt-1 font-semibold text-foreground">{project.dueDate}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                  ))}
+                  <ShowMoreButton
+                    total={dashboardView.featuredProjects.length}
+                    visible={visibleProjectCount}
+                    pageSize={PORTFOLIO_PAGE_SIZE}
+                    onShowMore={() => setVisibleProjectCount(v => Math.min(v + PORTFOLIO_PAGE_SIZE, dashboardView.featuredProjects.length))}
+                    onShowLess={() => setVisibleProjectCount(PORTFOLIO_PAGE_SIZE)}
+                  />
+                </>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border/60 bg-secondary/10 p-8 text-center">
                   <div className="mx-auto w-fit rounded-full bg-muted/30 p-4 mb-4">
@@ -374,15 +414,15 @@ export default function Dashboard() {
                     className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{
                       backgroundColor:
-                        activity.type === "completed"  ? "hsl(173 58% 44%)" :
-                        activity.type === "active"     ? "hsl(213 55% 52%)" :
-                        activity.type === "in-progress"? "hsl(258 50% 60%)" :
-                                                         "hsl(38 88% 52%)",
+                        activity.type === "completed" ? "hsl(173 58% 44%)" :
+                          activity.type === "active" ? "hsl(213 55% 52%)" :
+                            activity.type === "in-progress" ? "hsl(258 50% 60%)" :
+                              "hsl(38 88% 52%)",
                       boxShadow:
-                        activity.type === "completed"  ? "0 0 6px hsl(173 58% 44% / 0.5)" :
-                        activity.type === "active"     ? "0 0 6px hsl(213 55% 52% / 0.5)" :
-                        activity.type === "in-progress"? "0 0 6px hsl(258 50% 60% / 0.5)" :
-                                                         "0 0 6px hsl(38 88% 52% / 0.5)",
+                        activity.type === "completed" ? "0 0 6px hsl(173 58% 44% / 0.5)" :
+                          activity.type === "active" ? "0 0 6px hsl(213 55% 52% / 0.5)" :
+                            activity.type === "in-progress" ? "0 0 6px hsl(258 50% 60% / 0.5)" :
+                              "0 0 6px hsl(38 88% 52% / 0.5)",
                     }}
                   />
                   <div className="min-w-0 flex-1">
@@ -416,8 +456,8 @@ export default function Dashboard() {
       {widgetDefinitions
         .filter((widget) => canSeeCommercialInsights || widget.id !== "charts")
         .map((widget) => (
-        <div key={widget.id}>{widget.node}</div>
-      ))}
+          <div key={widget.id}>{widget.node}</div>
+        ))}
     </motion.div>
   );
 }

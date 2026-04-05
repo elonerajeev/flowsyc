@@ -105,24 +105,40 @@ export const authService = {
       throw new AppError("Email already exists", 409, "CONFLICT");
     }
 
-    const profile = buildProfile(input.role);
-    const user = await prisma.user.create({
-      data: {
-        id: crypto.randomUUID(),
-        name: input.name,
-        email: input.email,
-        passwordHash: await hashPassword(input.password),
-        role: input.role,
-        ...profile,
-        employeeId: generateEmployeeId(input.role),
-        paymentMode: toDbPaymentMode(profile.paymentMode),
-        updatedAt: new Date(),
-      },
+    const { user, session } = await prisma.$transaction(async (tx) => {
+      const profile = buildProfile(input.role);
+      const newUser = await tx.user.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: input.name,
+          email: input.email,
+          passwordHash: await hashPassword(input.password),
+          role: input.role,
+          ...profile,
+          employeeId: generateEmployeeId(input.role),
+          paymentMode: toDbPaymentMode(profile.paymentMode),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Special session creation that uses the transaction client
+      const payload: TokenPayload = { sub: newUser.id, email: newUser.email, role: newUser.role };
+      const accessToken = signAccessToken(payload);
+      const refreshToken = signRefreshToken(payload);
+
+      await tx.refreshToken.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: newUser.id,
+          tokenHash: hashToken(refreshToken),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      return { user: newUser, session: { accessToken, refreshToken } };
     });
 
-    const session = await createSession(user.id, user.email, user.role);
-
-    // Fire-and-forget welcome email
+    // Fire-and-forget welcome email (outside transaction)
     sendWelcomeEmail({ name: user.name, email: user.email, role: user.role }).catch(() => {});
 
     return {

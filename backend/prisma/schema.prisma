@@ -292,11 +292,15 @@ model Lead {
   email      String     @unique
   company    String
   jobTitle   String?
+  phone      String?
   status     LeadStatus @default(new)
   source     LeadSource @default(website)
   score      Int        @default(50)
   assignedTo String?
   notes      String?
+  tags       String[]   @default([])
+  convertedAt DateTime?
+  convertedToClientId Int?
   deletedAt  DateTime?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
@@ -307,18 +311,21 @@ model Lead {
 }
 
 model Deal {
-  id           Int            @id @default(autoincrement())
-  title        String
-  value        Int
-  stage        DealStage      @default(prospecting)
-  probability  Int            @default(50)
-  assignedTo   String?
+  id            Int            @id @default(autoincrement())
+  title         String
+  value         Int
+  currency      String         @default("USD")
+  stage         DealStage      @default(prospecting)
+  probability   Int            @default(50)
+  assignedTo    String?
   expectedClose DateTime?
-  description  String?
-  deletedAt    DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  activities   DealActivity[]
+  actualClose   DateTime?
+  description   String?
+  tags          String[]       @default([])
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  activities    DealActivity[]
 
   @@index([deletedAt])
   @@index([stage])
@@ -329,7 +336,7 @@ model DealActivity {
   dealId    Int
   type      String
   content   String
-  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
   deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   @@index([dealId])
@@ -356,7 +363,7 @@ model CandidateActivity {
   action      String
   detail      String
   performedBy String
-  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@index([candidateId])
 }

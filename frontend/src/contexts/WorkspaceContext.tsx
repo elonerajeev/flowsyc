@@ -11,8 +11,9 @@ export type WorkspaceContextValue = {
   togglePrivacyMode: () => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
-  openQuickCreate: (workflowId?: string) => void;
+  openQuickCreate: (workflowId?: string, data?: any) => void;
   closeQuickCreate: () => void;
+  editData: any | null;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -22,6 +23,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [workflowToOpen, setWorkflowToOpen] = useState<string | null>(null);
+  const [editData, setEditData] = useState<any | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false);
   
   const canUseQuickCreate = role === "admin" || role === "manager";
@@ -41,6 +43,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (isQuickCreate && canUseQuickCreate) {
         event.preventDefault();
         setWorkflowToOpen(null);
+        setEditData(null);
         setQuickCreateOpen(true);
         triggerHaptic("medium");
       }
@@ -56,15 +59,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     workflowToOpen,
     canUseQuickCreate,
     privacyMode,
+    editData,
     togglePrivacyMode,
     openCommandPalette: () => {
       setCommandOpen(true);
       triggerHaptic("selection");
     },
     closeCommandPalette: () => setCommandOpen(false),
-    openQuickCreate: (workflowId?: string) => {
+    openQuickCreate: (workflowId?: string, data?: any) => {
       if (canUseQuickCreate) {
-        setWorkflowToOpen(workflowId ?? null);
+        setWorkflowToOpen(workflowId || null);
+        setEditData(data || null);
         setQuickCreateOpen(true);
         triggerHaptic("medium");
       }
@@ -72,13 +77,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     closeQuickCreate: () => {
       setQuickCreateOpen(false);
       setWorkflowToOpen(null);
+      setEditData(null);
     },
   }), [
     commandOpen, 
     quickCreateOpen, 
     workflowToOpen, 
     canUseQuickCreate, 
-    privacyMode
+    privacyMode,
+    editData
   ]);
 
   return (

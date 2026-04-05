@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, CheckCircle2, ChevronRight, Clock3, FolderKanban, MessageSquare, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, CheckCircle2, ChevronRight, Clock3, FolderKanban, MessageSquare, Sparkles, TrendingUp, Users, Zap, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -40,7 +41,9 @@ const heatColors = [
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.04 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.25 } } };
-const AUDIT_PAGE_SIZE = 5;
+const AUDIT_PAGE_SIZE = 4;
+const ACTIVITY_PAGE_SIZE = 4;
+const TEAM_PAGE_SIZE = 4;
 const auditActionTone: Record<string, string> = {
   create: "text-success bg-success/10 border-success/20",
   update: "text-info bg-info/10 border-info/20",
@@ -77,10 +80,21 @@ export default function ActivityPage() {
   const { role } = useTheme();
   const canSeeAuditTrail = role === "admin" || role === "manager";
   const { data: dashboard, isLoading, error: dashboardError, refetch } = useDashboardData();
-  const { data: auditLogs = [] } = useAuditLogs(8, { enabled: canSeeAuditTrail });
+  const { data: auditLogs = [] } = useAuditLogs(4, { enabled: canSeeAuditTrail });
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await Promise.all([refetch()]);
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
   const [selectedHeatCell, setSelectedHeatCell] = useState<number | null>(null);
   const [activityFilter, setActivityFilter] = useState<FilterId>("all");
   const [visibleAuditCount, setVisibleAuditCount] = useState(AUDIT_PAGE_SIZE);
+  const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_PAGE_SIZE);
+  const [visibleTeamCount, setVisibleTeamCount] = useState(TEAM_PAGE_SIZE);
+  const [visibleFocusCount, setVisibleFocusCount] = useState(4);
+  const FOCUS_PAGE_SIZE = 4;
 
   const heatmap = useMemo(() => {
     const raw = dashboard?.activityHeatmap ?? [];
@@ -95,6 +109,11 @@ export default function ActivityPage() {
     () => (dashboard?.activityFeed ?? []).filter(i => activityFilter === "all" || i.category === activityFilter),
     [activityFilter, dashboard?.activityFeed],
   );
+
+  // Reset activity pagination when filter changes
+  useEffect(() => {
+    setVisibleActivityCount(ACTIVITY_PAGE_SIZE);
+  }, [activityFilter]);
   const filterCounts = useMemo(() => {
     const feed = dashboard?.activityFeed ?? [];
     return (Object.keys(filterConfig) as FilterId[]).reduce<Record<FilterId, number>>((acc, key) => {
@@ -158,14 +177,25 @@ export default function ActivityPage() {
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
                 Workspace Pulse
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="max-w-3xl font-display text-4xl font-semibold tracking-[-0.05em] text-foreground">
                   One clean view for flow, signals, and execution momentum.
                 </h1>
-                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Review live activity, focus areas, and audit movement without jumping between modules.
-                </p>
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+                  >
+                    <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                    {isLoading ? "Refreshing..." : "Refresh Pulse"}
+                  </Button>
+                </motion.div>
               </div>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                Review live activity, focus areas, and audit movement without jumping between modules.
+              </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -229,12 +259,24 @@ export default function ActivityPage() {
               <div className="relative">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today’s Focus</p>
                 <div className="mt-4 space-y-3">
-                  {focusPoints.length > 0 ? focusPoints.slice(0, 3).map((point, i) => (
-                    <div key={i} className="flex items-start gap-2 rounded-2xl border border-border/70 bg-background/65 px-3 py-2.5 backdrop-blur-sm">
-                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success" />
-                      <p className="text-sm text-foreground">{point}</p>
-                    </div>
-                  )) : (
+                  {focusPoints.length > 0 ? (
+                    <>
+                    {focusPoints.slice(0, visibleFocusCount).map((point, i) => (
+                      <div key={i} className="flex items-start gap-2 rounded-2xl border border-border/70 bg-background/65 px-3 py-2.5 backdrop-blur-sm">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success" />
+                        <p className="text-sm text-foreground">{point}</p>
+                      </div>
+                    ))}
+                    <ShowMoreButton
+                      total={focusPoints.length}
+                      visible={visibleFocusCount}
+                      pageSize={FOCUS_PAGE_SIZE}
+                      onShowMore={() => setVisibleFocusCount(v => Math.min(v + FOCUS_PAGE_SIZE, focusPoints.length))}
+                      onShowLess={() => setVisibleFocusCount(FOCUS_PAGE_SIZE)}
+                      className="mt-2"
+                    />
+                    </>
+                  ) : (
                     <p className="text-sm text-muted-foreground">No focus prompts yet. Add more operational data to generate the daily brief.</p>
                   )}
                 </div>
@@ -273,10 +315,12 @@ export default function ActivityPage() {
                   className="space-y-0"
                 >
                   {visibleActivity.length > 0 ? (
-                    visibleActivity.map((event, i) => {
+                    <>
+                    {visibleActivity.slice(0, visibleActivityCount).map((event, i) => {
                       const dot = eventDot[event.type] ?? "bg-muted-foreground/40";
                       const catCfg = filterConfig[event.category as FilterId] ?? filterConfig.system;
                       const CatIcon = catCfg.icon;
+                      const slicedLen = Math.min(visibleActivityCount, visibleActivity.length);
                       return (
                         <motion.article
                           key={event.id}
@@ -285,12 +329,12 @@ export default function ActivityPage() {
                           transition={{ delay: i * 0.03 }}
                           className={cn(
                             "group relative grid gap-3 py-4 md:grid-cols-[36px_1fr_auto]",
-                            i !== visibleActivity.length - 1 && "border-b border-border/50",
+                            i !== slicedLen - 1 && "border-b border-border/50",
                           )}
                         >
                           <div className="relative flex items-start justify-center">
                             <span className={cn("relative z-10 mt-1.5 h-3 w-3 rounded-full ring-4 ring-background", dot)} />
-                            {i !== visibleActivity.length - 1 && (
+                            {i !== slicedLen - 1 && (
                               <span className="absolute top-5 h-[calc(100%+0.75rem)] w-px bg-border/70" />
                             )}
                           </div>
@@ -316,7 +360,16 @@ export default function ActivityPage() {
                           </div>
                         </motion.article>
                       );
-                    })
+                    })}
+                    <ShowMoreButton
+                      total={visibleActivity.length}
+                      visible={visibleActivityCount}
+                      pageSize={ACTIVITY_PAGE_SIZE}
+                      onShowMore={() => setVisibleActivityCount(v => Math.min(v + ACTIVITY_PAGE_SIZE, visibleActivity.length))}
+                      onShowLess={() => setVisibleActivityCount(ACTIVITY_PAGE_SIZE)}
+                      className="mt-2"
+                    />
+                    </>
                   ) : (
                     <div className="rounded-[1.6rem] border border-dashed border-border/60 bg-secondary/10 p-12 text-center">
                       <Activity className="mx-auto mb-4 h-9 w-9 text-muted-foreground/35" />
@@ -400,7 +453,7 @@ export default function ActivityPage() {
             </div>
             {collaborators.length > 0 ? (
               <div className="space-y-2.5">
-                {collaborators.map(c => (
+                {collaborators.slice(0, visibleTeamCount).map(c => (
                   <div key={c.id} className="flex items-center gap-3 rounded-[1.15rem] border border-border/60 bg-secondary/10 px-3.5 py-3">
                     <div className="relative">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-foreground">
@@ -420,6 +473,13 @@ export default function ActivityPage() {
                     </div>
                   </div>
                 ))}
+                <ShowMoreButton
+                  total={collaborators.length}
+                  visible={visibleTeamCount}
+                  pageSize={TEAM_PAGE_SIZE}
+                  onShowMore={() => setVisibleTeamCount(v => Math.min(v + TEAM_PAGE_SIZE, collaborators.length))}
+                  onShowLess={() => setVisibleTeamCount(TEAM_PAGE_SIZE)}
+                />
               </div>
             ) : (
               <div className="rounded-[1.3rem] border border-dashed border-border/60 bg-secondary/10 p-5 text-sm text-muted-foreground">

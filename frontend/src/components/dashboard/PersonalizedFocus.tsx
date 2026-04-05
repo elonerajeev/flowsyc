@@ -3,6 +3,7 @@ import { Check, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
 
 type TodoItem = {
   id: string;
@@ -22,19 +23,16 @@ export default function PersonalizedFocus() {
   useEffect(() => {
     if (!user) return;
     const key = `crm-focus-${user.id}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      const data = JSON.parse(stored);
-      setFocusText(data.focusText || "Keep the next move obvious");
-      setTodos(data.todos || []);
-    }
+    const data = readStoredJSON<{ focusText?: string; todos?: TodoItem[] }>(key, {});
+    if (data.focusText) setFocusText(data.focusText);
+    if (data.todos) setTodos(data.todos);
   }, [user]);
 
   // Save to localStorage
   const saveData = (newFocus: string, newTodos: TodoItem[]) => {
     if (!user) return;
     const key = `crm-focus-${user.id}`;
-    localStorage.setItem(key, JSON.stringify({ focusText: newFocus, todos: newTodos }));
+    writeStoredJSON(key, { focusText: newFocus, todos: newTodos });
   };
 
   const addTodo = () => {

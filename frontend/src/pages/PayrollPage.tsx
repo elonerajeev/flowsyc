@@ -67,7 +67,7 @@ export default function PayrollPage() {
   const { data: records = [], isLoading, error: payrollError, refetch: refetchPayroll } = usePayroll();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
-  const PAGE_SIZE = 6;
+  const PAGE_SIZE = 8;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const filteredRecords = useMemo(() => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus } from "lucide-react";
+import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import { useListPreferences } from "@/hooks/use-list-preferences";
 import { cn } from "@/lib/utils";
 import { crmService } from "@/services/crm";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { Button } from "@/components/ui/button";
 
 type ProjectStage = "Discovery" | "Build" | "Review" | "Launch";
 
@@ -43,9 +44,18 @@ export default function ProjectsPage() {
   const { role } = useTheme();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const queryClient = useQueryClient();
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [visibleCount, setVisibleCount] = useState(4);
+  const [visibleTaskCount, setVisibleTaskCount] = useState(4);
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = 4;
+  const RELATED_TASK_PAGE_SIZE = 4;
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
@@ -78,6 +88,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     setSelectedProjectId((current) => current ?? preferredProjects[0]?.id ?? null);
+    setVisibleTaskCount(RELATED_TASK_PAGE_SIZE);
   }, [preferredProjects]);
 
   const selectedProject = useMemo(
@@ -105,18 +116,31 @@ export default function ProjectsPage() {
               <FolderKanban className="h-3.5 w-3.5 text-primary" />
               Program Delivery
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
-              {canUseQuickCreate && (
-                <button
-                  type="button"
-                  onClick={() => openQuickCreate("project")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg active:scale-95"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  New Project
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-xl border-border/70 bg-background/50 px-3 text-[11px] font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
+                  >
+                    <RefreshCw className={cn("h-3 w-3 text-primary", isLoading && "animate-spin")} />
+                    {isLoading ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </motion.div>
+                {canUseQuickCreate && (
+                  <button
+                    type="button"
+                    onClick={() => openQuickCreate("project")}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New Project
+                  </button>
+                )}
+              </div>
             </div>
             <p className="max-w-xl text-sm text-muted-foreground">
               {canViewBudget
@@ -212,7 +236,10 @@ export default function ProjectsPage() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {canEdit && (
                         <button
-                          onClick={() => toast.info("Edit mode coming via Quick Create extension")}
+                          onClick={() => {
+                            toast.info("Edit mode coming via Quick Create extension");
+                            openQuickCreate("project", project);
+                          }}
                           className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
                           title="Edit project"
                         >
@@ -348,7 +375,7 @@ export default function ProjectsPage() {
 
             {relatedTasks.length > 0 ? (
               <div className="mt-4 space-y-3">
-                {relatedTasks.map((task) => (
+                {relatedTasks.slice(0, visibleTaskCount).map((task) => (
                   <article key={task.id} className="rounded-2xl border border-border/70 bg-secondary/15 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -361,6 +388,13 @@ export default function ProjectsPage() {
                     </div>
                   </article>
                 ))}
+                <ShowMoreButton
+                  total={relatedTasks.length}
+                  visible={visibleTaskCount}
+                  pageSize={RELATED_TASK_PAGE_SIZE}
+                  onShowMore={() => setVisibleTaskCount(v => Math.min(v + RELATED_TASK_PAGE_SIZE, relatedTasks.length))}
+                  onShowLess={() => setVisibleTaskCount(RELATED_TASK_PAGE_SIZE)}
+                />
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-border/60 bg-secondary/10 p-8 text-center">

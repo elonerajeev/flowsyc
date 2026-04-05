@@ -61,13 +61,21 @@ systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Re
   }
 }));
 
-systemRouter.get("/audit", requireAuth, requireRole(["admin", "manager"]), asyncHandler(async (req: Request, res: Response) => {
+systemRouter.get("/audit", requireAuth, requireRole(["admin", "manager", "employee"]), asyncHandler(async (req: Request, res: Response) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 100) || 100));
   const offset = Math.max(0, Number(req.query.offset ?? 0) || 0);
   const search = String(req.query.search ?? "").trim();
   const action = String(req.query.action ?? "").trim();
   const entity = String(req.query.entity ?? "").trim();
-  const logs = await getAuditLogs({ limit, offset, search, action, entity });
+  const logs = await getAuditLogs({ 
+    limit, 
+    offset, 
+    search, 
+    action, 
+    entity,
+    userId: req.auth?.userId,
+    role: req.auth?.role
+  });
   res.status(200).json(logs);
 }));
 

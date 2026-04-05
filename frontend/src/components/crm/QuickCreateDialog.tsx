@@ -29,18 +29,47 @@ const projectStageOptions = ["Discovery", "Build", "Review", "Launch"];
 const priorityOptions = ["high", "medium", "low"];
 
 export default function QuickCreateDialog() {
-  const { quickCreateOpen, closeQuickCreate, canUseQuickCreate, workflowToOpen } = useWorkspace();
+  const { quickCreateOpen, closeQuickCreate, canUseQuickCreate, workflowToOpen, editData } = useWorkspace();
   const sharedTeamMembers = useSharedTeamMembers();
   const queryClient = useQueryClient();
   
   const [selected, setSelected] = useState(workflows[0].id);
 
-  // Sync with workflowToOpen when dialog opens
+  // Sync with workflowToOpen AND editData when dialog opens
   useEffect(() => {
-    if (quickCreateOpen && workflowToOpen) {
-      setSelected(workflowToOpen);
+    if (quickCreateOpen) {
+      if (workflowToOpen) setSelected(workflowToOpen);
+      
+      if (editData) {
+        // Pre-fill fields for editing
+        setName(editData.name || editData.title || editData.firstName + " " + (editData.lastName || ""));
+        setDescription(editData.description || editData.notes || "");
+        setPriority(editData.priority || "normal");
+        setDueDate(editData.dueDate || (editData.expectedClose ? editData.expectedClose.slice(0, 10) : ""));
+        setTags(Array.isArray(editData.tags) ? editData.tags.join(", ") : "");
+        setCompany(editData.company || "");
+        setIndustry(editData.industry || "");
+        setEmail(editData.email || "");
+        setPhone(editData.phone || "");
+        setLocation(editData.location || "");
+        setTier(editData.tier || "Growth");
+        setSegment(editData.segment || "New Business");
+        setStatus(editData.status || "pending");
+        setRevenue(editData.revenue || "");
+        setManager(editData.manager || editData.assignedTo || "");
+        setProjectStatus(editData.status || "pending");
+        setProjectStage(editData.stage || "Discovery");
+        setBudget(editData.budget || "$0");
+        setProjectTeam(Array.isArray(editData.team) ? editData.team : []);
+        setTaskAssigneeValue(editData.assignee || editData.assignedTo || "");
+        setTaskProjectId(editData.projectId ? String(editData.projectId) : "none");
+        setValueStream(editData.valueStream || "Growth");
+        setInvoiceClient(editData.client || "");
+        setAmount(editData.amount ? String(editData.amount).replace(/[^0-9.]/g, "") : "0");
+        setInvoiceStatus(editData.status || "pending");
+      }
     }
-  }, [quickCreateOpen, workflowToOpen]);
+  }, [quickCreateOpen, workflowToOpen, editData]);
   
   // Common fields
   const [name, setName] = useState("");
@@ -100,8 +129,21 @@ export default function QuickCreateDialog() {
     setInvoiceClient(""); setAmount("0"); setInvoiceDate(new Date().toISOString().slice(0, 10)); setInvoiceDue(""); setInvoiceStatus("pending");
   };
 
-  const createMutation = useMutation({
+  const actionMutation = useMutation({
     mutationFn: async (workflowId: string) => {
+      const isEdit = !!editData;
+      const id = editData?.id;
+
+      if (isEdit) {
+        switch (workflowId) {
+          case "client": return crmService.updateClient(id, { name, company, industry, email, phone, location, tier, segment, status, revenue, manager });
+          case "project": return crmService.updateProject(id, { name, description, status: projectStatus, team: projectTeam, dueDate, stage: projectStage, budget });
+          case "task": return crmService.updateTask(id, { title: name, priority: priority as any, dueDate, tags: tags.split(",").map(t => t.trim()), valueStream: valueStream as any, projectId: taskProjectId === "none" ? null : Number(taskProjectId) });
+          // Add others as needed
+          default: throw new Error(`Editing ${workflowId} not supported yet in Quick Create.`);
+        }
+      }
+
       switch (workflowId) {
         case "client":
           return crmService.createClient({
@@ -200,14 +242,16 @@ export default function QuickCreateDialog() {
         await queryClient.invalidateQueries({ queryKey: crmKeys.projects });
       }
       triggerHaptic("success");
-      toast.success(`${selectedWorkflow.title} created!`);
+      toast.success(`${selectedWorkflow.title} ${editData ? 'updated' : 'created'}!`);
       closeQuickCreate();
       resetForm();
     },
-    onError: () => toast.error(`Failed to create ${selectedWorkflow.title.toLowerCase()}.`),
+    onError: () => toast.error(`Failed to ${editData ? 'update' : 'create'} ${selectedWorkflow.title.toLowerCase()}.`),
   });
 
   if (!canUseQuickCreate) return null;
+
+  const isEdit = !!editData;
 
   return (
     <Dialog open={quickCreateOpen} onOpenChange={open => !open && closeQuickCreate()}>
@@ -221,8 +265,8 @@ export default function QuickCreateDialog() {
                 <Zap className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">Quick Create</p>
-                <p className="text-[11px] text-muted-foreground">Admin Panel</p>
+                <p className="text-sm font-semibold text-foreground">{isEdit ? "Global Editor" : "Quick Create"}</p>
+                <p className="text-[11px] text-muted-foreground">{isEdit ? "Modifying record" : "Admin Panel"}</p>
               </div>
             </div>
 
@@ -234,10 +278,12 @@ export default function QuickCreateDialog() {
                   <button
                     key={w.id}
                     type="button"
+                    disabled={isEdit}
                     onClick={() => setSelected(w.id)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition",
-                      isActive ? w.activeBg : "border-transparent hover:bg-secondary/60"
+                      isActive ? w.activeBg : "border-transparent hover:bg-secondary/60",
+                      isEdit && !isActive && "opacity-40 grayscale-[0.5]"
                     )}
                   >
                     <Icon className={cn("h-5 w-5 flex-shrink-0", isActive ? w.color : "text-muted-foreground")} />
@@ -255,8 +301,22 @@ export default function QuickCreateDialog() {
           {/* Right - form */}
           <div className="p-6">
             <DialogHeader className="mb-5">
-              <DialogTitle className="font-display text-xl font-semibold text-foreground">{selectedWorkflow.title}</DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">{selectedWorkflow.description}</DialogDescription>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <DialogTitle className="font-display text-xl font-semibold text-foreground">
+                    {isEdit ? `Edit ${selectedWorkflow.title}` : selectedWorkflow.title}
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-muted-foreground">
+                    {isEdit ? "Edit mode coming via Quick Create extension" : selectedWorkflow.description}
+                  </DialogDescription>
+                </div>
+                {isEdit && (
+                  <div className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1.5 animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                    Live Record
+                  </div>
+                )}
+              </div>
             </DialogHeader>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -546,14 +606,14 @@ export default function QuickCreateDialog() {
               </button>
               <button 
                 type="button" 
-                disabled={createMutation.isPending || !name.trim()} 
-                onClick={() => createMutation.mutate(selected)} 
+                disabled={actionMutation.isPending || !name.trim()} 
+                onClick={() => actionMutation.mutate(selected)} 
                 className={cn(
                   "rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50", 
                   selectedWorkflow.color.replace("text-", "bg-").replace("-500", "-500 hover:opacity-90")
                 )}
               >
-                {createMutation.isPending ? "Creating..." : `Create ${selectedWorkflow.title}`}
+                {actionMutation.isPending ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save Changes" : `Create ${selectedWorkflow.title}`)}
               </button>
             </div>
           </div>

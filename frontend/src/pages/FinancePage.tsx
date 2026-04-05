@@ -29,8 +29,8 @@ export default function FinancePage() {
 
 function FinancePageInner() {
   const { data: invoices = [], isLoading, error, refetch } = useInvoices();
-  const [visibleCount, setVisibleCount] = useState(5);
-  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(8);
+  const PAGE_SIZE = 8;
 
   const stats = useMemo(() => {
     const completed = invoices.filter((inv) => inv.status === "completed");

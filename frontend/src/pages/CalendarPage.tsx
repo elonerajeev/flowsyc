@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, T
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -125,6 +126,8 @@ export default function CalendarPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [visibleUpcomingCount, setVisibleUpcomingCount] = useState(8);
+  const UPCOMING_PAGE_SIZE = 8;
 
   const createMutation = useMutation({
     mutationFn: (event: EventDraft) => crmService.createCalendarEvent(event),
@@ -192,8 +195,7 @@ export default function CalendarPage() {
       .sort((a, b) => {
         const dateDiff = fromISODate(a.date).getTime() - fromISODate(b.date).getTime();
         return dateDiff || a.startTime.localeCompare(b.startTime);
-      })
-      .slice(0, 6);
+      });
   }, [events, today]);
 
   const monthSummary = useMemo(() => {
@@ -515,7 +517,8 @@ export default function CalendarPage() {
             </div>
             <div className="mt-4 space-y-3">
               {upcomingEvents.length > 0 ? (
-                upcomingEvents.map((event) => (
+                <>
+                {upcomingEvents.slice(0, visibleUpcomingCount).map((event) => (
                   <article key={event.id} className="rounded-xl border border-border/70 bg-secondary/15 p-3">
                     <p className="text-sm font-semibold text-foreground">{event.title}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -524,7 +527,15 @@ export default function CalendarPage() {
                       {event.assignmentKind !== "none" ? ` · ${event.assigneeName}` : ""}
                     </p>
                   </article>
-                ))
+                ))}
+                <ShowMoreButton
+                  total={upcomingEvents.length}
+                  visible={visibleUpcomingCount}
+                  pageSize={UPCOMING_PAGE_SIZE}
+                  onShowMore={() => setVisibleUpcomingCount(v => Math.min(v + UPCOMING_PAGE_SIZE, upcomingEvents.length))}
+                  onShowLess={() => setVisibleUpcomingCount(UPCOMING_PAGE_SIZE)}
+                />
+                </>
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-4 text-center">
                   <p className="text-sm text-muted-foreground">No upcoming events.</p>

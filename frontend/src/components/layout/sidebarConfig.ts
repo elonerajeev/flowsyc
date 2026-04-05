@@ -130,9 +130,9 @@ export const sidebarSections: SidebarSection[] = [
     icon: Settings2,
     items: [
       { to: "/system/settings", icon: Settings, label: "Settings", roles: ["admin", "manager", "employee", "client"] },
-      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager"] },
+      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager", "employee"] },
       { to: "/system/integrations", icon: PlugZap, label: "Integrations", roles: ["admin", "manager"], badge: "New" },
-      { to: "/system/audit", icon: Shield, label: "Audit Logs", roles: ["admin", "manager"] },
+      { to: "/system/audit", icon: Shield, label: "Audit Logs", roles: ["admin", "manager", "employee"] },
       { to: "/system/billing", icon: CreditCard, label: "Billing", roles: ["admin", "manager", "client"] },
     ],
   },

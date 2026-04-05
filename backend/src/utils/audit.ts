@@ -27,6 +27,8 @@ export type GetAuditLogsOptions = {
   search?: string;
   action?: string;
   entity?: string;
+  userId?: string;
+  role?: string;
 };
 
 export type AuditLogListResult = {
@@ -72,7 +74,7 @@ export async function logAudit(params: {
   }
 }
 
-function normalizeAuditOptions(input: number | GetAuditLogsOptions): Required<GetAuditLogsOptions> {
+function normalizeAuditOptions(input: number | GetAuditLogsOptions): GetAuditLogsOptions & { limit: number; offset: number; search: string; action: string; entity: string } {
   if (typeof input === "number") {
     return {
       limit: input,
@@ -80,6 +82,8 @@ function normalizeAuditOptions(input: number | GetAuditLogsOptions): Required<Ge
       search: "",
       action: "",
       entity: "",
+      userId: undefined,
+      role: undefined,
     };
   }
 
@@ -89,11 +93,18 @@ function normalizeAuditOptions(input: number | GetAuditLogsOptions): Required<Ge
     search: input.search?.trim() ?? "",
     action: input.action?.trim() ?? "",
     entity: input.entity?.trim() ?? "",
+    userId: input.userId,
+    role: input.role,
   };
 }
 
-function buildAuditWhereClause(options: Required<GetAuditLogsOptions>, params: unknown[]) {
+function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; action: string; entity: string }, params: unknown[]) {
   const conditions: string[] = [];
+
+  if (options.role === "employee" && options.userId) {
+    params.push(options.userId);
+    conditions.push(`"userId" = $${params.length}`);
+  }
 
   if (options.search) {
     params.push(`%${options.search}%`);

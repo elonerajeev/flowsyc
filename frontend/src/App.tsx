@@ -12,8 +12,8 @@ import RouteAccessGuard from "@/components/layout/RouteAccessGuard";
 import PageLoader from "@/components/shared/PageLoader";
 import AppErrorBoundary from "@/components/shared/AppErrorBoundary";
 import NetworkErrorBridge from "@/components/shared/NetworkErrorBridge";
-import CommandPalette from "@/components/crm/CommandPalette";
-import QuickCreateDialog from "@/components/crm/QuickCreateDialog";
+const CommandPalette = lazy(() => import("@/components/crm/CommandPalette"));
+const QuickCreateDialog = lazy(() => import("@/components/crm/QuickCreateDialog"));
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useMonitoring } from "@/hooks/use-monitoring";
 
@@ -44,6 +44,7 @@ const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
+const RestrictedPage = lazy(() => import("@/pages/RestrictedPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,8 +94,10 @@ const App = () => {
                     path="/*"
                     element={
                       <>
-                        <CommandPalette />
-                        <QuickCreateDialog />
+                        <Suspense fallback={null}>
+                          <CommandPalette />
+                          <QuickCreateDialog />
+                        </Suspense>
                         <AppLayout>
                           <Suspense fallback={<PageLoader />}>
                             <Routes>
@@ -163,6 +166,7 @@ const App = () => {
                               <Route path="/integrations" element={<Navigate to="/system/integrations" replace />} />
                               <Route path="/billing" element={<Navigate to="/finance" replace />} />
                               <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
+                              <Route path="/restricted" element={<RestrictedPage />} />
                               <Route path="*" element={<NotFound />} />
                             </Routes>
                           </Suspense>

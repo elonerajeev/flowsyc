@@ -4,10 +4,13 @@ import { ArrowUpRight, Clock3, Zap, Check } from "lucide-react";
 import { motion } from "framer-motion";
 
 import StatusBadge from "@/components/shared/StatusBadge";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { SimpleBarChart, SimpleSparkline } from "@/components/shared/SimpleCharts";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 import type { ClientRecord } from "@/types/crm";
+
+const ACCOUNTS_PAGE_SIZE = 4;
 
 type DashboardChartsProps = {
   revenueSeries: Array<{ month: string; revenue: number; deals: number; retention: number }>;
@@ -26,6 +29,8 @@ export default function DashboardCharts({
 }: DashboardChartsProps) {
   const [selectedStage, setSelectedStage] = useState(pipelineBreakdown[0] ?? null);
   const [selectedCadence, setSelectedCadence] = useState(operatingCadence[0] ?? null);
+  const [visibleFocusCount, setVisibleFocusCount] = useState(4);
+  const [visibleRiskCount, setVisibleRiskCount] = useState(4);
 
   const totalPipeline = useMemo(
     () => pipelineBreakdown.reduce((sum, stage) => sum + stage.value, 0),
@@ -240,7 +245,7 @@ export default function DashboardCharts({
           </div>
           {focusClients.length > 0 ? (
             <div className="space-y-2">
-              {focusClients.map((client) => (
+              {focusClients.slice(0, visibleFocusCount).map((client) => (
                 <div key={client.id} className={cn("border border-border/60 bg-secondary/15 flex items-center justify-between gap-3", RADIUS.lg, SPACING.inset)}>
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center bg-primary/10 font-semibold text-foreground text-xs", RADIUS.lg)}>
@@ -257,6 +262,13 @@ export default function DashboardCharts({
                   </div>
                 </div>
               ))}
+              <ShowMoreButton
+                total={focusClients.length}
+                visible={visibleFocusCount}
+                pageSize={ACCOUNTS_PAGE_SIZE}
+                onShowMore={() => setVisibleFocusCount(v => Math.min(v + ACCOUNTS_PAGE_SIZE, focusClients.length))}
+                onShowLess={() => setVisibleFocusCount(ACCOUNTS_PAGE_SIZE)}
+              />
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center rounded-2xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
@@ -278,7 +290,7 @@ export default function DashboardCharts({
           {atRiskClients.length > 0 ? (
             <>
               <div className="space-y-2">
-                {atRiskClients.map((client) => (
+                {atRiskClients.slice(0, visibleRiskCount).map((client) => (
                   <div key={client.id} className={cn("border border-border/60 bg-secondary/15 flex items-center justify-between gap-3", RADIUS.lg, SPACING.inset)}>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">{client.name}</p>
@@ -289,6 +301,13 @@ export default function DashboardCharts({
                     </span>
                   </div>
                 ))}
+                <ShowMoreButton
+                  total={atRiskClients.length}
+                  visible={visibleRiskCount}
+                  pageSize={ACCOUNTS_PAGE_SIZE}
+                  onShowMore={() => setVisibleRiskCount(v => Math.min(v + ACCOUNTS_PAGE_SIZE, atRiskClients.length))}
+                  onShowLess={() => setVisibleRiskCount(ACCOUNTS_PAGE_SIZE)}
+                />
               </div>
               <div className={cn("mt-4 border border-warning/20 bg-warning/5", RADIUS.lg, SPACING.inset)}>
                 <p className={cn("font-semibold text-warning", TEXT.body)}>

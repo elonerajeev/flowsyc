@@ -1,5 +1,6 @@
-import { useMemo, useState, useRef } from "react";
-import { FileText, Search, Shield, UserRoundCheck, ArrowRight, X, CheckCircle, Calendar, Clock, Users, Filter, ScrollText, Download, Upload, MessageSquare, History, Globe, Users2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { FileText, Search, Shield, UserRoundCheck, ArrowRight, X, CheckCircle, Calendar, Clock, Users, Filter, ScrollText, Download, Upload, MessageSquare, History, Globe, Users2, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
 import { SiIndeed, SiGlassdoor } from "@icons-pack/react-simple-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -48,9 +49,17 @@ export default function CandidatesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [jobFilter, setJobFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<string>("all");
-  const [visibleCount, setVisibleCount] = useState(6);
-  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
+  const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [quickNote, setQuickNote] = useState("");
   const [interviewDate, setInterviewDate] = useState("");
@@ -157,6 +166,31 @@ export default function CandidatesPage() {
     onError: () => toast.error("Failed to generate offer letter"),
   });
 
+  const handleExportCSV = () => {
+    if (candidates.length === 0) return;
+    const headers = ["ID", "Name", "Email", "Job Title", "Stage", "Source", "Rating", "Joined At"];
+    const rows = filtered.map(c => [
+      c.id,
+      c.name,
+      c.email,
+      c.jobTitle,
+      stageLabel[c.stage] || c.stage,
+      c.source || "Direct",
+      c.rating || 0,
+      new Date(c.createdAt).toLocaleDateString()
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `candidates_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Candidates export started");
+  };
+
   const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -169,24 +203,93 @@ export default function CandidatesPage() {
     if (!offerLetterRef.current) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
+    
+    // Add professional styling to the print window
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
       <head>
-        <title>Offer Letter - ${offerLetterData?.candidate?.name ?? ''}</title>
+        <title>Employment Offer - ${offerLetterData?.candidate?.name ?? ''}</title>
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { background: white; }
-          @media print {
-            @page { size: A4; margin: 0; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+          
+          * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; }
+          body { 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            background: #fff; 
+            color: #1e293b;
+            line-height: 1.5;
+            padding: 0;
+            margin: 0;
           }
+          
+          .print-container {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 25mm 20mm;
+            background: white;
+            position: relative;
+          }
+          
+          @media print {
+            body { background: none; }
+            @page { size: A4; margin: 0; }
+            .print-container { margin: 0; box-shadow: none; padding: 25mm 20mm; }
+          }
+          
+          /* Industrial Brand Header */
+          .header-brand {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #1e3a5f;
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+          }
+          
+          .logo-text {
+            font-weight: 800;
+            font-size: 24px;
+            letter-spacing: -0.02em;
+            color: #1e3a5f;
+          }
+          
+          .doc-type {
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            font-size: 12px;
+            color: #64748b;
+          }
+
+          /* Content formatting */
+          h1, h2, h3 { color: #1e3a5f; }
+          .section-title { font-size: 14px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+          .signature-area { display: flex; justify-content: space-between; margin-top: 60px; }
+          .sig-box { width: 45%; border-top: 1px solid #cbd5e1; padding-top: 10px; }
         </style>
       </head>
-      <body>${offerLetterRef.current.innerHTML}</body>
+      <body>
+        <div class="print-container">
+          <header class="header-brand">
+            <div class="logo-text">FOCAL POINT <span style="font-weight: 400; color: #64748b;">COMPASS</span></div>
+            <div class="doc-type">Official Employment Offer</div>
+          </header>
+          ${offerLetterRef.current.innerHTML}
+        </div>
+        <script>
+          window.onload = () => {
+            setTimeout(() => {
+              window.print();
+              // window.close(); // Optional: close tab after print
+            }, 600);
+          }
+        </script>
+      </body>
       </html>
     `);
     printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
   };
 
   const stageCounts = useMemo(() => {
@@ -216,22 +319,52 @@ export default function CandidatesPage() {
             <UserRoundCheck className="h-3.5 w-3.5 text-primary" />
             Candidates
           </div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">Candidate list</h1>
-          <div className="flex items-center gap-3">
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Applicant records with profile context and stage tracking for the hiring team.
-            </p>
-            {(jobFilter !== "all" || stageFilter !== "all") && (
-              <button
-                onClick={() => {
-                  setJobFilter("all");
-                  setStageFilter("all");
-                }}
-                className="text-xs text-primary hover:underline whitespace-nowrap"
-              >
-                Clear filters
-              </button>
-            )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">Candidate list</h1>
+              <div className="flex items-center gap-3">
+                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Applicant records with profile context and stage tracking for the hiring team.
+                </p>
+                {(jobFilter !== "all" || stageFilter !== "all") && (
+                  <button
+                    onClick={() => {
+                      setJobFilter("all");
+                      setStageFilter("all");
+                    }}
+                    className="text-xs text-primary hover:underline whitespace-nowrap"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {(role === "admin" || role === "manager") && (
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    disabled={candidates.length === 0}
+                    className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                  >
+                    <Download className="h-4 w-4 text-primary" />
+                    Export CSV
+                  </Button>
+                </motion.div>
+              )}
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh List"}
+                </Button>
+              </motion.div>
+            </div>
           </div>
         </div>
       </section>

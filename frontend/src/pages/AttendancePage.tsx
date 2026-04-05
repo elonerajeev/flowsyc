@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Clock3, MapPin, Monitor, RefreshCw, UserRoundCheck, UserRoundX } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -48,8 +50,15 @@ export default function AttendancePage() {
   const sharedTeamMembers = useSharedTeamMembers();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [visibleCount, setVisibleCount] = useState(6);
-  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetchTeamMembers();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
 
   useEffect(() => {
     const source: TeamMemberRecord[] = canManageAttendance ? teamMembers : [];

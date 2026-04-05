@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BadgeCheck, Clock3, FileText, GripVertical, Pin, Search, Shield, UserPlus, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Clock3, FileText, GripVertical, Pin, Search, Shield, UserPlus, UserRoundCheck, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -102,7 +104,7 @@ export default function TeamPage() {
   const [draggedMemberId, setDraggedMemberId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const PAGE_SIZE = 6;
+  const PAGE_SIZE = 8;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [noteDraft, setNoteDraft] = useState("");
   
@@ -145,6 +147,41 @@ export default function TeamPage() {
     attendance: "present" as TeamMemberRecord["attendance"],
     location: "",
   });
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetchTeamMembers();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const handleExportCSV = () => {
+    if (!normalizedMembers.length) return;
+    const headers = ["ID", "Name", "Email", "Role", "Department", "Designation", "Team", "Manager", "Salary", "Location", "Attendance"];
+    const rows = normalizedMembers.map(m => [
+      m.id,
+      m.name,
+      m.email,
+      m.role,
+      m.department,
+      m.designation,
+      m.team,
+      m.manager,
+      m.baseSalary,
+      m.officeLocation,
+      m.attendance,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(r => r.map(v => String(v).replace(/,/g, "")).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `crm_team_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Team CSV export started");
+  };
 
   const getMemberId = useCallback((member: TeamMemberRecord) => String(member.id), []);
 
@@ -393,18 +430,48 @@ export default function TeamPage() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => canEditTeam && setShowAddForm((current) => !current)}
-            disabled={!canEditTeam}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105",
-              canEditTeam ? "bg-primary" : "cursor-not-allowed bg-primary/40",
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {(role === "admin" || role === "manager") && (
+              <>
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                  >
+                    <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                    {isLoading ? "Refreshing..." : "Refresh Team"}
+                  </Button>
+                </motion.div>
+                
+                <motion.div whileTap={{ scale: 0.94 }}>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                  >
+                    <Download className="h-4 w-4 text-primary" />
+                    Export CSV
+                  </Button>
+                </motion.div>
+              </>
             )}
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Member
-          </button>
+
+            <button
+              type="button"
+              onClick={() => canEditTeam && setShowAddForm((current) => !current)}
+              disabled={!canEditTeam}
+              className={cn(
+                "inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-sm font-semibold text-primary-foreground transition hover:brightness-105",
+                canEditTeam ? "bg-primary" : "cursor-not-allowed bg-primary/40",
+              )}
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Member
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

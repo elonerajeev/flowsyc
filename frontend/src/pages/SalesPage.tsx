@@ -12,7 +12,8 @@ import {
   MoreHorizontal,
   Eye,
   Edit,
-  Trash2
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import PageLoader from "@/components/shared/PageLoader";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -40,6 +42,9 @@ const SalesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"pipeline" | "leads">("pipeline");
+  const SALES_PAGE_SIZE = 4;
+  const [visibleDealsCount, setVisibleDealsCount] = useState(4);
+  const [visibleLeadsCount, setVisibleLeadsCount] = useState(4);
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
@@ -77,6 +82,15 @@ const SalesPage = () => {
     },
     onError: () => toast.error("Failed to remove lead"),
   });
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await Promise.all([refetchDeals(), refetchLeads(), refetchMetrics()]);
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const isRefreshing = dealsLoading || leadsLoading;
 
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = deal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,16 +178,42 @@ const SalesPage = () => {
             </div>
           </div>
           {canUseQuickCreate ? (
-            <Button 
-              onClick={openQuickCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition"
-            >
-              <Plus className="h-4 w-4" />
-              Add Deal
-            </Button>
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button 
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition px-4 h-11"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                  {isRefreshing ? "Refreshing..." : "Refresh Sales"}
+                </Button>
+              </motion.div>
+              <Button 
+                onClick={() => openQuickCreate("lead")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition"
+              >
+                <Plus className="h-4 w-4" />
+                Add Deal
+              </Button>
+            </div>
           ) : (
-            <div className="inline-flex items-center rounded-2xl border border-border bg-secondary px-5 py-3 text-sm font-semibold text-muted-foreground">
-              Read only
+            <div className="flex gap-2">
+               <motion.div whileTap={{ scale: 0.94 }}>
+                <Button 
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition px-4 h-11"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                  {isRefreshing ? "Refreshing..." : "Refresh Sales"}
+                </Button>
+              </motion.div>
+              <div className="inline-flex items-center rounded-2xl border border-border bg-secondary px-5 py-3 text-sm font-semibold text-muted-foreground">
+                Read only
+              </div>
             </div>
           )}
         </div>
@@ -285,7 +325,8 @@ const SalesPage = () => {
           <div className="mt-6">
             <div className="space-y-4">
               {filteredDeals.length > 0 ? (
-                filteredDeals.map((deal) => (
+                <>
+                {filteredDeals.slice(0, visibleDealsCount).map((deal) => (
                   <Card key={deal.id} className="rounded-xl border-border/50 hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
@@ -305,7 +346,7 @@ const SalesPage = () => {
                               {formatCurrency(deal.value)}
                             </span>
                             <span>Expected: {new Date(deal.expectedCloseDate).toLocaleDateString()}</span>
-                            {deal.tags.map(tag => (
+                            {deal.tags?.map(tag => (
                               <Badge key={tag} variant="outline" className="text-xs">
                                 {tag}
                               </Badge>
@@ -347,7 +388,15 @@ const SalesPage = () => {
                       </div>
                     </CardContent>
                   </Card>
-                ))
+                ))}
+                <ShowMoreButton
+                  total={filteredDeals.length}
+                  visible={visibleDealsCount}
+                  pageSize={SALES_PAGE_SIZE}
+                  onShowMore={() => setVisibleDealsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredDeals.length))}
+                  onShowLess={() => setVisibleDealsCount(SALES_PAGE_SIZE)}
+                />
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
@@ -364,7 +413,8 @@ const SalesPage = () => {
           <div className="mt-6">
             <div className="space-y-4">
               {filteredLeads.length > 0 ? (
-                filteredLeads.map((lead) => (
+                <>
+                {filteredLeads.slice(0, visibleLeadsCount).map((lead) => (
                   <Card key={lead.id} className="rounded-xl border-border/50 hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
@@ -401,7 +451,12 @@ const SalesPage = () => {
                               View Lead
                             </DropdownMenuItem>
                             {canEdit && (
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                toast.info("Edit mode coming via Quick Create extension");
+                                openQuickCreate("lead", lead);
+                              }}
+                            >
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Lead
                             </DropdownMenuItem>
@@ -424,7 +479,15 @@ const SalesPage = () => {
                       </div>
                     </CardContent>
                   </Card>
-                ))
+                ))}
+                <ShowMoreButton
+                  total={filteredLeads.length}
+                  visible={visibleLeadsCount}
+                  pageSize={SALES_PAGE_SIZE}
+                  onShowMore={() => setVisibleLeadsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredLeads.length))}
+                  onShowLess={() => setVisibleLeadsCount(SALES_PAGE_SIZE)}
+                />
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
