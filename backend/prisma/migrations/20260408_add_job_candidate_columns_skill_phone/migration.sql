@@ -1,0 +1,5 @@
+ALTER TABLE "JobPosting"
+  ADD COLUMN IF NOT EXISTS "skills" TEXT[] DEFAULT '{}';
+
+ALTER TABLE "Candidate"
+  ADD COLUMN IF NOT EXISTS "phone" TEXT;
