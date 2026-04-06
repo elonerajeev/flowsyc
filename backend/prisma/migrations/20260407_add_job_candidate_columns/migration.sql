@@ -1,0 +1,6 @@
+ALTER TABLE "JobPosting"
+  ADD COLUMN IF NOT EXISTS "salary" TEXT DEFAULT 'Competitive',
+  ADD COLUMN IF NOT EXISTS "experience" TEXT DEFAULT '2-5 years';
+
+ALTER TABLE "Candidate"
+  ADD COLUMN IF NOT EXISTS "source" TEXT DEFAULT 'Direct';
