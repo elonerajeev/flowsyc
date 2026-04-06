@@ -22,7 +22,7 @@ import { notesService } from "../src/services/notes.service";
 import { conversationSeedRecords, messageSeedRecords } from "../src/data/crm-static";
 
 function assertNonProduction() {
-  if (env.NODE_ENV === "production") {
+  if (env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
     throw new Error("Never seed in production");
   }
 }

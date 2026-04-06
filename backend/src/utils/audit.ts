@@ -60,15 +60,16 @@ export async function logAudit(params: {
   detail?: string;
 }) {
   try {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "AuditLog" ("userId", "userName", action, entity, "entityId", detail, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      params.userId,
-      await resolveAuditActorName(params.userId, params.userName),
-      params.action,
-      params.entity,
-      params.entityId ? String(params.entityId) : null,
-      params.detail ?? null
-    );
+    await prisma.auditLog.create({
+      data: {
+        userId: params.userId,
+        userName: await resolveAuditActorName(params.userId, params.userName),
+        action: params.action,
+        entity: params.entity,
+        entityId: params.entityId ? String(params.entityId) : null,
+        detail: params.detail ?? null,
+      },
+    });
   } catch {
     // Never let audit logging break the main flow
   }

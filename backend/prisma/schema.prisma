@@ -346,18 +346,18 @@ model DealActivity {
 }
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(cuid())
   userId    String
   userName  String
   action    String
   entity    String
-  entityId  String
+  entityId  String?
   detail    String?
-  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([entity])
-  @@index([timestamp])
+  @@index([createdAt])
 }
 
 model CandidateActivity {
