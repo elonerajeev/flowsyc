@@ -12,8 +12,8 @@ import RouteAccessGuard from "@/components/layout/RouteAccessGuard";
 import PageLoader from "@/components/shared/PageLoader";
 import AppErrorBoundary from "@/components/shared/AppErrorBoundary";
 import NetworkErrorBridge from "@/components/shared/NetworkErrorBridge";
-import CommandPalette from "@/components/crm/CommandPalette";
-import QuickCreateDialog from "@/components/crm/QuickCreateDialog";
+const CommandPalette = lazy(() => import("@/components/crm/CommandPalette"));
+const QuickCreateDialog = lazy(() => import("@/components/crm/QuickCreateDialog"));
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useMonitoring } from "@/hooks/use-monitoring";
 
@@ -22,6 +22,7 @@ const SignupPage = lazy(() => import("@/pages/SignupPage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
+const TeamsPage = lazy(() => import("@/pages/TeamsPage"));
 const EmployeesPage = lazy(() => import("@/pages/TeamPage"));
 const ClientsPage = lazy(() => import("@/pages/ClientsPage"));
 const SalesPage = lazy(() => import("@/pages/SalesPage"));
@@ -43,6 +44,8 @@ const IntegrationsPage = lazy(() => import("@/pages/IntegrationsPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
+const RestrictedPage = lazy(() => import("@/pages/RestrictedPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,8 +95,10 @@ const App = () => {
                     path="/*"
                     element={
                       <>
-                        <CommandPalette />
-                        <QuickCreateDialog />
+                        <Suspense fallback={null}>
+                          <CommandPalette />
+                          <QuickCreateDialog />
+                        </Suspense>
                         <AppLayout>
                           <Suspense fallback={<PageLoader />}>
                             <Routes>
@@ -102,8 +107,10 @@ const App = () => {
                               <Route path="/overview/activity" element={<RouteAccessGuard><ActivityPage /></RouteAccessGuard>} />
                               <Route path="/overview/messages" element={<RouteAccessGuard><MessagesPage /></RouteAccessGuard>} />
 
-                              <Route path="/people/team" element={<RouteAccessGuard><TeamPage /></RouteAccessGuard>} />
-                              <Route path="/people/employees" element={<RouteAccessGuard><EmployeesPage /></RouteAccessGuard>} />
+                              <Route path="/people/team" element={<Navigate to="/people/teams" replace />} />
+                              <Route path="/people/teams" element={<RouteAccessGuard><TeamsPage /></RouteAccessGuard>} />
+                              <Route path="/people/members" element={<RouteAccessGuard><TeamPage /></RouteAccessGuard>} />
+                              <Route path="/people/employees" element={<Navigate to="/people/members" replace />} />
                               <Route path="/people/attendance" element={<RouteAccessGuard><AttendancePage /></RouteAccessGuard>} />
                               <Route path="/people/roles" element={<Navigate to="/system/access" replace />} />
 
@@ -113,7 +120,7 @@ const App = () => {
                               <Route path="/workspace/notes" element={<RouteAccessGuard><NotesPage /></RouteAccessGuard>} />
 
                               <Route path="/sales/clients" element={<RouteAccessGuard><ClientsPage /></RouteAccessGuard>} />
-                              <Route path="/sales" element={<RouteAccessGuard><SalesPage /></RouteAccessGuard>} />
+                              <Route path="/sales/pipelines" element={<RouteAccessGuard><SalesPage /></RouteAccessGuard>} />
 
                               <Route path="/finance/invoices" element={<RouteAccessGuard><InvoicesPage /></RouteAccessGuard>} />
                               <Route path="/finance" element={<RouteAccessGuard><FinancePage /></RouteAccessGuard>} />
@@ -133,13 +140,17 @@ const App = () => {
                               <Route path="/system/settings" element={<RouteAccessGuard><SettingsPage /></RouteAccessGuard>} />
                               <Route path="/system/integrations" element={<RouteAccessGuard><IntegrationsPage /></RouteAccessGuard>} />
                               <Route path="/system/billing" element={<RouteAccessGuard><BillingPage /></RouteAccessGuard>} />
+                              <Route path="/system/audit" element={<RouteAccessGuard><AuditLogPage /></RouteAccessGuard>} />
 
                               <Route path="/activity" element={<Navigate to="/overview/activity" replace />} />
-                              <Route path="/team" element={<Navigate to="/people/team" replace />} />
-                              <Route path="/employees" element={<Navigate to="/people/employees" replace />} />
+                              <Route path="/team" element={<Navigate to="/people/teams" replace />} />
+                              <Route path="/teams" element={<Navigate to="/people/teams" replace />} />
+                              <Route path="/members" element={<Navigate to="/people/members" replace />} />
+                              <Route path="/employees" element={<Navigate to="/people/members" replace />} />
                               <Route path="/clients" element={<Navigate to="/sales/clients" replace />} />
-                              <Route path="/leads" element={<Navigate to="/sales" replace />} />
-                              <Route path="/deals" element={<Navigate to="/sales" replace />} />
+                              <Route path="/leads" element={<Navigate to="/sales/pipelines" replace />} />
+                              <Route path="/deals" element={<Navigate to="/sales/pipelines" replace />} />
+                              <Route path="/sales" element={<Navigate to="/sales/pipelines" replace />} />
                               <Route path="/attendance" element={<Navigate to="/people/attendance" replace />} />
                               <Route path="/tasks" element={<Navigate to="/workspace/tasks" replace />} />
                               <Route path="/projects" element={<Navigate to="/workspace/projects" replace />} />
@@ -160,6 +171,7 @@ const App = () => {
                               <Route path="/integrations" element={<Navigate to="/system/integrations" replace />} />
                               <Route path="/billing" element={<Navigate to="/finance" replace />} />
                               <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
+                              <Route path="/restricted" element={<RestrictedPage />} />
                               <Route path="*" element={<NotFound />} />
                             </Routes>
                           </Suspense>

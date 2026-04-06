@@ -3,6 +3,7 @@ import { Prisma, type PaymentMode } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
+import { logger } from "../utils/logger";
 
 type TeamMemberRecord = {
   id: number;
@@ -13,6 +14,7 @@ type TeamMemberRecord = {
   avatar: string;
   department: string;
   team: string;
+  teamId: number | null;
   designation: string;
   manager: string;
   workingHours: string;
@@ -42,6 +44,7 @@ type TeamMemberCreateInput = {
   avatar?: string;
   department?: string;
   team?: string;
+  teamId?: number | null;
   designation?: string;
   manager?: string;
   workingHours?: string;
@@ -73,6 +76,37 @@ type TeamMemberQuery = {
   department?: string;
 };
 
+const teamMemberSelect = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  status: true,
+  avatar: true,
+  department: true,
+  team: true,
+  designation: true,
+  manager: true,
+  workingHours: true,
+  officeLocation: true,
+  timeZone: true,
+  baseSalary: true,
+  allowances: true,
+  deductions: true,
+  paymentMode: true,
+  warningCount: true,
+  suspendedAt: true,
+  terminationEligibleAt: true,
+  handoverCompletedAt: true,
+  terminatedAt: true,
+  separationNote: true,
+  attendance: true,
+  checkIn: true,
+  location: true,
+  workload: true,
+  deletedAt: true,
+} as const;
+
 function mapMember(member: {
   id: number;
   name: string;
@@ -101,6 +135,7 @@ function mapMember(member: {
   checkIn: string;
   location: string;
   workload: number;
+  deletedAt: Date | null;
 }): TeamMemberRecord {
   return {
     id: member.id,
@@ -111,6 +146,7 @@ function mapMember(member: {
     avatar: member.avatar,
     department: member.department,
     team: member.team,
+    teamId: null,
     designation: member.designation,
     manager: member.manager,
     workingHours: member.workingHours,
@@ -150,7 +186,10 @@ function isEmailUniqueConstraintError(error: unknown) {
 
 export const teamMembersService = {
   async getById(memberId: number) {
-    const member = await prisma.teamMember.findUnique({ where: { id: memberId } });
+    const member = await prisma.teamMember.findUnique({
+      where: { id: memberId },
+      select: teamMemberSelect,
+    });
     if (!member || member.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }
@@ -167,7 +206,13 @@ export const teamMembersService = {
 
     const [total, members, taskCounts, projects] = await prisma.$transaction([
       prisma.teamMember.count({ where }),
-      prisma.teamMember.findMany({ where, orderBy: { createdAt: "desc" }, skip: (query.page - 1) * query.limit, take: query.limit }),
+      prisma.teamMember.findMany({
+        where,
+        select: teamMemberSelect,
+        orderBy: { createdAt: "desc" },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
       prisma.task.groupBy({
         by: ["assignee"],
         where: { deletedAt: null, column: { not: "done" } },
@@ -202,9 +247,18 @@ export const teamMembersService = {
     });
 
     // Persist updated workloads back to DB (fire and forget)
-    Promise.all(membersWithWorkload.map(m =>
-      prisma.teamMember.update({ where: { id: m.id }, data: { workload: m.workload } })
-    )).catch(() => {});
+    Promise.allSettled(membersWithWorkload.map(m =>
+      prisma.teamMember.update({
+        where: { id: m.id },
+        data: { workload: m.workload },
+        select: { id: true },
+      })
+    )).then(results => {
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failures.length > 0) {
+        logger.warn("Some workload updates failed", { failures: failures.map(f => f.reason) });
+      }
+    });
 
     return {
       data: membersWithWorkload.map(mapMember),
@@ -219,6 +273,39 @@ export const teamMembersService = {
       throw new AppError("Team member email already exists", 409, "CONFLICT");
     }
 
+    const requireString = (value: string | undefined, label: string) => {
+      const trimmed = value?.trim();
+      if (!trimmed) {
+        throw new AppError(`${label} is required`, 400, "BAD_REQUEST");
+      }
+      return trimmed;
+    };
+
+    const teamName = requireString(input.team, "Team");
+    const department = requireString(input.department, "Department");
+    const designation = requireString(input.designation, "Designation");
+    const manager = requireString(input.manager, "Manager");
+    const workingHours = requireString(input.workingHours, "Working hours");
+    const officeLocation = requireString(input.officeLocation, "Office location");
+    const timeZone = requireString(input.timeZone, "Time zone");
+    const checkIn = requireString(input.checkIn, "Check-in");
+    const location = requireString(input.location, "Location");
+    const paymentMode = input.paymentMode;
+    const attendance = input.attendance;
+    const baseSalary = input.baseSalary;
+    const allowances = input.allowances;
+    const deductions = input.deductions;
+
+    if (paymentMode === undefined) {
+      throw new AppError("Payment mode is required", 400, "BAD_REQUEST");
+    }
+    if (attendance === undefined) {
+      throw new AppError("Attendance is required", 400, "BAD_REQUEST");
+    }
+    if (baseSalary === undefined || allowances === undefined || deductions === undefined) {
+      throw new AppError("Compensation fields are required", 400, "BAD_REQUEST");
+    }
+
     try {
       const member = await prisma.teamMember.create({
         data: {
@@ -227,29 +314,30 @@ export const teamMembersService = {
           role: input.role,
           status: input.status ?? "active",
           avatar: input.avatar ?? name.slice(0, 2).toUpperCase(),
-          department: input.department ?? "Operations",
-          team: input.team ?? "General",
-          designation: input.designation ?? "Employee",
-          manager: input.manager ?? "Team Lead",
-          workingHours: input.workingHours ?? "09:00 - 18:00",
-          officeLocation: input.officeLocation ?? "HQ",
-          timeZone: input.timeZone ?? "Asia/Calcutta",
-          baseSalary: input.baseSalary ?? 0,
-          allowances: input.allowances ?? 0,
-          deductions: input.deductions ?? 0,
-          paymentMode: toDbPaymentMode(input.paymentMode ?? "upi"),
+          department,
+          team: teamName,
+          designation,
+          manager,
+          workingHours,
+          officeLocation,
+          timeZone,
+          baseSalary,
+          allowances,
+          deductions,
+          paymentMode: toDbPaymentMode(paymentMode),
           warningCount: input.warningCount ?? 0,
           suspendedAt: input.suspendedAt ? new Date(input.suspendedAt) : null,
           terminationEligibleAt: input.terminationEligibleAt ? new Date(input.terminationEligibleAt) : null,
           handoverCompletedAt: input.handoverCompletedAt ? new Date(input.handoverCompletedAt) : null,
           terminatedAt: input.terminatedAt ? new Date(input.terminatedAt) : null,
           separationNote: input.separationNote ?? null,
-          attendance: input.attendance ?? "present",
-          checkIn: input.checkIn ?? "-",
-          location: input.location ?? "HQ",
+          attendance,
+          checkIn,
+          location,
           workload: input.workload ?? 0,
           updatedAt: new Date(),
         },
+        select: teamMemberSelect,
       });
       return mapMember(member);
     } catch (error) {
@@ -261,7 +349,14 @@ export const teamMembersService = {
   },
 
   async update(memberId: number, patch: TeamMemberUpdateInput) {
-    const existing = await prisma.teamMember.findUnique({ where: { id: memberId } });
+    const existing = await prisma.teamMember.findUnique({
+      where: { id: memberId },
+      select: {
+        id: true,
+        email: true,
+        deletedAt: true,
+      },
+    });
     if (!existing || existing.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }
@@ -282,7 +377,7 @@ export const teamMembersService = {
           ...(patch.status !== undefined ? { status: patch.status } : {}),
           ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
           ...(patch.department !== undefined ? { department: patch.department } : {}),
-          ...(patch.team !== undefined ? { team: patch.team } : {}),
+          ...(patch.team !== undefined ? { team: patch.team.trim() || "General" } : {}),
           ...(patch.designation !== undefined ? { designation: patch.designation } : {}),
           ...(patch.manager !== undefined ? { manager: patch.manager } : {}),
           ...(patch.workingHours !== undefined ? { workingHours: patch.workingHours } : {}),
@@ -303,6 +398,7 @@ export const teamMembersService = {
           ...(patch.location !== undefined ? { location: patch.location } : {}),
           ...(patch.workload !== undefined ? { workload: patch.workload } : {}),
         },
+        select: teamMemberSelect,
       });
 
       return mapMember(member);
@@ -315,7 +411,13 @@ export const teamMembersService = {
   },
 
   async delete(memberId: number) {
-    const existing = await prisma.teamMember.findUnique({ where: { id: memberId } });
+    const existing = await prisma.teamMember.findUnique({
+      where: { id: memberId },
+      select: {
+        id: true,
+        deletedAt: true,
+      },
+    });
     if (!existing || existing.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }

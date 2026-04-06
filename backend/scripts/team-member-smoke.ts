@@ -7,6 +7,20 @@ async function main() {
     name: "Minimal Member",
     email,
     role: "Employee",
+    department: "Ops",
+    team: "Smoke",
+    designation: "Support Specialist",
+    manager: "Team Lead",
+    workingHours: "09:00 - 18:00",
+    officeLocation: "HQ",
+    timeZone: "Asia/Calcutta",
+    baseSalary: 50000,
+    allowances: 5000,
+    deductions: 1000,
+    paymentMode: "upi",
+    attendance: "present",
+    checkIn: "9:00 AM",
+    location: "HQ",
   });
 
   console.log(

@@ -30,6 +30,12 @@ function getStoredAuthToken() {
 
 function buildUrl(endpoint: string) {
   const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  // If using relative URL (/api), prepend /api to the endpoint for the proxy
+  if (!appEnv.apiBaseUrl.startsWith("http")) {
+    // Prepend /api for all endpoints when using proxy mode
+    return `/api${normalizedEndpoint}`;
+  }
+  // Otherwise use absolute URL
   if (appEnv.apiBaseUrl.startsWith("http")) {
     return new URL(normalizedEndpoint, appEnv.apiBaseUrl).toString();
   }
@@ -39,6 +45,7 @@ function buildUrl(endpoint: string) {
 export async function requestJson<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const authToken = getStoredAuthToken();
   const response = await fetch(buildUrl(endpoint), {
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -59,4 +66,28 @@ export async function requestJson<T>(endpoint: string, init?: RequestInit): Prom
 
 export function isRemoteApiEnabled() {
   return appEnv.useRemoteApi && Boolean(appEnv.apiBaseUrl.trim());
+}
+
+export async function uploadFile<T>(endpoint: string, file: File, fieldName = "file"): Promise<T> {
+  const authToken = getStoredAuthToken();
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  const response = await fetch(buildUrl(endpoint), {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const message = body || response.statusText || "Upload failed";
+    emitNetworkError({ endpoint, status: response.status, message });
+    throw new ApiError(message, response.status, endpoint);
+  }
+
+  return (await response.json()) as T;
 }

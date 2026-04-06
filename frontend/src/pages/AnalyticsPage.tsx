@@ -1,10 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, Users, DollarSign, FolderOpen, BarChart2 } from "lucide-react";
+import { TrendingUp, Users, DollarSign, FolderOpen, BarChart2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import AdminOnly from "@/components/shared/AdminOnly";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useClients, useProjects, useInvoices, useTeamMembers } from "@/hooks/use-crm-data";
+import { cn } from "@/lib/utils";
 
 function parseAmount(raw: string): number {
   const numeric = Number(String(raw).replace(/[^0-9.]/g, ""));
@@ -15,10 +19,25 @@ const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { st
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function AnalyticsPage() {
+  return <AdminOnly><AnalyticsPageInner /></AdminOnly>;
+}
+
+function AnalyticsPageInner() {
   const { data: clients = [], isLoading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: teamMembers = [], isLoading: teamLoading } = useTeamMembers();
+  const [visibleClientCount, setVisibleClientCount] = useState(4);
+  const ANALYTICS_PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await Promise.all([refetchClients()]);
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const isRefreshing = clientsLoading || projectsLoading || invoicesLoading || teamLoading;
 
   const isLoading = clientsLoading || projectsLoading || invoicesLoading || teamLoading;
 
@@ -49,8 +68,7 @@ export default function AnalyticsPage() {
   const topClients = useMemo(
     () =>
       [...clients]
-        .sort((a, b) => b.healthScore - a.healthScore)
-        .slice(0, 4),
+        .sort((a, b) => b.healthScore - a.healthScore),
     [clients],
   );
 
@@ -102,6 +120,17 @@ export default function AnalyticsPage() {
             <h1 className="flex items-center gap-2 text-2xl font-display font-bold text-foreground">Analytics</h1>
             <p className="mt-1 text-sm text-muted-foreground">Live snapshot of your business performance</p>
           </div>
+          <motion.div whileTap={{ scale: 0.94 }}>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+            >
+              <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+              {isRefreshing ? "Refreshing..." : "Refresh Stats"}
+            </Button>
+          </motion.div>
         </div>
       </motion.div>
 
@@ -172,24 +201,33 @@ export default function AnalyticsPage() {
       <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
         <h3 className="font-display font-semibold text-foreground mb-4">Top Clients by Health Score</h3>
         {topClients.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {topClients.map((client, i) => (
-              <div key={client.id} className="rounded-xl border border-border bg-secondary/30 p-4 text-center card-hover">
-                <div className="relative mx-auto w-fit mb-3">
-                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-lg font-bold text-foreground">
-                    {client.avatar || client.name.slice(0, 2).toUpperCase()}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {topClients.slice(0, visibleClientCount).map((client, i) => (
+                <div key={client.id} className="rounded-xl border border-border bg-secondary/30 p-4 text-center card-hover">
+                  <div className="relative mx-auto w-fit mb-3">
+                    <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-lg font-bold text-foreground">
+                      {client.avatar || client.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    {i === 0 && (
+                      <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-accent/20 border-2 border-accent flex items-center justify-center text-[10px] font-bold text-accent">
+                        1
+                      </span>
+                    )}
                   </div>
-                  {i === 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-accent/20 border-2 border-accent flex items-center justify-center text-[10px] font-bold text-accent">
-                      1
-                    </span>
-                  )}
+                  <p className="font-semibold text-sm text-foreground">{client.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{client.industry} · {client.tier}</p>
+                  <p className="text-xs text-success font-medium mt-1">Health {client.healthScore}%</p>
                 </div>
-                <p className="font-semibold text-sm text-foreground">{client.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{client.industry} · {client.tier}</p>
-                <p className="text-xs text-success font-medium mt-1">Health {client.healthScore}%</p>
-              </div>
-            ))}
+              ))}
+            </div>
+            <ShowMoreButton
+              total={topClients.length}
+              visible={visibleClientCount}
+              pageSize={ANALYTICS_PAGE_SIZE}
+              onShowMore={() => setVisibleClientCount(v => Math.min(v + ANALYTICS_PAGE_SIZE, topClients.length))}
+              onShowLess={() => setVisibleClientCount(ANALYTICS_PAGE_SIZE)}
+            />
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-8 text-center">

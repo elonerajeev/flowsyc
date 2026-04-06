@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { CreditCard, Receipt, ShieldCheck, Zap, AlertCircle } from "lucide-react";
 import { useInvoices } from "@/hooks/use-crm-data";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { cn } from "@/lib/utils";
+
+const BILLING_PAGE_SIZE = 8;
 
 export default function BillingPage() {
   const { data: invoices = [], isLoading, error, refetch } = useInvoices();
+  const [visibleInvoiceCount, setVisibleInvoiceCount] = useState(BILLING_PAGE_SIZE);
 
   if (isLoading) return <PageLoader />;
   if (error) return <ErrorFallback title="Billing data failed to load" error={error} onRetry={() => refetch()} retryLabel="Retry" />;
@@ -15,7 +20,6 @@ export default function BillingPage() {
     .reduce((sum, i) => sum + Number(String(i.amount).replace(/[^0-9.]/g, "")), 0);
 
   const pendingInvoices = invoices.filter((i) => i.status === "pending");
-  const recentInvoices = invoices.slice(0, 5);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -72,14 +76,15 @@ export default function BillingPage() {
       {/* Recent invoices from DB */}
       <section className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
         <p className="mb-4 text-sm font-semibold text-foreground">Recent Invoices</p>
-        {recentInvoices.length === 0 ? (
+        {invoices.length === 0 ? (
           <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-secondary/10 p-6">
             <AlertCircle className="h-5 w-5 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">No invoices found. Create invoices in the Finance section.</p>
           </div>
         ) : (
+          <>
           <div className="space-y-2">
-            {recentInvoices.map((inv) => (
+            {invoices.slice(0, visibleInvoiceCount).map((inv) => (
               <div key={inv.id} className="flex items-center justify-between rounded-2xl border border-border/70 bg-secondary/10 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">{inv.client}</p>
@@ -99,6 +104,15 @@ export default function BillingPage() {
               </div>
             ))}
           </div>
+          <ShowMoreButton
+            total={invoices.length}
+            visible={visibleInvoiceCount}
+            pageSize={BILLING_PAGE_SIZE}
+            onShowMore={() => setVisibleInvoiceCount(v => Math.min(v + BILLING_PAGE_SIZE, invoices.length))}
+            onShowLess={() => setVisibleInvoiceCount(BILLING_PAGE_SIZE)}
+            className="mt-3"
+          />
+          </>
         )}
       </section>
 

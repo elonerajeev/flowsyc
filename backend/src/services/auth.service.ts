@@ -7,7 +7,8 @@ import { buildProfile } from "../utils/employee-profile";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
 import { comparePassword, hashPassword } from "../utils/password";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken, type TokenPayload } from "../utils/jwt";
-import type { AuthUser } from "../config/types";
+import { sendWelcomeEmail } from "../utils/email-templates";
+import type { AuthUser, UserRole as AppUserRole } from "../config/types";
 
 type AuthResponse = {
   user: AuthUser;
@@ -21,7 +22,7 @@ function toAuthUser(user: {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: AppUserRole;
   employeeId: string;
   department: string;
   team: string;
@@ -39,13 +40,40 @@ function toAuthUser(user: {
   joinedAt: string;
   location: string;
 }): AuthUser {
+  const paymentMode = fromDbPaymentMode(user.paymentMode);
+
+  if (user.role === "client") {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      employeeId: user.employeeId || "CLT",
+      department: "Client",
+      team: "",
+      designation: "Client Contact",
+      manager: "Account Team",
+      workingHours: "",
+      officeLocation: "",
+      timeZone: user.timeZone,
+      baseSalary: 0,
+      allowances: 0,
+      deductions: 0,
+      paymentMode,
+      payrollCycle: "",
+      payrollDueDate: "",
+      joinedAt: user.joinedAt,
+      location: user.location,
+    };
+  }
+
   return {
     ...user,
-    paymentMode: fromDbPaymentMode(user.paymentMode),
+    paymentMode,
   };
 }
 
-function generateEmployeeId(role: UserRole) {
+function generateEmployeeId(role: AppUserRole) {
   const prefix = role === "client" ? "CLT" : "EMP";
   const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `${prefix}-${suffix}`;
@@ -62,7 +90,7 @@ async function persistRefreshToken(userId: string, token: string) {
   });
 }
 
-async function createSession(userId: string, email: string, role: UserRole): Promise<{ accessToken: string; refreshToken: string }> {
+async function createSession(userId: string, email: string, role: AppUserRole): Promise<{ accessToken: string; refreshToken: string }> {
   const payload: TokenPayload = { sub: userId, email, role };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
@@ -77,22 +105,42 @@ export const authService = {
       throw new AppError("Email already exists", 409, "CONFLICT");
     }
 
-    const profile = buildProfile(input.role);
-    const user = await prisma.user.create({
-      data: {
-        id: crypto.randomUUID(),
-        name: input.name,
-        email: input.email,
-        passwordHash: await hashPassword(input.password),
-        role: input.role,
-        ...profile,
-        employeeId: generateEmployeeId(input.role),
-        paymentMode: toDbPaymentMode(profile.paymentMode),
-        updatedAt: new Date(),
-      },
+    const { user, session } = await prisma.$transaction(async (tx) => {
+      const profile = buildProfile(input.role);
+      const newUser = await tx.user.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: input.name,
+          email: input.email,
+          passwordHash: await hashPassword(input.password),
+          role: input.role,
+          ...profile,
+          employeeId: generateEmployeeId(input.role),
+          paymentMode: toDbPaymentMode(profile.paymentMode),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Special session creation that uses the transaction client
+      const payload: TokenPayload = { sub: newUser.id, email: newUser.email, role: newUser.role };
+      const accessToken = signAccessToken(payload);
+      const refreshToken = signRefreshToken(payload);
+
+      await tx.refreshToken.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: newUser.id,
+          tokenHash: hashToken(refreshToken),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      return { user: newUser, session: { accessToken, refreshToken } };
     });
 
-    const session = await createSession(user.id, user.email, user.role);
+    // Fire-and-forget welcome email (outside transaction)
+    sendWelcomeEmail({ name: user.name, email: user.email, role: user.role }).catch(() => {});
+
     return {
       user: toAuthUser(user),
       ...session,
@@ -141,7 +189,7 @@ export const authService = {
     });
   },
 
-  async updateProfile(userId: string, input: {
+  async updateProfile(userId: string, role: AppUserRole, input: {
     name?: string;
     department?: string;
     team?: string;
@@ -152,9 +200,18 @@ export const authService = {
     timeZone?: string;
     location?: string;
   }): Promise<AuthUser> {
+    const allowedInput =
+      role === "admin" || role === "manager"
+        ? input
+        : {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.timeZone !== undefined ? { timeZone: input.timeZone } : {}),
+            ...(input.location !== undefined ? { location: input.location } : {}),
+          };
+
     const user = await prisma.user.update({
       where: { id: userId },
-      data: input,
+      data: allowedInput,
     });
     return toAuthUser(user);
   },
@@ -197,7 +254,7 @@ export const authService = {
     };
   },
 
-  async switchRole(userId: string, targetRole: UserRole): Promise<AuthUser> {
+  async switchRole(userId: string, targetRole: AppUserRole): Promise<AuthUser> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) {
       throw new AppError("User not found", 404, "NOT_FOUND");

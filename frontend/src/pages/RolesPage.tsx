@@ -1,12 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { BadgeCheck, BarChart3, CheckCircle2, ClipboardList, FolderKanban, KeyRound, Lock, Settings, Shield, UserCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useTheme, type UserRole } from "@/contexts/ThemeContext";
 import { canAccessItem, sidebarSections } from "@/components/layout/sidebarConfig";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
+
+const SECTION_ITEMS_PAGE_SIZE = 8;
 
 type PermissionStatus = {
   accessible: number;
@@ -74,6 +77,7 @@ function PermissionPill({ allowed }: { allowed: boolean }) {
 export default function RolesPage() {
   const { role } = useTheme();
   const { canUseQuickCreate } = useWorkspace();
+  const [expandedSections, setExpandedSections] = useState<Record<string, number>>({});
 
   const permissionStats = useMemo<PermissionStatus>(() => {
     const totalItems = sidebarSections.reduce((sum, section) => sum + section.items.length, 0);
@@ -266,7 +270,7 @@ export default function RolesPage() {
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    {section.allowedItems.slice(0, 3).map((item) => {
+                    {section.allowedItems.slice(0, expandedSections[section.key] ?? SECTION_ITEMS_PAGE_SIZE).map((item) => {
                       const ItemIcon = item.icon;
                       return (
                         <div
@@ -284,6 +288,13 @@ export default function RolesPage() {
                         </div>
                       );
                     })}
+                    <ShowMoreButton
+                      total={section.allowedItems.length}
+                      visible={expandedSections[section.key] ?? SECTION_ITEMS_PAGE_SIZE}
+                      pageSize={SECTION_ITEMS_PAGE_SIZE}
+                      onShowMore={() => setExpandedSections(prev => ({ ...prev, [section.key]: Math.min((prev[section.key] ?? SECTION_ITEMS_PAGE_SIZE) + SECTION_ITEMS_PAGE_SIZE, section.allowedItems.length) }))}
+                      onShowLess={() => setExpandedSections(prev => ({ ...prev, [section.key]: SECTION_ITEMS_PAGE_SIZE }))}
+                    />
                     {section.blockedCount > 0 && (
                       <p className="px-1 text-xs text-muted-foreground">
                         {section.blockedCount} more item{section.blockedCount === 1 ? "" : "s"} in this section are hidden for this role.

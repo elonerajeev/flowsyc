@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 
 import { prisma } from "../config/prisma";
-import { requireAuth } from "../middleware/auth.middleware";
+import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { systemService } from "../services/system.service";
 import { getAuditLogs } from "../utils/audit";
 import { asyncHandler } from "../utils/async-handler";
@@ -61,10 +61,22 @@ systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Re
   }
 }));
 
-systemRouter.get("/audit", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+systemRouter.get("/audit", requireAuth, requireRole(["admin", "manager", "employee"]), asyncHandler(async (req: Request, res: Response) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 100) || 100));
-  const logs = await getAuditLogs(limit);
-  res.status(200).json({ data: logs });
+  const offset = Math.max(0, Number(req.query.offset ?? 0) || 0);
+  const search = String(req.query.search ?? "").trim();
+  const action = String(req.query.action ?? "").trim();
+  const entity = String(req.query.entity ?? "").trim();
+  const logs = await getAuditLogs({ 
+    limit, 
+    offset, 
+    search, 
+    action, 
+    entity,
+    userId: req.auth?.userId,
+    role: req.auth?.role
+  });
+  res.status(200).json(logs);
 }));
 
 export { systemRouter };

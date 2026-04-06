@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { prisma } from "../config/prisma";
+import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
+import { getInvoiceClientLabels } from "../utils/access-control";
 
 type InvoiceRecord = {
   id: string;
@@ -19,9 +21,33 @@ type InvoiceQuery = {
   status?: InvoiceRecord["status"];
 };
 
+type AccessScope = {
+  role: UserRole;
+  email: string;
+  userId?: string;
+} | null | undefined;
+
+async function buildWhere(query: InvoiceQuery, access: AccessScope) {
+  const permittedLabels = await getInvoiceClientLabels(access);
+  return {
+    deletedAt: null,
+    ...(query.status ? { status: query.status } : {}),
+    ...(permittedLabels ? { client: { in: permittedLabels } } : {}),
+  };
+}
+
 export const invoicesService = {
-  async getById(invoiceId: string) {
-    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  async getById(invoiceId: string, access?: AccessScope) {
+    const permittedLabels = await getInvoiceClientLabels(access);
+    const invoice = permittedLabels
+      ? await prisma.invoice.findFirst({
+          where: {
+            deletedAt: null,
+            id: invoiceId,
+            client: { in: permittedLabels },
+          },
+        })
+      : await prisma.invoice.findUnique({ where: { id: invoiceId } });
     if (!invoice || invoice.deletedAt) {
       throw new AppError("Invoice not found", 404, "NOT_FOUND");
     }
@@ -35,11 +61,8 @@ export const invoicesService = {
     };
   },
 
-  async list(query: InvoiceQuery) {
-    const where = {
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-    };
+  async list(query: InvoiceQuery, access?: AccessScope) {
+    const where = await buildWhere(query, access);
 
     const [total, invoices] = await prisma.$transaction([
       prisma.invoice.count({ where }),

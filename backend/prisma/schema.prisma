@@ -7,59 +7,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model CandidateActivity {
-  id          Int       @id @default(autoincrement())
-  candidateId Int
-  action      String
-  detail      String?
-  performedBy String
-  createdAt   DateTime  @default(now())
-  Candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-
-  @@index([candidateId])
-}
-
 model Candidate {
   id              Int            @id @default(autoincrement())
   name            String
   email           String         @unique
   jobId           Int
   stage           CandidateStage @default(applied)
-  source          String         @default("Direct")
-  phone           String?
   resume          String?
   notes           String?
-  rating          Int            @default(0)
-  interviewDate   DateTime?
-  interviewers    String[]       @default([])
-  joiningDate     String?
-  offeredSalary   String?
-  offerLetterSent Boolean        @default(false)
   deletedAt       DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime
+  source          String?        @default("Direct")
+  phone           String?
+  rating          Int?           @default(0)
+  interviewDate   DateTime?      @db.Timestamp(6)
+  interviewers    String[]       @default([])
+  offerLetterSent Boolean?       @default(false)
+  joiningDate     String?
+  offeredSalary   String?
   JobPosting      JobPosting     @relation(fields: [jobId], references: [id])
-  activities      CandidateActivity[]
 
   @@index([deletedAt])
   @@index([jobId])
   @@index([stage])
   @@index([source])
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String
-  userName  String
-  action    String
-  entity    String
-  entityId  String?
-  detail    String?
-  createdAt DateTime @default(now())
-
-  @@index([createdAt])
-  @@index([entity])
-  @@index([userId])
+  @@index([rating])
 }
 
 model Client {
@@ -134,15 +107,15 @@ model JobPosting {
   type        String      @default("Full-time")
   status      JobStatus   @default(open)
   description String      @default("")
-  salary      String      @default("Competitive")
-  experience  String      @default("2-5 years")
-  skills      String[]    @default([])
-  views       Int         @default(0)
-  priority    String      @default("normal")
-  deadline    String?
   deletedAt   DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime
+  salary      String?     @default("Competitive")
+  experience  String?     @default("2-5 years")
+  skills      String[]    @default([])
+  views       Int?        @default(0)
+  deadline    String?
+  priority    String?     @default("normal")
   Candidate   Candidate[]
 
   @@index([deletedAt])
@@ -224,11 +197,11 @@ model Task {
   tags        String[]     @default([])
   valueStream String
   column      TaskColumn   @default(todo)
-  projectId   Int?
-  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   deletedAt   DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime
+  projectId   Int?
+  project     Project?     @relation(fields: [projectId], references: [id], onUpdate: NoAction)
 
   @@index([column])
   @@index([deletedAt])
@@ -245,6 +218,8 @@ model TeamMember {
   avatar                String
   department            String
   team                  String
+  teamId                Int?
+  teamRef               Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
   designation           String
   manager               String
   workingHours          String
@@ -271,6 +246,7 @@ model TeamMember {
   @@index([deletedAt])
   @@index([role])
   @@index([status])
+  @@index([teamId])
 }
 
 model User {
@@ -295,10 +271,10 @@ model User {
   payrollDueDate String
   joinedAt       String
   location       String
-  signatureUrl   String?
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime
+  signatureUrl   String?
   RefreshToken   RefreshToken[]
 }
 
@@ -310,6 +286,99 @@ model UserPreference {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model Lead {
+  id         Int        @id @default(autoincrement())
+  firstName  String
+  lastName   String
+  email      String     @unique
+  company    String
+  jobTitle   String?
+  phone      String?
+  status     LeadStatus @default(new)
+  source     LeadSource @default(website)
+  score      Int        @default(50)
+  assignedTo String?
+  notes      String?
+  tags       String[]   @default([])
+  convertedAt DateTime?
+  convertedToClientId Int?
+  deletedAt  DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([deletedAt])
+  @@index([status])
+  @@index([source])
+}
+
+model Deal {
+  id            Int            @id @default(autoincrement())
+  title         String
+  value         Int
+  currency      String         @default("USD")
+  stage         DealStage      @default(prospecting)
+  probability   Int            @default(50)
+  assignedTo    String?
+  expectedClose DateTime?
+  actualClose   DateTime?
+  description   String?
+  tags          String[]       @default([])
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  activities    DealActivity[]
+
+  @@index([deletedAt])
+  @@index([stage])
+}
+
+model DealActivity {
+  id        Int      @id @default(autoincrement())
+  dealId    Int
+  type      String
+  content   String
+  createdAt DateTime @default(now())
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  userName  String
+  action    String
+  entity    String
+  entityId  String
+  detail    String?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([timestamp])
+}
+
+model CandidateActivity {
+  id          Int      @id @default(autoincrement())
+  candidateId Int
+  action      String
+  detail      String
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  @@index([candidateId])
+}
+
+model Integration {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      String
+  status    String   @default("active")
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum UserRole {
@@ -388,4 +457,108 @@ enum CandidateStage {
   offer
   hired
   rejected
+}
+
+enum LeadStatus {
+  new
+  contacted
+  qualified
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+enum LeadSource {
+  website
+  referral
+  social
+  email
+  other
+}
+
+enum DealStage {
+  prospecting
+  qualification
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+model CalendarEvent {
+  id             Int            @id @default(autoincrement())
+  title          String
+  date           String
+  startTime    String     @map("starttime")
+  endTime      String     @map("endtime")
+  location       String         @default("")
+  notes          String         @default("")
+  color          String         @default("primary")
+  repeat         EventRepeat    @default(none)
+  assignmentKind AssignmentKind @default(none)
+  assigneeId     String         @default("")
+  assigneeName   String         @default("")
+  assigneeMeta   String         @default("")
+  authorId       String
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([authorId])
+  @@index([deletedAt])
+  @@index([date])
+  @@index([assigneeId])
+}
+
+model Payroll {
+  id          Int          @id @default(autoincrement())
+  memberId    String
+  memberName  String
+  department  String       @default("")
+  period     String
+  baseSalary Int
+  allowances Int
+  deductions Int
+  netPay     Int
+  status     PayrollStatus @default(pending)
+  paymentMode PaymentMode  @default(bank_transfer)
+  paidAt     DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([memberId])
+  @@index([period])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+enum EventRepeat {
+  none
+  weekly
+  monthly
+}
+
+enum AssignmentKind {
+  none
+  member
+  team
+}
+
+enum PayrollStatus {
+  pending
+  processed
+  paid
+}
+
+model Team {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?  @default("")
+  permissions Json     @default("{}") // Object of service permissions, e.g. {"clients": true, "tasks": false}
+  members     TeamMember[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
 }

@@ -28,11 +28,11 @@ export const projectsController = {
       return;
     }
 
-    const projects = await projectsService.list(parsed.data);
+    const projects = await projectsService.list(parsed.data, req.auth);
     res.status(200).json(projects);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const project = await projectsService.getById(readProjectId(req));
+    const project = await projectsService.getById(readProjectId(req), req.auth);
     res.status(200).json(project);
   },
   create: async (req: Request, res: Response): Promise<void> => {

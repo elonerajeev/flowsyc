@@ -24,6 +24,7 @@ import {
   PlugZap,
   ReceiptText,
   UsersRound,
+  Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -56,16 +57,17 @@ export const sidebarSections: SidebarSection[] = [
     items: [
       { to: "/overview", icon: Home, label: "Dashboard", roles: ["admin", "manager", "employee", "client"] },
       { to: "/overview/activity", icon: Inbox, label: "Activity", roles: ["admin", "manager", "employee", "client"], badge: "New" },
-      { to: "/overview/messages", icon: MessageSquare, label: "Messages", roles: ["admin", "manager", "employee", "client"], badge: "3" },
+      { to: "/overview/messages", icon: MessageSquare, label: "Messages", roles: ["admin", "manager"], badge: "3" },
     ],
   },
   {
     key: "people",
     label: "People",
-    description: "Team and attendance",
+    description: "Teams, members, attendance",
     icon: Users,
     items: [
-      { to: "/people/team", icon: Users, label: "Team", roles: ["admin", "manager"] },
+      { to: "/people/teams", icon: Users, label: "Team", roles: ["admin", "manager"] },
+      { to: "/people/members", icon: UsersRound, label: "Members", roles: ["admin", "manager"] },
       { to: "/people/attendance", icon: UserRoundCheck, label: "Attendance", roles: ["admin", "manager"], badge: "New" },
     ],
   },
@@ -88,7 +90,7 @@ export const sidebarSections: SidebarSection[] = [
     icon: BadgeDollarSign,
     items: [
       { to: "/sales/clients", icon: UserCheck, label: "Clients", roles: ["admin", "manager", "client"] },
-      { to: "/sales", icon: PieChart, label: "Pipeline", roles: ["admin", "manager", "employee"], badge: "New" },
+      { to: "/sales/pipelines", icon: PieChart, label: "Pipelines", roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -129,8 +131,9 @@ export const sidebarSections: SidebarSection[] = [
     icon: Settings2,
     items: [
       { to: "/system/settings", icon: Settings, label: "Settings", roles: ["admin", "manager", "employee", "client"] },
-      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager", "employee", "client"] },
+      { to: "/system/access", icon: ShieldCheck, label: "Access & Permissions", roles: ["admin", "manager", "employee"] },
       { to: "/system/integrations", icon: PlugZap, label: "Integrations", roles: ["admin", "manager"], badge: "New" },
+      { to: "/system/audit", icon: Shield, label: "Audit Logs", roles: ["admin", "manager", "employee"] },
       { to: "/system/billing", icon: CreditCard, label: "Billing", roles: ["admin", "manager", "client"] },
     ],
   },

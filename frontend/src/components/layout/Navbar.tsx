@@ -11,6 +11,7 @@ import { triggerHaptic } from "@/lib/micro-interactions";
 import { useAuth } from "@/contexts/AuthContext";
 import { findTeamMemberByEmail, useSharedTeamMembers } from "@/lib/team-roster";
 import { toast } from "@/components/ui/sonner";
+import Breadcrumbs from "@/components/shared/Breadcrumbs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,9 @@ const roleLabels: Record<UserRole, string> = {
   employee: "Employee",
   client: "Client",
 };
+
+const prefetchQuickCreate = () => import("@/components/crm/QuickCreateDialog");
+const prefetchCommandPalette = () => import("@/components/crm/CommandPalette");
 
 export default function Navbar() {
   const { mode, toggleMode, role: themeRole, setRole } = useTheme();
@@ -88,6 +92,10 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 flex flex-col gap-3 border-b border-border/60 bg-card/95 px-4 py-3 backdrop-blur-xl shadow-sm md:h-16 md:flex-row md:items-center md:justify-between md:px-6 md:py-0">
+      <div className="flex items-center gap-4">
+        <Breadcrumbs />
+      </div>
+
       {/* Search */}
       <div className="group relative w-full max-w-none md:max-w-xl">
         <div className={cn("premium-hover flex h-11 items-center border border-border/70 bg-card/85 backdrop-blur-xl transition-all", RADIUS.xl, "shadow-[0_2px_8px_hsl(222_42%_12%_/_0.04)] group-focus-within:border-primary/40 group-focus-within:bg-card/95 group-focus-within:shadow-[0_8px_24px_hsl(222_42%_12%_/_0.08)]")}>
@@ -96,6 +104,7 @@ export default function Navbar() {
             type="text"
             placeholder="Search anything..."
             onFocus={openCommandPalette}
+            onMouseEnter={prefetchCommandPalette}
             readOnly
             className={cn("h-full w-full bg-transparent pl-3 pr-20 text-foreground placeholder:text-muted-foreground/80 outline-none focus:outline-none", TEXT.body)}
           />
@@ -109,7 +118,8 @@ export default function Navbar() {
       <div className="flex w-full items-center justify-between gap-1.5 md:ml-4 md:w-auto md:justify-end">
         {canUseQuickCreate ? (
           <button
-            onClick={openQuickCreate}
+            onClick={() => openQuickCreate()}
+            onMouseEnter={prefetchQuickCreate}
             className={cn("premium-hover inline-flex items-center gap-2 h-9 bg-primary font-semibold uppercase tracking-[0.14em] text-primary-foreground transition hover:brightness-105", RADIUS.xl, "px-3.5", TEXT.eyebrow)}
           >
             <Plus className="h-3.5 w-3.5" />

@@ -29,6 +29,8 @@ type MockTeamMember = {
   location: string;
   workload: number;
   deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 const mockState = {
@@ -46,10 +48,12 @@ const mockPrisma = {
       }
       return null;
     }),
-    create: jest.fn(async ({ data }: { data: Omit<MockTeamMember, "id" | "deletedAt"> }) => {
+    create: jest.fn(async ({ data }: { data: Omit<MockTeamMember, "id" | "deletedAt" | "createdAt" | "updatedAt"> }) => {
       const member: MockTeamMember = {
         id: mockState.members.length + 1,
         deletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
         ...data,
       };
       mockState.members.push(member);
@@ -69,18 +73,31 @@ describe("teamMembersService", () => {
     mockPrisma.teamMember.create.mockClear();
   });
 
-  it("creates a team member with defaults when optional fields are omitted", async () => {
+  it("creates a team member with required fields", async () => {
     const { teamMembersService } = await import("../services/team-members.service");
 
     const member = await teamMembersService.create({
       name: "Minimal Member",
       email: "minimal@example.com",
       role: "Employee",
+      department: "Operations",
+      team: "Platform Ops",
+      designation: "Employee",
+      manager: "Team Lead",
+      workingHours: "09:00 - 18:00",
+      officeLocation: "HQ",
+      timeZone: "Asia/Calcutta",
+      baseSalary: 50000,
+      allowances: 5000,
+      deductions: 1000,
+      paymentMode: "upi",
+      attendance: "present",
+      checkIn: "9:00 AM",
+      location: "HQ",
     });
 
-    expect(member.team).toBe("General");
-    expect(member.designation).toBe("Employee");
-    expect(member.manager).toBe("Team Lead");
+    expect(member.team).toBe("Platform Ops");
+    expect(member.department).toBe("Operations");
     expect(member.paymentMode).toBe("upi");
     expect(member.workingHours).toBe("09:00 - 18:00");
   });
@@ -115,6 +132,8 @@ describe("teamMembersService", () => {
       location: "HQ",
       workload: 0,
       deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
     const { teamMembersService } = await import("../services/team-members.service");
@@ -123,7 +142,33 @@ describe("teamMembersService", () => {
         name: "Duplicate Member",
         email: "existing@example.com",
         role: "Employee",
+        department: "Operations",
+        team: "Platform Ops",
+        designation: "Employee",
+        manager: "Team Lead",
+        workingHours: "09:00 - 18:00",
+        officeLocation: "HQ",
+        timeZone: "Asia/Calcutta",
+        baseSalary: 50000,
+        allowances: 5000,
+        deductions: 1000,
+        paymentMode: "upi",
+        attendance: "present",
+        checkIn: "9:00 AM",
+        location: "HQ",
       }),
     ).rejects.toThrow("Team member email already exists");
+  });
+
+  it("throws 400 when required fields are missing", async () => {
+    const { teamMembersService } = await import("../services/team-members.service");
+
+    await expect(
+      teamMembersService.create({
+        name: "Missing Team Member",
+        email: "missing-team@example.com",
+        role: "Employee",
+      }),
+    ).rejects.toThrow("Department is required");
   });
 });

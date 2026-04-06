@@ -154,12 +154,27 @@ export interface AuditLogRecord {
   createdAt: string;
 }
 
+export interface AuditLogQueryParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  action?: string;
+  entity?: string;
+}
+
+export interface AuditLogListResponse {
+  data: AuditLogRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CollaboratorRecord {
   id: string;
   name: string;
   role: string;
   avatar: string;
-  status: "online" | "idle" | "reviewing";
+  status: AttendanceStatus;
   lastSeen: string;
 }
 
@@ -211,6 +226,7 @@ export interface TaskRecord {
   dueDate: string;
   tags: string[];
   valueStream: "Growth" | "Product" | "Support";
+  column?: TaskColumn;
   projectId?: number | null;
 }
 
@@ -297,6 +313,7 @@ export interface TeamMemberRecord {
   avatar: string;
   department: string;
   team: string;
+  teamId?: number | null;
   designation: string;
   manager: string;
   workingHours: string;
@@ -318,6 +335,52 @@ export interface TeamMemberRecord {
   workload: number;
 }
 
+export interface TeamRecord {
+  id: number;
+  name: string;
+  description: string | null;
+  permissions: Record<string, boolean>;
+  members: Array<Pick<TeamMemberRecord, "id" | "name" | "email">>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateTeamInput = {
+  name: string;
+  description?: string;
+  permissions?: Record<string, boolean>;
+};
+
+export type CreateTeamMemberInput = {
+  name: string;
+  email: string;
+  role: TeamMemberRecord["role"];
+  status?: TeamMemberRecord["status"];
+  avatar?: string;
+  department?: string;
+  team?: string;
+  teamId?: number | null;
+  designation?: string;
+  manager?: string;
+  workingHours?: string;
+  officeLocation?: string;
+  timeZone?: string;
+  baseSalary?: number;
+  allowances?: number;
+  deductions?: number;
+  paymentMode?: TeamMemberRecord["paymentMode"];
+  warningCount?: number;
+  suspendedAt?: string | null;
+  terminationEligibleAt?: string | null;
+  handoverCompletedAt?: string | null;
+  terminatedAt?: string | null;
+  separationNote?: string;
+  attendance?: TeamMemberRecord["attendance"];
+  checkIn?: string;
+  location?: string;
+  workload?: number;
+};
+
 export interface AttendanceRecord {
   id: number;
   name: string;
@@ -327,6 +390,49 @@ export interface AttendanceRecord {
   checkIn: string;
   location: string;
   note: string;
+}
+
+export type PayrollStatus = "pending" | "processing" | "paid" | "overdue";
+
+export interface PayrollRecord {
+  id: number;
+  memberId: string;
+  memberName: string;
+  period: string; // "YYYY-MM"
+  baseSalary: number;
+  allowances: number;
+  deductions: number;
+  netPay: number;
+  status: PayrollStatus;
+  paymentMode: PaymentMode;
+  dueDate: string;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  member?: {
+    designation: string;
+    team: string;
+    avatar: string;
+  } | null;
+}
+
+export interface CalendarEventRecord {
+  id: number;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  notes: string;
+  color: string;
+  repeat: "none" | "weekly" | "monthly";
+  assignmentKind: "none" | "team" | "member";
+  assigneeId: string;
+  assigneeName: string;
+  assigneeMeta: string;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface NoteRecord {
@@ -374,4 +480,23 @@ export interface CandidateRecord {
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type AlertType = "payroll_due" | "invoice_overdue" | "task_overdue" | "project_stalled";
+
+export interface AlertRecord {
+  type: AlertType;
+  severity: "warning" | "critical";
+  title: string;
+  description: string;
+  entityId?: string | number;
+  entityType: string;
+  actionUrl?: string;
+}
+
+export interface AlertsSummary {
+  total: number;
+  critical: number;
+  warning: number;
+  byType: Record<AlertType, number>;
 }

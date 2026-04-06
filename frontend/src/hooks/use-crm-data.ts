@@ -2,6 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { crmService } from "@/services/crm";
 
+type QueryToggle = {
+  enabled?: boolean;
+};
+
 export const crmKeys = {
   dashboard: ["crm", "dashboard"] as const,
   clients: ["crm", "clients"] as const,
@@ -11,6 +15,7 @@ export const crmKeys = {
   messages: ["crm", "messages"] as const,
   invoices: ["crm", "invoices"] as const,
   reports: ["crm", "reports"] as const,
+  teams: ["crm", "teams"] as const,
   teamMembers: ["crm", "team-members"] as const,
   attendance: ["crm", "attendance"] as const,
   commands: ["crm", "commands"] as const,
@@ -19,6 +24,8 @@ export const crmKeys = {
   notes: ["crm", "notes"] as const,
   jobPostings: ["crm", "job-postings"] as const,
   candidates: ["crm", "candidates"] as const,
+  calendar: ["crm", "calendar"] as const,
+  payroll: ["crm", "payroll"] as const,
 };
 
 export function useDashboardData() {
@@ -31,37 +38,41 @@ export function useDashboardData() {
   });
 }
 
-export function useClients() {
+export function useClients(options?: QueryToggle) {
   return useQuery({
     queryKey: crmKeys.clients,
     queryFn: crmService.getClients,
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
-export function useProjects() {
+export function useProjects(options?: QueryToggle) {
   return useQuery({
     queryKey: crmKeys.projects,
     queryFn: crmService.getProjects,
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
-export function useTasks(projectId?: number) {
+export function useTasks(projectId?: number, options?: QueryToggle) {
   return useQuery({
     queryKey: [...crmKeys.tasks, projectId ?? "all"],
     queryFn: () => crmService.getTasks(projectId),
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
-export function useAuditLogs(limit = 100) {
+export function useAuditLogs(limit = 100, options?: QueryToggle) {
   return useQuery({
     queryKey: [...crmKeys.auditLogs, limit],
     queryFn: () => crmService.getAuditLogs(limit),
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 60 * 2,
     refetchIntervalInBackground: false,
+    enabled: options?.enabled,
   });
 }
 
@@ -81,11 +92,12 @@ export function useMessages() {
   });
 }
 
-export function useInvoices() {
+export function useInvoices(options?: QueryToggle) {
   return useQuery({
     queryKey: crmKeys.invoices,
     queryFn: crmService.getInvoices,
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
@@ -97,19 +109,30 @@ export function useReports() {
   });
 }
 
-export function useTeamMembers() {
+export function useTeams(options?: QueryToggle) {
+  return useQuery({
+    queryKey: crmKeys.teams,
+    queryFn: crmService.getTeams,
+    staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
+  });
+}
+
+export function useTeamMembers(options?: QueryToggle) {
   return useQuery({
     queryKey: crmKeys.teamMembers,
     queryFn: crmService.getTeamMembers,
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
-export function useAttendance() {
+export function useAttendance(options?: QueryToggle) {
   return useQuery({
     queryKey: crmKeys.attendance,
     queryFn: crmService.getAttendance,
     staleTime: 1000 * 60 * 5,
+    enabled: options?.enabled,
   });
 }
 
@@ -149,6 +172,22 @@ export function useCandidates() {
   return useQuery({
     queryKey: crmKeys.candidates,
     queryFn: crmService.getCandidates,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useCalendarEvents() {
+  return useQuery({
+    queryKey: crmKeys.calendar,
+    queryFn: crmService.getCalendarEvents,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function usePayroll(period?: string) {
+  return useQuery({
+    queryKey: [...crmKeys.payroll, period],
+    queryFn: () => crmService.getPayroll(period),
     staleTime: 1000 * 60 * 5,
   });
 }

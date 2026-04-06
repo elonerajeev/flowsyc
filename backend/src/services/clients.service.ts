@@ -2,6 +2,7 @@ import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import type { UserRole } from "../config/types";
 import {
   buildClientAvatar,
   fromDbClientSegment,
@@ -11,6 +12,7 @@ import {
   toDbClientStatus,
   toDbClientTier,
 } from "../utils/client-mapping";
+import { getClientAccessEmail } from "../utils/access-control";
 
 type ClientRecord = {
   id: number;
@@ -47,6 +49,12 @@ type ClientFilters = {
   order: "asc" | "desc";
 };
 
+type AccessScope = {
+  role: UserRole;
+  email: string;
+  userId?: string;
+} | null | undefined;
+
 type ClientInput = {
   name: string;
   email: string;
@@ -69,7 +77,8 @@ type ClientInput = {
   tags?: string[];
 };
 
-function mapClient(client: {
+function mapClient(
+  client: {
   id: number;
   name: string;
   industry: string;
@@ -92,19 +101,23 @@ function mapClient(client: {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
-}): ClientRecord {
+},
+  role?: UserRole,
+): ClientRecord {
+  const isClientView = role === "client";
+
   return {
     id: client.id,
     name: client.name,
     industry: client.industry,
-    manager: client.manager,
+    manager: isClientView ? "Account team" : client.manager,
     status: fromDbClientStatus(client.status),
-    revenue: client.revenue,
+    revenue: isClientView ? "Private" : client.revenue,
     location: client.location,
     avatar: client.avatar,
     tier: fromDbClientTier(client.tier),
-    healthScore: client.healthScore,
-    nextAction: client.nextAction,
+    healthScore: isClientView ? 0 : client.healthScore,
+    nextAction: isClientView ? "Contact your account team for the next update." : client.nextAction,
     segment: fromDbClientSegment(client.segment),
     email: client.email,
     phone: client.phone,
@@ -112,15 +125,22 @@ function mapClient(client: {
     companyId: client.companyId ?? undefined,
     jobTitle: client.jobTitle ?? undefined,
     source: client.source ?? undefined,
-    assignedTo: client.assignedTo ?? undefined,
-    tags: client.tags,
+    assignedTo: isClientView ? undefined : client.assignedTo ?? undefined,
+    tags: isClientView ? [] : client.tags,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
 }
 
-function buildWhere(filters: ClientFilters): Prisma.ClientWhereInput {
+async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<Prisma.ClientWhereInput> {
   const and: Prisma.ClientWhereInput[] = [{ deletedAt: null }];
+
+  const clientEmail = await getClientAccessEmail(access);
+  if (clientEmail) {
+    and.push({
+      email: { equals: clientEmail, mode: "insensitive" },
+    });
+  }
 
   if (filters.status) {
     and.push({ status: toDbClientStatus(filters.status) });
@@ -174,16 +194,25 @@ function isEmailUniqueConstraintError(error: unknown) {
 }
 
 export const clientsService = {
-  async getById(clientId: number) {
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
+  async getById(clientId: number, access?: AccessScope) {
+    const clientEmail = await getClientAccessEmail(access);
+    const client = clientEmail
+      ? await prisma.client.findFirst({
+          where: {
+            deletedAt: null,
+            id: clientId,
+            email: { equals: clientEmail, mode: "insensitive" },
+          },
+        })
+      : await prisma.client.findUnique({ where: { id: clientId } });
     if (!client || client.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
     }
-    return mapClient(client);
+    return mapClient(client, access?.role);
   },
 
-  async list(filters: ClientFilters) {
-    const where = buildWhere(filters);
+  async list(filters: ClientFilters, access?: AccessScope) {
+    const where = await buildWhere(filters, access);
 
     const [total, clients] = await prisma.$transaction([
       prisma.client.count({ where }),
@@ -196,7 +225,7 @@ export const clientsService = {
     ]);
 
     return {
-      data: clients.map(mapClient),
+      data: clients.map((client) => mapClient(client, access?.role)),
       pagination: {
         page: filters.page,
         limit: filters.limit,
@@ -306,10 +335,14 @@ export const clientsService = {
     });
   },
 
-  async getPipeline() {
+  async getPipeline(access?: AccessScope) {
+    const where = await buildWhere(
+      { page: 1, limit: 1, sort: "createdAt", order: "desc" },
+      access,
+    );
     const clients = await prisma.client.groupBy({
       by: ["segment"],
-      where: { deletedAt: null },
+      where,
       _count: { _all: true },
     });
 

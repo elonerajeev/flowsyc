@@ -37,15 +37,6 @@ export const teamMembersController = {
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const member = await teamMembersService.create(req.body);
-    if (req.auth) {
-      await logAudit({
-        userId: req.auth.userId,
-        action: "create",
-        entity: "TeamMember",
-        entityId: member.id,
-        detail: `Created: ${member.name}`,
-      });
-    }
     res.status(201).json(member);
   },
   update: async (req: Request, res: Response): Promise<void> => {

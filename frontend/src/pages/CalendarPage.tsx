@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, Trash2, PencilLine } from "lucide-react";
 
+import PageLoader from "@/components/shared/PageLoader";
+import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,29 +17,15 @@ import { toast } from "@/components/ui/use-toast";
 import { useSharedTeamMembers } from "@/lib/team-roster";
 import { cn } from "@/lib/utils";
 import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
-import type { TeamMemberRecord } from "@/types/crm";
+import { crmKeys, useCalendarEvents } from "@/hooks/use-crm-data";
+import { crmService } from "@/services/crm";
+import type { CalendarEventRecord, TeamMemberRecord } from "@/types/crm";
 
 type EventRepeat = "none" | "weekly" | "monthly";
 type AssignmentKind = "none" | "team" | "member";
-type CalendarEvent = {
-  id: string;
-  title: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  location: string;
-  notes: string;
-  color: string;
-  repeat: EventRepeat;
-  assignmentKind: AssignmentKind;
-  assigneeId: string;
-  assigneeName: string;
-  assigneeMeta: string;
-};
+type CalendarEvent = CalendarEventRecord;
 
-type EventDraft = Omit<CalendarEvent, "id">;
-
-const STORAGE_KEY = "crm-calendar-events";
+type EventDraft = Omit<CalendarEvent, "id" | "authorId" | "createdAt" | "updatedAt">;
 
 const eventColors = [
   { value: "primary", label: "Primary", className: "border-primary/25 bg-primary/10 text-primary" },
@@ -126,21 +116,46 @@ function normalizeEvent(event: CalendarEvent): CalendarEvent {
 }
 
 export default function CalendarPage() {
+  const queryClient = useQueryClient();
   const today = useMemo(() => new Date(), []);
   const sharedTeamMembers = useSharedTeamMembers();
   const [month, setMonth] = useState(() => getMonthStart(today));
-  const [events, setEvents] = useState<CalendarEvent[]>(() => {
-    return readStoredJSON<CalendarEvent[]>(STORAGE_KEY, []).map(normalizeEvent);
-  });
+  const { data: events = [], isLoading, error: fetchError, refetch } = useCalendarEvents();
   const [selectedDate, setSelectedDate] = useState(() => new Date(today));
   const [draft, setDraft] = useState<EventDraft>(() => emptyDraft(today));
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [visibleUpcomingCount, setVisibleUpcomingCount] = useState(8);
+  const UPCOMING_PAGE_SIZE = 8;
 
-  useEffect(() => {
-    writeStoredJSON(STORAGE_KEY, events);
-  }, [events]);
+  const createMutation = useMutation({
+    mutationFn: (event: EventDraft) => crmService.createCalendarEvent(event),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.calendar });
+      toast({ title: "Event created", description: "The event has been saved to the database." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to create event.", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Partial<CalendarEvent> }) =>
+      crmService.updateCalendarEvent(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.calendar });
+      toast({ title: "Event updated", description: "The changes have been saved." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update event.", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.deleteCalendarEvent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.calendar });
+      toast({ title: "Event deleted", description: "The event has been removed." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete event.", variant: "destructive" }),
+  });
 
   const teamOptions = useMemo(() => {
     const names = new Set<string>();
@@ -180,8 +195,7 @@ export default function CalendarPage() {
       .sort((a, b) => {
         const dateDiff = fromISODate(a.date).getTime() - fromISODate(b.date).getTime();
         return dateDiff || a.startTime.localeCompare(b.startTime);
-      })
-      .slice(0, 6);
+      });
   }, [events, today]);
 
   const monthSummary = useMemo(() => {
@@ -255,8 +269,7 @@ export default function CalendarPage() {
       return;
     }
 
-    const nextEvent: CalendarEvent = {
-      id: editingId ?? `event-${Date.now()}`,
+    const payload: EventDraft = {
       ...draft,
       title: draft.title.trim(),
       location: draft.location.trim(),
@@ -264,26 +277,32 @@ export default function CalendarPage() {
       ...resolveAssignment(draft),
     };
 
-    setEvents((current) => {
-      const withoutCurrent = current.filter((event) => event.id !== nextEvent.id);
-      return [...withoutCurrent, nextEvent].sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-    });
-    setSelectedDate(fromISODate(nextEvent.date));
-    setMonth(getMonthStart(fromISODate(nextEvent.date)));
+    if (editingId !== null) {
+      updateMutation.mutate({ id: editingId, patch: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+
+    setSelectedDate(fromISODate(payload.date));
+    setMonth(getMonthStart(fromISODate(payload.date)));
     setIsDialogOpen(false);
-    toast({
-      title: editingId ? "Event updated" : "Event created",
-      description: `${nextEvent.title} is now on the calendar.`,
-    });
   };
 
-  const deleteEvent = (eventId: string) => {
-    setEvents((current) => current.filter((event) => event.id !== eventId));
-    toast({
-      title: "Event removed",
-      description: "The calendar entry has been deleted.",
-    });
+  const deleteEvent = (eventId: number) => {
+    deleteMutation.mutate(eventId);
   };
+
+  if (isLoading) return <PageLoader />;
+  if (fetchError) {
+    return (
+      <ErrorFallback
+        title="Calendar events failed to load"
+        error={fetchError}
+        onRetry={() => refetch()}
+        retryLabel="Retry calendar"
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -498,7 +517,8 @@ export default function CalendarPage() {
             </div>
             <div className="mt-4 space-y-3">
               {upcomingEvents.length > 0 ? (
-                upcomingEvents.map((event) => (
+                <>
+                {upcomingEvents.slice(0, visibleUpcomingCount).map((event) => (
                   <article key={event.id} className="rounded-xl border border-border/70 bg-secondary/15 p-3">
                     <p className="text-sm font-semibold text-foreground">{event.title}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -507,7 +527,15 @@ export default function CalendarPage() {
                       {event.assignmentKind !== "none" ? ` · ${event.assigneeName}` : ""}
                     </p>
                   </article>
-                ))
+                ))}
+                <ShowMoreButton
+                  total={upcomingEvents.length}
+                  visible={visibleUpcomingCount}
+                  pageSize={UPCOMING_PAGE_SIZE}
+                  onShowMore={() => setVisibleUpcomingCount(v => Math.min(v + UPCOMING_PAGE_SIZE, upcomingEvents.length))}
+                  onShowLess={() => setVisibleUpcomingCount(UPCOMING_PAGE_SIZE)}
+                />
+                </>
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-4 text-center">
                   <p className="text-sm text-muted-foreground">No upcoming events.</p>

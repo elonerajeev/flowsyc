@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { isRemoteApiEnabled } from "@/lib/api-client";
-import { authService, getStoredAuthToken, getStoredAuthUser } from "@/services/auth";
+import { authService, getStoredAuthUser } from "@/services/auth";
 import type { AuthCredentials, AuthUser } from "@/services/auth";
 import type { UserRole } from "@/contexts/ThemeContext";
 
@@ -34,32 +34,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (skipInitialFetch) return;
 
-    if (!isRemoteApiEnabled()) {
+    // In remote mode, always try to verify the session (cookies are automatic)
+    if (isRemoteApiEnabled()) {
+      let cancelled = false;
+      authService
+        .me()
+        .then((session) => {
+          if (cancelled) return;
+          setUser(session?.user ?? null);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setUser(null);
+        });
+      return () => { cancelled = true; };
+    } else {
+      // Mock mode: rely on localStorage
       setUser(getStoredAuthUser());
-      return;
     }
-
-    if (!getStoredAuthToken()) {
-      setUser(null);
-      return;
-    }
-
-    let cancelled = false;
-    authService
-      .me()
-      .then((session) => {
-        if (cancelled) return;
-        setUser(session?.user ?? null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // Clear invalid token
-        localStorage.removeItem('crm-auth-token');
-        localStorage.removeItem('crm-auth-user');
-        localStorage.removeItem('crm-auth-refresh-token');
-        setUser(null);
-      });
-    return () => { cancelled = true; };
   }, [skipInitialFetch]);
 
   const login = async (credentials: AuthCredentials) => {

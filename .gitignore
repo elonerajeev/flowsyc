@@ -7,9 +7,27 @@
 *.env
 !.env.example
 
+# Auth/secret files
+/frontend/.htpasswd
+
 # Logs
 logs/
 *.log
+
+# Local tooling
+.vscode/
+.idea/
+.claude/
+.codex/
+.kiro/
+
+# Temp / cache
+temp/
+/frontend/temp/
+/backend/temp/
+coverage/
+.nyc_output/
+*.tsbuildinfo
 
 # OS files
 .DS_Store

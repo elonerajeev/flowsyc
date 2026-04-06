@@ -32,10 +32,10 @@ export const notesController = {
     res.status(200).json(notes);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const note = await notesService.getById(readNoteId(req));
-    if (req.auth?.userId !== note.authorId) {
-      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    if (!req.auth?.userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
+    const note = await notesService.getById(readNoteId(req), req.auth.userId);
     res.status(200).json(note);
   },
   create: async (req: Request, res: Response): Promise<void> => {
@@ -53,37 +53,33 @@ export const notesController = {
     res.status(201).json(note);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    const note = await notesService.getById(readNoteId(req));
-    if (req.auth?.userId !== note.authorId) {
-      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    if (!req.auth?.userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
-    const updated = await notesService.update(note.id, req.body);
-    if (req.auth?.userId) {
-      await logAudit({
-        userId: req.auth.userId,
-        action: "update",
-        entity: "Note",
-        entityId: note.id,
-        detail: `Updated: ${updated.title}`,
-      });
-    }
+    const noteId = readNoteId(req);
+    const updated = await notesService.update(noteId, req.auth.userId, req.body);
+    await logAudit({
+      userId: req.auth.userId,
+      action: "update",
+      entity: "Note",
+      entityId: noteId,
+      detail: `Updated: ${updated.title}`,
+    });
     res.status(200).json(updated);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    const note = await notesService.getById(readNoteId(req));
-    if (req.auth?.userId !== note.authorId) {
-      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    if (!req.auth?.userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
-    await notesService.delete(note.id);
-    if (req.auth?.userId) {
-      await logAudit({
-        userId: req.auth.userId,
-        action: "delete",
-        entity: "Note",
-        entityId: note.id,
-        detail: `Deleted note #${note.id}`,
-      });
-    }
+    const noteId = readNoteId(req);
+    await notesService.delete(noteId, req.auth.userId);
+    await logAudit({
+      userId: req.auth.userId,
+      action: "delete",
+      entity: "Note",
+      entityId: noteId,
+      detail: `Deleted note #${noteId}`,
+    });
     res.status(200).json({ message: "Note deleted successfully" });
   },
 };

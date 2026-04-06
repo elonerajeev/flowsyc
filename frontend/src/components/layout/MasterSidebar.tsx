@@ -50,6 +50,10 @@ export default function MasterSidebar({ activeSection, onSectionChange }: Master
                 type="button"
                 title={`${section.label}${isLocked ? " - locked for this role" : ""}`}
                 onClick={() => {
+                  if (isLocked) {
+                    navigate("/restricted", { state: { from: section.label } });
+                    return;
+                  }
                   onSectionChange(section.key);
                   navigate(allowedItems[0]?.to ?? "/overview");
                 }}
@@ -57,9 +61,7 @@ export default function MasterSidebar({ activeSection, onSectionChange }: Master
                   "group flex h-12 w-full items-center justify-center rounded-2xl border transition",
                   isActive
                     ? "border-sidebar-active/40 bg-sidebar-active/16 text-sidebar-active shadow-[0_10px_24px_hsl(222_58%_5%_/_0.18)]"
-                    : isLocked
-                      ? "border-transparent text-sidebar-muted/80 hover:border-sidebar-border hover:bg-sidebar-hover hover:text-sidebar-foreground"
-                      : "border-transparent text-sidebar-fg hover:border-sidebar-border hover:bg-sidebar-hover hover:text-sidebar-foreground",
+                    : "border-transparent text-sidebar-fg hover:border-sidebar-border hover:bg-sidebar-hover hover:text-sidebar-foreground",
                 )}
               >
                 <div className="relative">

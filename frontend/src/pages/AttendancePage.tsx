@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Clock3, MapPin, Monitor, RefreshCw, UserRoundCheck, UserRoundX } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -7,9 +9,9 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { useTeamMembers } from "@/hooks/use-crm-data";
-import { readStoredJSON } from "@/lib/preferences";
 import { findTeamMemberByEmail, useSharedTeamMembers } from "@/lib/team-roster";
 import type { AttendanceRecord, AttendanceStatus, TeamMemberRecord } from "@/types/crm";
 
@@ -43,29 +45,27 @@ const statusTone: Record<string, string> = {
 export default function AttendancePage() {
   const { user } = useAuth();
   const { role } = useTheme();
-  const { data: teamMembers = [], isLoading, error: teamError, refetch: refetchTeamMembers } = useTeamMembers();
+  const canManageAttendance = role === "admin" || role === "manager";
+  const { data: teamMembers = [], isLoading, error: teamError, refetch: refetchTeamMembers } = useTeamMembers({ enabled: canManageAttendance });
   const sharedTeamMembers = useSharedTeamMembers();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [visibleCount, setVisibleCount] = useState(6);
-  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(4);
+  const PAGE_SIZE = 4;
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetchTeamMembers();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
 
   useEffect(() => {
-    // API data (teamMembers from DB) always takes priority.
-    // Only fall back to localStorage when API returned nothing.
-    let source: TeamMemberRecord[];
-    if (teamMembers.length > 0) {
-      source = teamMembers;
-    } else {
-      const buckets = ["admin", "manager", "employee"] as const;
-      source = buckets.flatMap((bucket) =>
-        readStoredJSON<TeamMemberRecord[]>(`crm-team-members-${bucket}`, []),
-      );
-    }
+    const source: TeamMemberRecord[] = canManageAttendance ? teamMembers : [];
     const nextRecords = source.map(buildAttendanceRecord);
     setRecords(nextRecords);
     setSelectedId((current) => current ?? nextRecords[0]?.id ?? null);
-  }, [teamMembers]);
+  }, [canManageAttendance, teamMembers]);
 
   const summary = useMemo(() => {
     return {
@@ -76,10 +76,29 @@ export default function AttendancePage() {
     };
   }, [records]);
 
-  const selfRecord = useMemo(() => {
-    return records.find((member) => member.name === user?.name) ?? records[0] ?? null;
-  }, [records, user?.name]);
   const liveEmployeeRecord = useMemo(() => findTeamMemberByEmail(sharedTeamMembers, user?.email), [sharedTeamMembers, user?.email]);
+  const selfRecord = useMemo(() => {
+    if (role === "employee" && user) {
+      return {
+        id: Number(liveEmployeeRecord?.id ?? 0) || 0,
+        name: liveEmployeeRecord?.name ?? user.name,
+        role: liveEmployeeRecord?.role ?? "Employee",
+        department: liveEmployeeRecord?.department ?? user.department,
+        status: liveEmployeeRecord?.attendance ?? "present",
+        checkIn: liveEmployeeRecord?.checkIn ?? "-",
+        location: liveEmployeeRecord?.location ?? user.location,
+        note:
+          liveEmployeeRecord?.attendance === "absent"
+            ? "Needs follow-up"
+            : liveEmployeeRecord?.attendance === "late"
+              ? "Late check-in"
+              : liveEmployeeRecord?.attendance === "remote"
+                ? "Remote today"
+                : "On time",
+      };
+    }
+    return records.find((member) => member.name === user?.name) ?? records[0] ?? null;
+  }, [liveEmployeeRecord, records, role, user]);
 
   const selectedRecord = useMemo(() => {
     return records.find((member) => member.id === selectedId) ?? records[0] ?? null;
@@ -118,10 +137,10 @@ export default function AttendancePage() {
     }
   };
 
-  if (isLoading) {
+  if (canManageAttendance && isLoading) {
     return <PageLoader />;
   }
-  if (teamError) {
+  if (canManageAttendance && teamError) {
     return (
       <ErrorFallback
         title="Attendance data failed to load"

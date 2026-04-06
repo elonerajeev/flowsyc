@@ -9,8 +9,8 @@ import { createProjectSchema, updateProjectSchema } from "../validators/project.
 
 export const projectsRouter = Router();
 
-projectsRouter.get("/", requireAuth, validateQuery(projectQuerySchema), asyncHandler(projectsController.list));
-projectsRouter.get("/:id", requireAuth, asyncHandler(projectsController.getOne));
+projectsRouter.get("/", requireAuth, requireRole(["admin", "manager", "employee"]), validateQuery(projectQuerySchema), asyncHandler(projectsController.list));
+projectsRouter.get("/:id", requireAuth, requireRole(["admin", "manager", "employee"]), asyncHandler(projectsController.getOne));
 projectsRouter.post("/", requireAuth, requireRole(["admin", "manager"]), validateBody(createProjectSchema), asyncHandler(projectsController.create));
 projectsRouter.patch("/:id", requireAuth, requireRole(["admin", "manager"]), validateBody(updateProjectSchema), asyncHandler(projectsController.update));
 projectsRouter.delete("/:id", requireAuth, requireRole(["admin"]), asyncHandler(projectsController.remove));

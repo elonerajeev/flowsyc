@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
-import { readStoredString, removeStoredValue, writeStoredString } from "@/lib/preferences";
+import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from "react";
+import { readStoredJSON, readStoredString, removeStoredValue, writeStoredString } from "@/lib/preferences";
 import { crmService } from "@/services/crm";
 
 export type ThemeColor = "ocean" | "midnight" | "nebula" | "slate";
@@ -408,22 +408,38 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const saved = readStoredString("crm-background", "") as BackgroundStyle;
     return validBackgrounds.includes(saved) ? saved : "ocean";
   });
-  const [role, setRoleState] = useState<UserRole>(() => (readStoredString("crm-role", "admin") as UserRole) || "admin");
+  const [role, setRoleState] = useState<UserRole>(() => {
+    const storedUser = readStoredJSON<any>("crm-auth-user", null);
+    return (storedUser?.role as UserRole) || (readStoredString("crm-role", "admin") as UserRole) || "admin";
+  });
 
   // Sync with backend on mount
   useEffect(() => {
+    let mounted = true;
     const syncPreferences = async () => {
       try {
         const { data } = await crmService.getPreferences();
+        if (!mounted) return;
         if (data["crm-mode"]) setMode(data["crm-mode"] as ThemeMode);
         if (data["crm-color"]) setColorState(data["crm-color"] as ThemeColor);
         if (data["crm-background"]) setBackgroundState(data["crm-background"] as BackgroundStyle);
-        if (data["crm-role"]) setRoleState(data["crm-role"] as UserRole);
+        // Auth user role always wins over stored preference
+        const storedUser = readStoredJSON<any>("crm-auth-user", null);
+        if (storedUser?.role) {
+          setRoleState(storedUser.role as UserRole);
+        } else if (data["crm-role"]) {
+          setRoleState(data["crm-role"] as UserRole);
+        }
       } catch (err) {
+        if (!mounted) return;
         console.warn("Failed to sync preferences from backend:", err);
+        // Still apply auth user role even if preferences fail
+        const storedUser = readStoredJSON<any>("crm-auth-user", null);
+        if (storedUser?.role) setRoleState(storedUser.role as UserRole);
       }
     };
     syncPreferences();
+    return () => { mounted = false; };
   }, []);
 
   const applyTheme = (m: ThemeMode, c: ThemeColor, backdrop: BackgroundStyle) => {
@@ -515,12 +531,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { applyTheme(mode, color, background); }, [mode, color, background]);
 
-  const toggleMode = () => {
+  const toggleMode = useCallback(() => {
     const next = mode === "light" ? "dark" : "light";
     setMode(next);
     writeStoredString("crm-mode", next);
     crmService.updatePreferences({ "crm-mode": next });
-  };
+  }, [mode]);
 
   const setColor = (c: ThemeColor) => {
     setColorState(c);
@@ -541,7 +557,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={useMemo(() => ({ mode, color, background, role, toggleMode, setColor, setBackground, setRole }), [mode, color, background, role])}>
+    <ThemeContext.Provider value={useMemo(() => ({ mode, color, background, role, toggleMode, setColor, setBackground, setRole }), [mode, color, background, role, toggleMode])}>
       {children}
     </ThemeContext.Provider>
   );

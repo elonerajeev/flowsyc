@@ -4,8 +4,12 @@ import { ArrowLeft, ArrowUpRight, FileText, Sparkles, TrendingUp } from "lucide-
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import AdminOnly from "@/components/shared/AdminOnly";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useReports } from "@/hooks/use-crm-data";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 8;
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -25,8 +29,14 @@ const badgeColors: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  return <AdminOnly><ReportsPageInner /></AdminOnly>;
+}
+
+function ReportsPageInner() {
   const { data: reports = [], isLoading, error: reportsError, refetch } = useReports();
   const [selectedReport, setSelectedReport] = useState<(typeof reports)[0] | null>(null);
+  const [visibleReportCount, setVisibleReportCount] = useState(PAGE_SIZE);
+  const [visibleRowCount, setVisibleRowCount] = useState(PAGE_SIZE);
 
   if (isLoading) return <PageLoader />;
   if (reportsError) {
@@ -106,7 +116,7 @@ export default function ReportsPage() {
                   </span>
                 </div>
                 <div className="divide-y divide-border/40">
-                  {selectedReport.details.rows.map((row, i) => (
+                  {selectedReport.details.rows.slice(0, visibleRowCount).map((row, i) => (
                     <div key={i} className="flex items-center justify-between gap-4 px-6 py-3.5 hover:bg-secondary/10 transition">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-secondary/40 text-xs font-bold text-muted-foreground">
@@ -128,6 +138,15 @@ export default function ReportsPage() {
                     </div>
                   ))}
                 </div>
+                <div className="px-6 py-3">
+                  <ShowMoreButton
+                    total={selectedReport.details.rows.length}
+                    visible={visibleRowCount}
+                    pageSize={PAGE_SIZE}
+                    onShowMore={() => setVisibleRowCount(v => Math.min(v + PAGE_SIZE, selectedReport.details!.rows!.length))}
+                    onShowLess={() => setVisibleRowCount(PAGE_SIZE)}
+                  />
+                </div>
               </div>
             )}
           </motion.div>
@@ -141,33 +160,43 @@ export default function ReportsPage() {
             transition={{ duration: 0.2 }}
           >
             {reports.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
-                {reports.map((report) => (
-                  <article key={report.title} className="rounded-[1.5rem] border border-border/70 bg-card shadow-card overflow-hidden">
-                    <div className={`bg-gradient-to-br ${report.gradient} p-6`}>
-                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-card/75 text-primary shadow-sm">
-                        <FileText className="h-5 w-5" />
+              <>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
+                  {reports.slice(0, visibleReportCount).map((report) => (
+                    <article key={report.title} className="rounded-[1.5rem] border border-border/70 bg-card shadow-card overflow-hidden">
+                      <div className={`bg-gradient-to-br ${report.gradient} p-6`}>
+                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-card/75 text-primary shadow-sm">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <span className="rounded-full border border-border/70 bg-card/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          {report.type}
+                        </span>
+                        <h2 className="mt-4 font-display text-xl font-semibold text-foreground">{report.title}</h2>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{report.description}</p>
                       </div>
-                      <span className="rounded-full border border-border/70 bg-card/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        {report.type}
-                      </span>
-                      <h2 className="mt-4 font-display text-xl font-semibold text-foreground">{report.title}</h2>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{report.description}</p>
-                    </div>
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-border/50">
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{report.date}</p>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReport(report)}
-                        className="group inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-95"
-                      >
-                        View Details
-                        <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                      <div className="flex items-center justify-between px-6 py-4 border-t border-border/50">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{report.date}</p>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedReport(report); setVisibleRowCount(PAGE_SIZE); }}
+                          className="group inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-95"
+                        >
+                          View Details
+                          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <ShowMoreButton
+                  total={reports.length}
+                  visible={visibleReportCount}
+                  pageSize={PAGE_SIZE}
+                  onShowMore={() => setVisibleReportCount(v => Math.min(v + PAGE_SIZE, reports.length))}
+                  onShowLess={() => setVisibleReportCount(PAGE_SIZE)}
+                  className="mt-4"
+                />
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-12 text-center">
                 <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />

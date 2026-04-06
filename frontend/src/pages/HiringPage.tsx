@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, Copy, ToggleLeft, ToggleRight, AlertTriangle, Clock, ArrowRight, Edit2, Trash2, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { Button } from "@/components/ui/button";
 import { useCandidates, useJobPostings, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type CandidateStage = "applied" | "screening" | "interview" | "offer" | "hired" | "rejected";
 type JobPriority = "urgent" | "high" | "normal" | "low";
@@ -52,9 +54,24 @@ export default function HiringPage() {
     refetch: refetchCandidates,
   } = useCandidates();
 
+  const { role } = useTheme();
+  const canManageHiring = role === "admin" || role === "manager";
+  const canDeleteHiring = role === "admin" || role === "manager"; // Matches backend routes for candidates
+
   const [expandedJobs, setExpandedJobs] = useState<Set<number>>(new Set());
   const [activeStage, setActiveStage] = useState<CandidateStage | null>(null);
+  const [visibleJobCount, setVisibleJobCount] = useState(4);
+  const JOB_PAGE_SIZE = 4;
   const queryClient = useQueryClient();
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await Promise.all([refetchJobs(), refetchCandidates()]);
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const isRefreshing = jobsLoading || candidatesLoading;
 
   const toggleStatusMutation = useMutation({
     mutationFn: (jobId: number) => crmService.toggleJobStatus(jobId),
@@ -66,6 +83,15 @@ export default function HiringPage() {
     mutationFn: (jobId: number) => crmService.cloneJob(jobId),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: crmKeys.jobPostings }); toast.success("Job cloned as draft"); },
     onError: () => toast.error("Failed to clone job"),
+  });
+
+  const deleteCandidateMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeCandidate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.candidates });
+      toast.success("Candidate removed");
+    },
+    onError: () => toast.error("Failed to remove candidate"),
   });
 
   const toggleJobExpanded = (jobId: number) => {
@@ -117,10 +143,25 @@ export default function HiringPage() {
             <BriefcaseBusiness className="h-3.5 w-3.5 text-primary" />
             Hiring
           </div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">Hiring pipeline</h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Open roles, stage counts, and where candidates sit in the recruitment process.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="font-display text-3xl font-semibold text-foreground">Hiring pipeline</h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                Open roles, stage counts, and where candidates sit in the recruitment process.
+              </p>
+            </div>
+            <motion.div whileTap={{ scale: 0.94 }}>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+              >
+                <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                {isRefreshing ? "Refreshing..." : "Refresh Pipeline"}
+              </Button>
+            </motion.div>
+          </div>
         </div>
       </section>
 
@@ -215,7 +256,7 @@ export default function HiringPage() {
                             initial={{ opacity: 0, x: -12 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between rounded-xl bg-background/40 px-3 py-2"
+                            className="flex items-center justify-between rounded-xl bg-background/40 px-3 py-2 group"
                           >
                             <div className="flex items-center gap-2">
                               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background/60 text-[10px] font-bold">
@@ -226,9 +267,33 @@ export default function HiringPage() {
                                 <p className="text-[10px] opacity-70">{c.jobTitle}</p>
                               </div>
                             </div>
-                            {c.rating !== undefined && c.rating > 0 && (
-                              <span className="text-[10px] opacity-80">{"★".repeat(c.rating)}</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {canManageHiring && (
+                                <button
+                                  onClick={() => toast.info("Edit mode coming via Hiring extension")}
+                                  className="p-1 rounded-full hover:bg-background/60 text-muted-foreground hover:text-primary transition opacity-0 group-hover:opacity-100"
+                                  title="Edit candidate"
+                                >
+                                  <Edit2 className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                              {canDeleteHiring && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Are you sure you want to remove ${c.name}?`)) {
+                                      deleteCandidateMutation.mutate(c.id);
+                                    }
+                                  }}
+                                  className="p-1 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
+                                  title="Delete candidate"
+                                >
+                                  <Trash2 className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                              {c.rating !== undefined && c.rating > 0 && (
+                                <span className="text-[10px] opacity-80">{"★".repeat(c.rating)}</span>
+                              )}
+                            </div>
                           </motion.div>
                         ))
                       )}
@@ -308,7 +373,7 @@ export default function HiringPage() {
 
           {jobPostings.length > 0 ? (
             <div className="space-y-3">
-              {jobPostings.map((job) => {
+              {jobPostings.slice(0, visibleJobCount).map((job) => {
                 const isExpanded = expandedJobs.has(job.id);
                 const jobCandidates = candidates.filter(c => c.jobId === job.id);
                 const priority = (job.priority ?? "normal") as JobPriority;
@@ -417,6 +482,13 @@ export default function HiringPage() {
                   </div>
                 );
               })}
+              <ShowMoreButton
+                total={jobPostings.length}
+                visible={visibleJobCount}
+                pageSize={JOB_PAGE_SIZE}
+                onShowMore={() => setVisibleJobCount(v => Math.min(v + JOB_PAGE_SIZE, jobPostings.length))}
+                onShowLess={() => setVisibleJobCount(JOB_PAGE_SIZE)}
+              />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">

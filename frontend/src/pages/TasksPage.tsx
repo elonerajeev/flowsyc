@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Flag, GripVertical, Pin, Plus, Search } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 
-import StatusBadge from "@/components/shared/StatusBadge";
+import PageLoader from "@/components/shared/PageLoader";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useTasks } from "@/hooks/use-crm-data";
+import { crmKeys, useProjects, useTasks } from "@/hooks/use-crm-data";
+import { crmService } from "@/services/crm";
 import type { TaskColumn, TaskRecord } from "@/types/crm";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
 
 const priorityConfig = {
@@ -29,46 +34,33 @@ function readPinned(key: string) {
   return readStoredJSON<string[]>(key, []);
 }
 
-function moveTask(
-  board: Record<TaskColumn, TaskRecord[]>,
-  taskId: number,
-  direction: "left" | "right",
-) {
-  const sourceColumn = orderedColumns.find((column) => board[column].some((task) => task.id === taskId));
-  if (!sourceColumn) return board;
-
-  const currentIndex = orderedColumns.indexOf(sourceColumn);
-  const nextIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
-  const destination = orderedColumns[nextIndex];
-  if (!destination) return board;
-
-  const task = board[sourceColumn].find((entry) => entry.id === taskId);
-  if (!task) return board;
-
-  return {
-    ...board,
-    [sourceColumn]: board[sourceColumn].filter((entry) => entry.id !== taskId),
-    [destination]: [...board[destination], task],
-  };
-}
-
 function TaskCard({
   task,
   column,
+  projectName,
   pinned,
+  canEdit,
+  canDelete,
   onMove,
   onPin,
+  onDelete,
   onDragStart,
   onDropCard,
 }: {
   task: TaskRecord;
   column: TaskColumn;
+  projectName?: string;
   pinned: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   onMove: (taskId: number, direction: "left" | "right") => void;
   onPin: (taskId: number) => void;
+  onDelete: (taskId: number) => void;
   onDragStart: (taskId: number) => void;
   onDropCard: (taskId: number, targetColumn: TaskColumn) => void;
 }) {
+  const { openQuickCreate } = useWorkspace();
+
   return (
     <article
       draggable
@@ -89,16 +81,42 @@ function TaskCard({
             </span>
           ))}
         </div>
-        <span className={cn(
-          "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase flex items-center gap-1 flex-shrink-0",
-          priorityConfig[task.priority as keyof typeof priorityConfig]?.color ?? "border-border/70 bg-secondary/20 text-muted-foreground"
-        )}>
-          <span className={cn("h-1.5 w-1.5 rounded-full", priorityConfig[task.priority as keyof typeof priorityConfig]?.dot ?? "bg-muted-foreground")} />
-          {task.priority}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {canEdit && (
+            <button
+              onClick={() => {
+                toast.info("Edit mode coming via Quick Create extension");
+                openQuickCreate("task", task);
+              }}
+              className="p-1 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+              title="Edit task"
+            >
+              <Edit2 className="h-3 w-3" />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => onDelete(task.id)}
+              className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
+              title="Delete task"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+          <span className={cn(
+            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase flex items-center gap-1 flex-shrink-0",
+            priorityConfig[task.priority as keyof typeof priorityConfig]?.color ?? "border-border/70 bg-secondary/20 text-muted-foreground"
+          )}>
+            <span className={cn("h-1.5 w-1.5 rounded-full", priorityConfig[task.priority as keyof typeof priorityConfig]?.dot ?? "bg-muted-foreground")} />
+            {task.priority}
+          </span>
+        </div>
       </div>
 
       <h3 className="text-sm font-semibold leading-5 text-foreground">{task.title}</h3>
+      {projectName && (
+        <p className="mt-1 text-xs font-medium text-primary">{projectName}</p>
+      )}
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between">
@@ -143,22 +161,75 @@ function TaskCard({
 }
 
 export default function TasksPage() {
-  const { data, isLoading, error: tasksError, refetch } = useTasks();
+  const queryClient = useQueryClient();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const { role } = useTheme();
+  const { data: projects = [] } = useProjects();
+  const [selectedProject, setSelectedProject] = useState<string>("all");
+  const activeProjectId = selectedProject === "all" ? undefined : Number(selectedProject);
+  const { data, isLoading, error: tasksError, refetch } = useTasks(activeProjectId);
   const [search, setSearch] = useState("");
   const [board, setBoard] = useState<Record<TaskColumn, TaskRecord[]> | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   const pinnedKey = `crm-task-pins-${role}`;
   const [pinnedTaskIds, setPinnedTaskIds] = useState<string[]>([]);
-  const [doneVisible, setDoneVisible] = useState(5);
-  const DONE_PAGE = 5;
+  const TASK_PAGE_SIZE = 4;
+  const [todoVisible, setTodoVisible] = useState(4);
+  const [inProgressVisible, setInProgressVisible] = useState(4);
+  const [doneVisible, setDoneVisible] = useState(4);
+
+  const handleRefresh = async () => {
+    const start = Date.now();
+    await refetch();
+    const duration = Date.now() - start;
+    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+  };
+
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin" || role === "manager";
 
   useEffect(() => {
     setPinnedTaskIds(readPinned(pinnedKey));
   }, [pinnedKey]);
 
+  useEffect(() => {
+    setBoard(null);
+    setTodoVisible(TASK_PAGE_SIZE);
+    setInProgressVisible(TASK_PAGE_SIZE);
+    setDoneVisible(TASK_PAGE_SIZE);
+  }, [data, activeProjectId]);
+
   const effectiveBoard = board ?? data ?? null;
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
+  );
+
+  const moveTaskMutation = useMutation({
+    mutationFn: ({ taskId, column }: { taskId: number; column: TaskColumn }) =>
+      crmService.updateTask(taskId, { column }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: crmKeys.tasks }),
+        queryClient.invalidateQueries({ queryKey: crmKeys.projects }),
+      ]);
+    },
+    onError: async () => {
+      setBoard(null);
+      await refetch();
+      toast.error("Task update failed. The board was reloaded from the server.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeTask(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.tasks });
+      queryClient.invalidateQueries({ queryKey: crmKeys.projects });
+      toast.success("Task removed successfully");
+    },
+    onError: () => toast.error("Failed to remove task"),
+  });
 
   const filteredBoard = useMemo(() => {
     if (!effectiveBoard) return null;
@@ -169,7 +240,8 @@ export default function TasksPage() {
         return (
           task.title.toLowerCase().includes(query) ||
           task.assignee.toLowerCase().includes(query) ||
-          task.tags.some((tag) => tag.toLowerCase().includes(query))
+          task.tags.some((tag) => tag.toLowerCase().includes(query)) ||
+          (task.projectId ? projectNameById.get(task.projectId)?.toLowerCase().includes(query) : false)
         );
       });
       acc[column] = [
@@ -178,7 +250,11 @@ export default function TasksPage() {
       ];
       return acc;
     }, {} as Record<TaskColumn, TaskRecord[]>);
-  }, [effectiveBoard, pinnedTaskIds, search]);
+  }, [effectiveBoard, pinnedTaskIds, projectNameById, search]);
+
+  const hasVisibleTasks = filteredBoard
+    ? orderedColumns.some((column) => filteredBoard[column].length > 0)
+    : false;
 
   const persistPinned = (nextPinned: string[]) => {
     setPinnedTaskIds(nextPinned);
@@ -191,32 +267,30 @@ export default function TasksPage() {
     persistPinned(next);
   };
 
-  const handleDropToColumn = (taskId: number, targetColumn: TaskColumn) => {
+  const updateTaskColumn = (taskId: number, targetColumn: TaskColumn) => {
+    const currentBoard = effectiveBoard;
+    if (!currentBoard) return;
+
+    const sourceColumn = orderedColumns.find((column) => currentBoard[column].some((task) => task.id === taskId));
+    if (!sourceColumn || sourceColumn === targetColumn) return;
+
     setBoard((current) => {
-      const currentBoard = current ?? effectiveBoard;
-      if (!currentBoard) return current;
-
-      const sourceColumn = orderedColumns.find((column) => currentBoard[column].some((task) => task.id === taskId));
-      if (!sourceColumn) return current;
-
-      const task = currentBoard[sourceColumn].find((entry) => entry.id === taskId);
+      const resolvedBoard = current ?? currentBoard;
+      const task = resolvedBoard[sourceColumn].find((entry) => entry.id === taskId);
       if (!task) return current;
 
-      if (sourceColumn === targetColumn) {
-        const sourceTasks = currentBoard[sourceColumn].filter((entry) => entry.id !== taskId);
-        return {
-          ...currentBoard,
-          [sourceColumn]: sourceTasks,
-          [targetColumn]: [...sourceTasks, task],
-        };
-      }
-
       return {
-        ...currentBoard,
-        [sourceColumn]: currentBoard[sourceColumn].filter((entry) => entry.id !== taskId),
-        [targetColumn]: [...currentBoard[targetColumn], task],
+        ...resolvedBoard,
+        [sourceColumn]: resolvedBoard[sourceColumn].filter((entry) => entry.id !== taskId),
+        [targetColumn]: [...resolvedBoard[targetColumn], { ...task, column: targetColumn }],
       };
     });
+
+    moveTaskMutation.mutate({ taskId, column: targetColumn });
+  };
+
+  const handleDropToColumn = (taskId: number, targetColumn: TaskColumn) => {
+    updateTaskColumn(taskId, targetColumn);
   };
 
   if (tasksError) {
@@ -233,6 +307,11 @@ export default function TasksPage() {
   if (isLoading || !effectiveBoard || !filteredBoard) {
     return <PageLoader />;
   }
+
+  const emptyMessage =
+    role === "employee"
+      ? "Tasks assigned to your team or yourself will appear here once someone adds them. Talk to your manager to get visibility."
+      : "No tasks available yet. Create one via Quick Create.";
 
   return (
     <div className="space-y-6">
@@ -251,17 +330,43 @@ export default function TasksPage() {
             </div>
           </div>
           {canUseQuickCreate ? (
-            <button
-              type="button"
-              onClick={openQuickCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
-            >
-              <Plus className="h-4 w-4" />
-              New Task
-            </button>
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Board"}
+                </Button>
+              </motion.div>
+              <button
+                type="button"
+                onClick={openQuickCreate}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+              >
+                <Plus className="h-4 w-4" />
+                New Task
+              </button>
+            </div>
           ) : (
-            <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
-              Read only
+            <div className="flex gap-2">
+              <motion.div whileTap={{ scale: 0.94 }}>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                >
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
+                  {isLoading ? "Refreshing..." : "Refresh Board"}
+                </Button>
+              </motion.div>
+              <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
+                Read only
+              </div>
             </div>
           )}
         </div>
@@ -274,7 +379,27 @@ export default function TasksPage() {
             className="h-12 w-full rounded-2xl border border-border/70 bg-background/55 pl-11 pr-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
+        <div className="mt-4 max-w-xs">
+          <select
+            value={selectedProject}
+            onChange={(event) => setSelectedProject(event.target.value)}
+            className="h-11 w-full rounded-2xl border border-border/70 bg-background/55 px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="all">All projects</option>
+            {projects.map((project) => (
+              <option key={project.id} value={String(project.id)}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </section>
+
+      {!hasVisibleTasks && (
+        <div className="rounded-2xl border border-border/60 bg-secondary/10 p-6 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </div>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-3">
         {orderedColumns.map((column) => (
@@ -296,20 +421,36 @@ export default function TasksPage() {
             </div>
             <div className="space-y-2.5 p-3">
               {filteredBoard[column].length > 0 ? (
-                (column === "done" ? filteredBoard[column].slice(0, doneVisible) : filteredBoard[column]).map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    column={column}
-                    pinned={pinnedTaskIds.includes(String(task.id))}
-                    onMove={(taskId, direction) => {
-                      setBoard((current) => moveTask(current ?? effectiveBoard, taskId, direction));
-                    }}
-                    onPin={togglePin}
-                    onDragStart={(taskId) => setDraggedTaskId(taskId)}
-                    onDropCard={handleDropToColumn}
-                  />
-                ))
+                (() => {
+                  const visibleLimit = column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible;
+                  return filteredBoard[column].slice(0, visibleLimit).map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      column={column}
+                      projectName={task.projectId ? projectNameById.get(task.projectId) : undefined}
+                      pinned={pinnedTaskIds.includes(String(task.id))}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      onMove={(taskId, direction) => {
+                        const sourceColumn = orderedColumns.find((entry) => (effectiveBoard?.[entry] ?? []).some((task) => task.id === taskId));
+                        if (!sourceColumn) return;
+                        const currentIndex = orderedColumns.indexOf(sourceColumn);
+                        const nextColumn = direction === "left" ? orderedColumns[currentIndex - 1] : orderedColumns[currentIndex + 1];
+                        if (!nextColumn) return;
+                        updateTaskColumn(taskId, nextColumn);
+                      }}
+                      onPin={togglePin}
+                      onDelete={(id) => {
+                        if (window.confirm("Are you sure you want to delete this task?")) {
+                          deleteMutation.mutate(id);
+                        }
+                      }}
+                      onDragStart={(taskId) => setDraggedTaskId(taskId)}
+                      onDropCard={handleDropToColumn}
+                    />
+                  ));
+                })()
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
                   <p className="text-sm font-semibold text-foreground">
@@ -324,15 +465,22 @@ export default function TasksPage() {
                   </p>
                 </div>
               )}
-              {column === "done" && (
-                <ShowMoreButton
-                  total={filteredBoard[column].length}
-                  visible={doneVisible}
-                  pageSize={DONE_PAGE}
-                  onShowMore={() => setDoneVisible(v => Math.min(v + DONE_PAGE, filteredBoard[column].length))}
-                  onShowLess={() => setDoneVisible(DONE_PAGE)}
-                />
-              )}
+              {/* Show More */}
+              <ShowMoreButton
+                total={filteredBoard[column].length}
+                visible={column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible}
+                pageSize={TASK_PAGE_SIZE}
+                onShowMore={() => {
+                  if (column === "todo") setTodoVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                  else if (column === "in-progress") setInProgressVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                  else setDoneVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
+                }}
+                onShowLess={() => {
+                  if (column === "todo") setTodoVisible(TASK_PAGE_SIZE);
+                  else if (column === "in-progress") setInProgressVisible(TASK_PAGE_SIZE);
+                  else setDoneVisible(TASK_PAGE_SIZE);
+                }}
+              />
             </div>
           </div>
         ))}

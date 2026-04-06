@@ -1,0 +1,212 @@
+{
+  "uid": "crm-monitoring",
+  "title": "CRM Monitoring",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["crm", "backend", "prometheus"],
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API Status",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "up{job=\"crm-backend\"}", "refId": "A" }],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red" }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Requests / sec",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(rate(http_requests_total[5m]))", "refId": "A" }],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error Rate (5xx)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "refId": "A" }],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 2 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Active DB Connections",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "db_active_connections", "refId": "A" }],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Heap Used",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "nodejs_heap_size_used_bytes", "refId": "A" }],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "CPU (User + System)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(process_cpu_user_seconds_total[5m]) + rate(process_cpu_system_seconds_total[5m]))", "refId": "A" }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": { "defaults": { "unit": "cores" }, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "HTTP Requests by Status",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total[5m])) by (status)", "refId": "A", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Request Rate by Route",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "topk(8, sum(rate(http_requests_total[5m])) by (route))", "refId": "A", "legendFormat": "{{route}}" }
+      ],
+      "fieldConfig": { "defaults": { "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Response Time (avg, p95)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 11, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_response_time_seconds_sum[5m])) / sum(rate(http_response_time_seconds_count[5m]))",
+          "refId": "A",
+          "legendFormat": "avg"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_response_time_seconds_bucket[5m])) by (le))",
+          "refId": "B",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Process Memory",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "process_resident_memory_bytes", "refId": "A", "legendFormat": "rss" },
+        { "expr": "nodejs_heap_size_used_bytes", "refId": "B", "legendFormat": "heap used" },
+        { "expr": "nodejs_heap_size_total_bytes", "refId": "C", "legendFormat": "heap total" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "CPU Usage (User/System)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "rate(process_cpu_user_seconds_total[5m])", "refId": "A", "legendFormat": "user" },
+        { "expr": "rate(process_cpu_system_seconds_total[5m])", "refId": "B", "legendFormat": "system" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "cores", "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Event Loop Lag",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "rate(nodejs_eventloop_lag_seconds_sum[5m]) / rate(nodejs_eventloop_lag_seconds_count[5m])",
+          "refId": "A",
+          "legendFormat": "avg"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "lineWidth": 2 }, "overrides": [] },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+    }
+  ],
+  "templating": { "list": [] },
+  "annotations": { "list": [] }
+}
+

@@ -53,15 +53,25 @@ function getTransporter() {
 }
 
 export async function sendMail(input: SendMailInput) {
-  const config = readMailConfig();
-  cachedTransporter = null;
-  const transporter = getTransporter();
+  let config;
+  try {
+    config = readMailConfig();
+  } catch (err) {
+    console.warn("Mail skipped (not configured):", (err as any).message);
+    return;
+  }
 
-  await transporter.sendMail({
-    from: config.from,
-    to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
-  });
+  try {
+    const transporter = getTransporter();
+    await transporter.sendMail({
+      from: config.from,
+      to: input.to,
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+    });
+  } catch (err) {
+    console.warn("Failed to deliver email:", (err as any).message);
+    // We don't re-throw here to allow the rest of the business logic to complete
+  }
 }

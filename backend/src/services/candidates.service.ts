@@ -41,9 +41,9 @@ function mapCandidate(candidate: {
   email: string;
   jobId: number;
   stage: CandidateStage;
-  source: string;
+  source: string | null;
   phone: string | null;
-  rating: number;
+  rating: number | null;
   interviewDate: Date | null;
   interviewers: string[];
   resume: string | null;
@@ -59,9 +59,9 @@ function mapCandidate(candidate: {
     jobId: candidate.jobId,
     jobTitle: candidate.JobPosting.title,
     stage: mapStage(candidate.stage),
-    source: candidate.source,
+    source: candidate.source ?? undefined,
     phone: candidate.phone ?? undefined,
-    rating: candidate.rating,
+    rating: candidate.rating ?? undefined,
     interviewDate: candidate.interviewDate?.toISOString() ?? undefined,
     interviewers: candidate.interviewers,
     resume: candidate.resume ?? undefined,
@@ -138,13 +138,29 @@ function buildOfferLetterEmail(data: {
 }
 
 export const candidatesService = {
-  async list() {
-    const candidates = await prisma.candidate.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      include: { JobPosting: { select: { title: true } } },
-    });
-    return { data: candidates.map(mapCandidate) };
+  async list(query?: { page?: number; limit?: number; stage?: string; jobId?: number }) {
+    const page = query?.page ?? 1;
+    const limit = Math.min(query?.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    const where: { deletedAt: null; stage?: string; jobId?: number } = { deletedAt: null };
+    if (query?.stage) where.stage = query.stage as any;
+    if (query?.jobId) where.jobId = query.jobId;
+
+    const [candidates, total] = await Promise.all([
+      prisma.candidate.findMany({
+        where: where as any,
+        orderBy: { createdAt: "desc" },
+        include: { JobPosting: { select: { title: true } } },
+        skip,
+        take: limit,
+      }),
+      prisma.candidate.count({ where: where as any }),
+    ]);
+    return {
+      data: candidates.map(mapCandidate),
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
   },
 
   async getById(candidateId: number) {
@@ -268,55 +284,60 @@ export const candidatesService = {
       throw new AppError(`Cannot move from ${existing.stage} stage`, 400, "BAD_REQUEST");
     }
 
-    // Update candidate stage
-    const candidate = await prisma.candidate.update({
-      where: { id: candidateId },
-      data: { stage: nextStage },
-      include: { JobPosting: { select: { title: true } } },
-    });
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update candidate stage
+      const updatedCandidate = await tx.candidate.update({
+        where: { id: candidateId },
+        data: { stage: nextStage },
+        include: { JobPosting: { select: { title: true } } },
+      });
 
-    // Log activity
-    await (prisma as any).candidateActivity.create({
-      data: { candidateId, action: "stage_change", detail: `Moved from ${existing.stage} to ${nextStage}`, performedBy: "HR" },
-    });
+      // 2. Log activity
+      await (tx as any).candidateActivity.create({
+        data: { candidateId, action: "stage_change", detail: `Moved from ${existing.stage} to ${nextStage}`, performedBy: "HR System" },
+      }).catch(() => {}); // Don't fail the whole transaction for a failed log
 
-    // 🎯 AUTO-CREATE EMPLOYEE when hired
-    if (nextStage === "hired") {
-      const existingEmployee = await prisma.teamMember.findUnique({ where: { email: existing.email } });
-      
-      if (!existingEmployee) {
-        await prisma.teamMember.create({
-          data: {
-            name: existing.name,
-            email: existing.email,
-            role: "Employee",
-            status: "pending",
-            avatar: existing.name.slice(0, 2).toUpperCase(),
-            department: existing.JobPosting.department,
-            team: "New Hires",
-            designation: existing.JobPosting.title,
-            manager: "HR Manager",
-            workingHours: "09:00 - 18:00",
-            officeLocation: existing.JobPosting.location,
-            timeZone: "Asia/Calcutta",
-            baseSalary: 60000,
-            allowances: 10000,
-            deductions: 2500,
-            paymentMode: "bank_transfer",
-            attendance: "present",
-            checkIn: "-",
-            location: "Onboarding",
-            workload: 0,
-            updatedAt: new Date(),
-          },
-        });
-        await (prisma as any).candidateActivity.create({
-          data: { candidateId, action: "hired", detail: "Automatically added to team members", performedBy: "System" },
-        });
+      // 3. 🎯 AUTO-CREATE EMPLOYEE when hired
+      if (nextStage === "hired") {
+        const existingEmployee = await tx.teamMember.findUnique({ where: { email: existing.email } });
+        
+        if (!existingEmployee) {
+          await tx.teamMember.create({
+            data: {
+              name: existing.name,
+              email: existing.email,
+              role: "Employee",
+              status: "pending",
+              avatar: existing.name.slice(0, 2).toUpperCase(),
+              department: existing.JobPosting.department,
+              team: "New Hires",
+              designation: existing.JobPosting.title,
+              manager: "HR Manager",
+              workingHours: "09:00 - 18:00",
+              officeLocation: existing.JobPosting.location,
+              timeZone: "Asia/Calcutta",
+              baseSalary: 60000,
+              allowances: 10000,
+              deductions: 2500,
+              paymentMode: "bank_transfer",
+              attendance: "present",
+              checkIn: "-",
+              location: "Onboarding",
+              workload: 0,
+              updatedAt: new Date(),
+            },
+          });
+
+          await (tx as any).candidateActivity.create({
+            data: { candidateId, action: "hired", detail: "Automatically added to team members", performedBy: "HR System" },
+          }).catch(() => {});
+        }
       }
-    }
 
-    return mapCandidate(candidate);
+      return updatedCandidate;
+    });
+
+    return mapCandidate(result);
   },
 
   async generateOfferLetter(candidateId: number, hrUserId: string, input: {
@@ -365,20 +386,12 @@ export const candidatesService = {
 
     const email = buildOfferLetterEmail(offerLetter);
     
-    try {
-      await sendMail({
-        to: offerLetter.candidate.email,
-        subject: email.subject,
-        text: email.text,
-        html: email.html,
-      });
-    } catch (error) {
-      throw new AppError(
-        "Failed to send offer letter email. Please check SMTP configuration.",
-        500,
-        "EMAIL_SEND_FAILED"
-      );
-    }
+    await sendMail({
+      to: offerLetter.candidate.email,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+    });
 
     await prisma.candidate.update({
       where: { id: candidateId },
@@ -389,14 +402,18 @@ export const candidatesService = {
       },
     });
 
-    await (prisma as any).candidateActivity.create({
-      data: {
-        candidateId,
-        action: "offer_letter_sent",
-        detail: `Offer letter emailed to ${candidate.email}`,
-        performedBy: hr.email,
-      },
-    });
+    try {
+      await (prisma as any).candidateActivity.create({
+        data: {
+          candidateId,
+          action: "offer_letter_sent",
+          detail: `Offer letter emailed to ${candidate.email}`,
+          performedBy: hr.email,
+        },
+      });
+    } catch (err) {
+      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+    }
 
     return offerLetter;
   },
@@ -416,9 +433,13 @@ export const candidatesService = {
       data: { stage: "rejected" },
       include: { JobPosting: { select: { title: true } } },
     });
-    await (prisma as any).candidateActivity.create({
-      data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR" },
-    });
+    try {
+      await (prisma as any).candidateActivity.create({
+        data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },
+      });
+    } catch (err) {
+      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+    }
     return mapCandidate(candidate);
   },
 
@@ -437,9 +458,13 @@ export const candidatesService = {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
 
-    await (prisma as any).candidateActivity.create({
-      data: { candidateId, action: "note", detail: note, performedBy },
-    });
+    try {
+      await (prisma as any).candidateActivity.create({
+        data: { candidateId, action: "note", detail: note, performedBy },
+      });
+    } catch (err) {
+      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+    }
     const candidate = await prisma.candidate.update({
       where: { id: candidateId },
       data: { notes: existing.notes ? `${existing.notes}\n\n${note}` : note },

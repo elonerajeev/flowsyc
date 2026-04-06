@@ -8,8 +8,8 @@ import { createJobSchema, updateJobSchema } from "../validators/hiring.schema";
 
 export const hiringRouter = Router();
 
-hiringRouter.get("/", requireAuth, asyncHandler(hiringController.list));
-hiringRouter.get("/:id", requireAuth, asyncHandler(hiringController.getOne));
+hiringRouter.get("/", requireAuth, requireRole(["admin", "manager"]), asyncHandler(hiringController.list));
+hiringRouter.get("/:id", requireAuth, requireRole(["admin", "manager"]), asyncHandler(hiringController.getOne));
 hiringRouter.post("/", requireAuth, requireRole(["admin", "manager"]), validateBody(createJobSchema), asyncHandler(hiringController.create));
 hiringRouter.patch("/:id", requireAuth, requireRole(["admin", "manager"]), validateBody(updateJobSchema), asyncHandler(hiringController.update));
 hiringRouter.post("/:id/toggle-status", requireAuth, requireRole(["admin", "manager"]), asyncHandler(hiringController.toggleStatus));

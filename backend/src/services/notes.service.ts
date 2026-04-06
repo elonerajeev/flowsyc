@@ -50,8 +50,8 @@ export const notesService = {
     return { data: notes.map(mapNote) };
   },
 
-  async getById(noteId: number) {
-    const note = await prisma.note.findUnique({ where: { id: noteId } });
+  async getById(noteId: number, authorId: string) {
+    const note = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!note || note.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
     }
@@ -72,8 +72,8 @@ export const notesService = {
     return mapNote(note);
   },
 
-  async update(noteId: number, patch: Partial<NoteInput>) {
-    const existing = await prisma.note.findUnique({ where: { id: noteId } });
+  async update(noteId: number, authorId: string, patch: Partial<NoteInput>) {
+    const existing = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
     }
@@ -90,8 +90,8 @@ export const notesService = {
     return mapNote(note);
   },
 
-  async delete(noteId: number) {
-    const existing = await prisma.note.findUnique({ where: { id: noteId } });
+  async delete(noteId: number, authorId: string) {
+    const existing = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
     }
