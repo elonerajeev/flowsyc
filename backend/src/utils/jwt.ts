@@ -7,7 +7,8 @@ import type { UserRole } from "../config/types";
 export type TokenPayload = {
   sub: string;
   email: string;
-  role: UserRole;
+  role?: UserRole;
+  type?: string;
 };
 
 export function signAccessToken(payload: TokenPayload) {

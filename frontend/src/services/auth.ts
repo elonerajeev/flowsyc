@@ -14,6 +14,7 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   role: UserRole;
   employeeId: string;
   department: string;
@@ -130,6 +131,7 @@ function createMockSession(credentials: AuthCredentials): AuthSession {
     id: `user-${Math.random().toString(36).slice(2, 10)}`,
     name,
     email: credentials.email,
+    emailVerified: true,
     role,
     ...getMockProfile(role),
   };
@@ -225,6 +227,22 @@ export const authService = {
     });
     persistUser(user);
     return user;
+  },
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    return requestJson("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) });
+  },
+
+  async resendVerification(email: string): Promise<{ message: string }> {
+    return requestJson("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) });
+  },
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return requestJson("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    return requestJson("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, newPassword }) });
   },
 
   async switchRole(targetRole: UserRole): Promise<AuthUser> {

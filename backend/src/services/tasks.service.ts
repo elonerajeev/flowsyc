@@ -4,6 +4,7 @@ import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
 import { getEmployeeAssigneeScope } from "../utils/access-control";
+import { sendTaskAssignmentEmail } from "../utils/email-templates";
 
 type TaskRecord = {
   id: number;
@@ -184,6 +185,20 @@ export const tasksService = {
       },
     });
 
+    // Send task assignment email
+    const assignee = await prisma.teamMember.findUnique({ where: { email: input.assignee }, select: { name: true, email: true } });
+    if (assignee) {
+      sendTaskAssignmentEmail({
+        title: input.title,
+        description: "", // Task model doesn't have description
+        priority: input.priority,
+        dueDate: input.dueDate || "",
+        assigneeEmail: assignee.email,
+        assigneeName: assignee.name,
+        assignerName: "Task Manager", // TODO: Get actual assigner
+      }).catch(() => {});
+    }
+
     await syncProjectTaskStats(task.projectId);
     return mapTask(task);
   },
@@ -221,6 +236,22 @@ export const tasksService = {
         ...(patch.projectId !== undefined ? { projectId: patch.projectId ?? null } : {}),
       },
     });
+
+    // Send email if assignee changed
+    if (patch.assignee && patch.assignee !== existing.assignee) {
+      const assignee = await prisma.teamMember.findUnique({ where: { email: patch.assignee }, select: { name: true, email: true } });
+      if (assignee) {
+        sendTaskAssignmentEmail({
+          title: task.title,
+          description: "", // Task model doesn't have description
+          priority: fromDbPriority(task.priority),
+          dueDate: task.dueDate || "",
+          assigneeEmail: assignee.email,
+          assigneeName: assignee.name,
+          assignerName: "Task Manager",
+        }).catch(() => {});
+      }
+    }
 
     await Promise.all([
       syncProjectTaskStats(existing.projectId),

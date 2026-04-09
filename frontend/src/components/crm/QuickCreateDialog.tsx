@@ -143,7 +143,7 @@ export default function QuickCreateDialog() {
         switch (workflowId) {
           case "client": return crmService.updateClient(id, { name, company, industry, email, phone, location, tier, segment, status, revenue, manager });
           case "project": return crmService.updateProject(id, { name, description, status: projectStatus, team: projectTeam, dueDate, stage: projectStage, budget });
-          case "task": return crmService.updateTask(id, { title: name, priority: priority as any, dueDate, tags: tags.split(",").map(t => t.trim()), valueStream: valueStream as any, projectId: taskProjectId === "none" ? null : Number(taskProjectId) });
+          case "task": return crmService.updateTask(id, { title: name, priority: priority as "high" | "medium" | "low", dueDate, tags: tags.split(",").map(t => t.trim()), valueStream: valueStream as string, projectId: taskProjectId === "none" ? null : Number(taskProjectId) });
           // Add others as needed
           default: throw new Error(`Editing ${workflowId} not supported yet in Quick Create.`);
         }

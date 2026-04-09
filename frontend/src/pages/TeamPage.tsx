@@ -18,6 +18,7 @@ import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { normalizeTeamMember } from "@/lib/team-roster";
 import type { TeamMemberRecord } from "@/types/crm";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts";
 
 const roleTone: Record<string, string> = {
   Admin: "bg-accent/10 text-accent border-accent/20",
@@ -89,6 +90,73 @@ export default function TeamPage() {
   const navigate = useNavigate();
   const { data: members = [], isLoading, error: teamError, refetch: refetchTeamMembers } = useTeamMembers();
   const { data: teams = [], isLoading: teamsLoading } = useTeams();
+
+  // Productivity metrics calculation
+  const productivityMetrics = useMemo(() => {
+    const totalMembers = members.length;
+    const presentMembers = members.filter(m => m.attendance === "present").length;
+    const attendanceRate = totalMembers > 0 ? Math.round((presentMembers / totalMembers) * 100) : 0;
+
+    // Department productivity with enhanced metrics
+    const departmentStats = members.reduce((acc, member) => {
+      if (!acc[member.department]) {
+        acc[member.department] = {
+          department: member.department,
+          count: 0,
+          present: 0,
+          productivity: 0,
+          avgWorkload: 0,
+          totalCompensation: 0,
+          totalWorkload: 0,
+          roleDistribution: { Admin: 0, Manager: 0, Employee: 0 },
+          compositeProductivity: 0
+        };
+      }
+      acc[member.department].count += 1;
+      if (member.attendance === "present") acc[member.department].present += 1;
+      acc[member.department].totalWorkload += member.workload;
+      acc[member.department].totalCompensation += member.baseSalary + member.allowances - member.deductions;
+      acc[member.department].roleDistribution[member.role as 'admin' | 'manager' | 'employee' | 'client'] += 1;
+
+      return acc;
+    }, {} as Record<string, {
+      department: string;
+      count: number;
+      present: number;
+      productivity: number;
+      avgWorkload: number;
+      totalCompensation: number;
+      totalWorkload: number;
+      roleDistribution: { admin: number; manager: number; employee: number; client: number };
+      compositeProductivity: number;
+    }>);
+
+    // Calculate derived metrics
+    Object.values(departmentStats).forEach(dept => {
+      // Basic productivity based on attendance
+      dept.productivity = dept.count > 0 ? Math.round((dept.present / dept.count) * 100) : 0;
+
+      // Average workload
+      dept.avgWorkload = dept.count > 0 ? Math.round(dept.totalWorkload / dept.count) : 0;
+
+      // Composite productivity score (weighted formula)
+      // Attendance: 40%, Workload efficiency: 30%, Role diversity bonus: 30%
+      const attendanceScore = dept.productivity;
+      const workloadScore = Math.min(100, dept.avgWorkload); // Cap at 100%
+      const roleDiversity = (dept.roleDistribution.admin > 0 ? 20 : 0) +
+                           (dept.roleDistribution.manager > 0 ? 20 : 0) +
+                           (dept.roleDistribution.employee > 0 ? 10 : 0) +
+                           (dept.roleDistribution.client > 0 ? 5 : 0);
+      dept.compositeProductivity = Math.round((attendanceScore * 0.4) + (workloadScore * 0.3) + (roleDiversity * 0.3));
+    });
+
+    return {
+      attendanceRate,
+      totalMembers,
+      presentMembers,
+      departmentStats: Object.values(departmentStats).sort((a, b) => b.compositeProductivity - a.compositeProductivity), // Sort by composite score
+    };
+  }, [members]);
   const { role } = useTheme();
   const queryClient = useQueryClient();
   const canEditTeam = role === "admin" || role === "manager";
@@ -99,7 +167,8 @@ export default function TeamPage() {
   const [draggedMemberId, setDraggedMemberId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const PAGE_SIZE = 8;
+  const [showDepartmentDetails, setShowDepartmentDetails] = useState(false);
+  const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [noteDraft, setNoteDraft] = useState("");
   
@@ -538,6 +607,130 @@ export default function TeamPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Team Productivity Overview */}
+      <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-foreground">Team Productivity</h2>
+            <p className="text-sm text-muted-foreground mt-1">Attendance rates and departmental performance metrics</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Attendance Rate</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.attendanceRate}%</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center">
+                <UserRoundCheck className="h-5 w-5 text-success" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Present Today</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.presentMembers}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-info/20 flex items-center justify-center">
+                <BadgeCheck className="h-5 w-5 text-info" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Members</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.totalMembers}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <UserRoundCheck className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Avg Workload</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {productivityMetrics.totalMembers > 0
+                    ? Math.round(members.reduce((sum, m) => sum + m.workload, 0) / productivityMetrics.totalMembers)
+                    : 0}%
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-warning/20 flex items-center justify-center">
+                <Clock3 className="h-5 w-5 text-warning" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {productivityMetrics.departmentStats.length > 0 && (
+          <div>
+            <h3 className="font-semibold text-foreground mb-4">Department Performance (Composite Score)</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={productivityMetrics.departmentStats}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="department" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value, name, props) => [
+                      `${value}%`,
+                      name,
+                      `Attendance: ${props.payload.productivity}%, Workload: ${props.payload.avgWorkload}%, Team: ${props.payload.count}`
+                    ]}
+                    labelFormatter={(label) => `Department: ${label}`}
+                  />
+                  <Bar dataKey="compositeProductivity" fill="#2563eb" name="Composite Productivity %" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {showDepartmentDetails && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {productivityMetrics.departmentStats.slice(0, 6).map((dept) => (
+                  <div key={dept.department} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
+                    <h4 className="font-semibold text-foreground mb-2">{dept.department}</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Team Size:</span>
+                        <span className="font-medium">{dept.count}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Attendance:</span>
+                        <span className="font-medium">{dept.productivity}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Avg Workload:</span>
+                        <span className="font-medium">{dept.avgWorkload}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Composite Score:</span>
+                        <span className="font-medium text-primary">{dept.compositeProductivity}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => setShowDepartmentDetails(!showDepartmentDetails)}
+                className="rounded-2xl border-border/70 bg-background/60 px-4 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
+              >
+                {showDepartmentDetails ? 'Show Less' : 'Show More'}
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       {showAddForm && canEditTeam && (

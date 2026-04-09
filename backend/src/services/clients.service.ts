@@ -3,6 +3,7 @@ import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { UserRole } from "../config/types";
+import { sendClientWelcomeEmail } from "../utils/email-templates";
 import {
   buildClientAvatar,
   fromDbClientSegment,
@@ -266,6 +267,12 @@ export const clientsService = {
           updatedAt: new Date(),
         },
       });
+
+      // Send welcome email to new client
+      sendClientWelcomeEmail({
+        name: client.name,
+        email: client.email,
+      }).catch(() => {});
 
       return mapClient(client);
     } catch (error) {

@@ -26,43 +26,60 @@ export const searchService = {
     const [clients, projects, tasks, members, invoices, jobs] = await Promise.all([
       shouldSearch("client")
         ? prisma.client.findMany({
-            where: { deletedAt: null, OR: [{ name: contains }, { email: contains }, { company: contains }] },
-            select: { id: true, name: true, company: true, email: true },
+            where: { deletedAt: null, OR: [
+              { name: contains }, { email: contains }, { company: contains },
+              { phone: contains }, { industry: contains }, { location: contains }, { jobTitle: contains }
+            ] },
+            select: { id: true, name: true, company: true, email: true, industry: true },
             take,
           })
         : Promise.resolve([]),
       shouldSearch("project")
         ? prisma.project.findMany({
-            where: { deletedAt: null, OR: [{ name: contains }, { description: contains }] },
-            select: { id: true, name: true, status: true },
+            where: { deletedAt: null, OR: [
+              { name: contains }, { description: contains },
+              { team: { has: q } }
+            ] },
+            select: { id: true, name: true, status: true, stage: true },
             take,
           })
         : Promise.resolve([]),
       shouldSearch("task")
         ? prisma.task.findMany({
-            where: { deletedAt: null, title: contains },
-            select: { id: true, title: true, assignee: true, column: true },
+            where: { deletedAt: null, OR: [
+              { title: contains }, { assignee: contains }, { valueStream: contains },
+              { tags: { has: q } }
+            ] },
+            select: { id: true, title: true, assignee: true, column: true, valueStream: true },
             take,
           })
         : Promise.resolve([]),
       shouldSearch("team-member")
         ? prisma.teamMember.findMany({
-            where: { deletedAt: null, OR: [{ name: contains }, { email: contains }, { department: contains }] },
-            select: { id: true, name: true, department: true, designation: true },
+            where: { deletedAt: null, OR: [
+              { name: contains }, { email: contains }, { department: contains },
+              { designation: contains }, { team: contains }, { officeLocation: contains }
+            ] },
+            select: { id: true, name: true, department: true, designation: true, team: true },
             take,
           })
         : Promise.resolve([]),
       shouldSearch("invoice")
         ? prisma.invoice.findMany({
-            where: { deletedAt: null, OR: [{ client: contains }, { id: contains }] },
+            where: { deletedAt: null, OR: [
+              { client: contains }, { id: contains }, { amount: contains }
+            ] },
             select: { id: true, client: true, amount: true, status: true },
             take,
           })
         : Promise.resolve([]),
       shouldSearch("job")
         ? prisma.jobPosting.findMany({
-            where: { deletedAt: null, OR: [{ title: contains }, { department: contains }, { location: contains }] },
-            select: { id: true, title: true, department: true, status: true },
+            where: { deletedAt: null, OR: [
+              { title: contains }, { department: contains }, { location: contains },
+              { description: contains }, { skills: { has: q } }
+            ] },
+            select: { id: true, title: true, department: true, status: true, location: true },
             take,
           })
         : Promise.resolve([]),

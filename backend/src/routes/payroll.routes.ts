@@ -42,4 +42,12 @@ router.patch(
   }),
 );
 
+router.patch(
+  "/:id/mark-paid",
+  asyncHandler(async (req, res) => {
+    const updated = await payrollService.markPaid(Number(req.params.id), req.auth);
+    res.json(updated);
+  }),
+);
+
 export const payrollRouter = router;

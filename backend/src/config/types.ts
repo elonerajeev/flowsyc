@@ -4,6 +4,7 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   role: UserRole;
   employeeId: string;
   department: string;

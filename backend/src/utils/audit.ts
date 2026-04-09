@@ -29,6 +29,8 @@ export type GetAuditLogsOptions = {
   entity?: string;
   userId?: string;
   role?: string;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 export type AuditLogListResult = {
@@ -121,6 +123,16 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
   if (options.entity) {
     params.push(options.entity);
     conditions.push(`entity = $${params.length}`);
+  }
+
+  if (options.dateFrom) {
+    params.push(options.dateFrom);
+    conditions.push(`"createdAt" >= $${params.length}`);
+  }
+
+  if (options.dateTo) {
+    params.push(options.dateTo);
+    conditions.push(`"createdAt" <= $${params.length}`);
   }
 
   return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

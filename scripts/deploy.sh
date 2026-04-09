@@ -21,3 +21,15 @@ sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin dock
 sudo usermod -aG docker $USER
 newgrp docker
 
+# Clone the Github Repo
+git clone https://github.com/elonerajeev/focal-point-compass.git
+
+# move to wokring directory
+cd focal-point-compass
+
+# build teh docker compose images
+docker compose up --build
+
+# # # In another tab do this -> do manually for sefety...
+# ocker compose exec backend npx prisma migrate deploy
+# docker compose restart backend

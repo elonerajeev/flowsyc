@@ -281,8 +281,8 @@ export const teamMembersService = {
       return trimmed;
     };
 
-    const teamName = requireString(input.team, "Team");
     const department = requireString(input.department, "Department");
+    const teamName = requireString(input.team, "Team");
     const designation = requireString(input.designation, "Designation");
     const manager = requireString(input.manager, "Manager");
     const workingHours = requireString(input.workingHours, "Working hours");

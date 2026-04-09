@@ -11,9 +11,9 @@ export type WorkspaceContextValue = {
   togglePrivacyMode: () => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
-  openQuickCreate: (workflowId?: string, data?: any) => void;
+  openQuickCreate: (workflowId?: string, data?: Record<string, unknown>) => void;
   closeQuickCreate: () => void;
-  editData: any | null;
+  editData: Record<string, unknown> | null;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -23,7 +23,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [workflowToOpen, setWorkflowToOpen] = useState<string | null>(null);
-  const [editData, setEditData] = useState<any | null>(null);
+  const [editData, setEditData] = useState<Record<string, unknown> | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false);
 
   const canUseQuickCreate = role === "admin" || role === "manager";
@@ -66,7 +66,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       triggerHaptic("selection");
     },
     closeCommandPalette: () => setCommandOpen(false),
-    openQuickCreate: (workflowId?: string, data?: any) => {
+    openQuickCreate: (workflowId?: string, data?: Record<string, unknown>) => {
       if (canUseQuickCreate) {
         setWorkflowToOpen(workflowId || null);
         setEditData(data || null);

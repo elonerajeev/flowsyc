@@ -13,4 +13,15 @@ export const payrollController = {
     const result = await payrollService.generate(period, req.auth);
     res.status(200).json(result);
   },
+
+  markPaid: async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid payroll id" });
+      return;
+    }
+
+    const result = await payrollService.markPaid(id, req.auth);
+    res.status(200).json(result);
+  },
 };

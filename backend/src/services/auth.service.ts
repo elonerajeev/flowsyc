@@ -7,7 +7,7 @@ import { buildProfile } from "../utils/employee-profile";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
 import { comparePassword, hashPassword } from "../utils/password";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken, type TokenPayload } from "../utils/jwt";
-import { sendWelcomeEmail } from "../utils/email-templates";
+import { sendWelcomeEmail, sendVerificationEmail } from "../utils/email-templates";
 import type { AuthUser, UserRole as AppUserRole } from "../config/types";
 
 type AuthResponse = {
@@ -22,6 +22,7 @@ function toAuthUser(user: {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   role: AppUserRole;
   employeeId: string;
   department: string;
@@ -47,6 +48,7 @@ function toAuthUser(user: {
       id: user.id,
       name: user.name,
       email: user.email,
+      emailVerified: user.emailVerified,
       role: user.role,
       employeeId: user.employeeId || "CLT",
       department: "Client",
@@ -115,10 +117,9 @@ export const authService = {
           passwordHash: await hashPassword(input.password),
           role: input.role,
           ...profile,
-          employeeId: generateEmployeeId(input.role),
           paymentMode: toDbPaymentMode(profile.paymentMode),
           updatedAt: new Date(),
-        },
+        } as any,
       });
 
       // Special session creation that uses the transaction client
@@ -138,8 +139,9 @@ export const authService = {
       return { user: newUser, session: { accessToken, refreshToken } };
     });
 
-    // Fire-and-forget welcome email (outside transaction)
-    sendWelcomeEmail({ name: user.name, email: user.email, role: user.role }).catch(() => {});
+    // Send verification email (outside transaction)
+    const verificationToken = signAccessToken({ sub: user.id, email: user.email, type: 'email_verification' });
+    sendVerificationEmail({ name: user.name, email: user.email }, verificationToken).catch(() => {});
 
     return {
       user: toAuthUser(user),
@@ -156,6 +158,10 @@ export const authService = {
     const matches = await comparePassword(input.password, user.passwordHash);
     if (!matches) {
       throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
+    }
+
+    if (!user.emailVerified) {
+      throw new AppError("Please verify your email before logging in", 403, "EMAIL_NOT_VERIFIED");
     }
 
     const session = await createSession(user.id, user.email, user.role);

@@ -61,18 +61,56 @@ systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Re
   }
 }));
 
+systemRouter.get("/search", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const query = String(req.query.q ?? "").trim();
+  const category = req.query.category ? String(req.query.category).trim() : undefined;
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20) || 20));
+  const { searchService } = await import("../services/search.service");
+  const results = await searchService.global(query, limit, category);
+  res.status(200).json({ data: results });
+}));
+
+// Export endpoints
+systemRouter.get("/export/clients/csv", requireAuth, requireRole(["admin", "manager"]), asyncHandler(async (req: Request, res: Response) => {
+  const { clientsService } = await import("../services/clients.service");
+  const result = await clientsService.list({ page: 1, limit: 10000, sort: "createdAt", order: "desc" }, req.auth);
+  const csv = [
+    "ID,Name,Email,Company,Industry,Status,Tier,Revenue,Health Score,Next Action",
+    ...result.data.map((c: any) => `${c.id},"${c.name}","${c.email}","${c.company}","${c.industry}","${c.status}","${c.tier}","${c.revenue}",${c.healthScore},"${c.nextAction}"`)
+  ].join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=clients.csv");
+  res.status(200).send(csv);
+}));
+
+systemRouter.get("/export/invoices/csv", requireAuth, requireRole(["admin", "manager"]), asyncHandler(async (req: Request, res: Response) => {
+  const { invoicesService } = await import("../services/invoices.service");
+  const result = await invoicesService.list({ page: 1, limit: 10000 }, req.auth);
+  const csv = [
+    "ID,Client,Amount,Date,Due,Status",
+    ...result.data.map((i: any) => `${i.id},"${i.client}","${i.amount}","${i.date}","${i.due}","${i.status}"`)
+  ].join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=invoices.csv");
+  res.status(200).send(csv);
+}));
+
 systemRouter.get("/audit", requireAuth, requireRole(["admin", "manager", "employee"]), asyncHandler(async (req: Request, res: Response) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 100) || 100));
   const offset = Math.max(0, Number(req.query.offset ?? 0) || 0);
   const search = String(req.query.search ?? "").trim();
   const action = String(req.query.action ?? "").trim();
   const entity = String(req.query.entity ?? "").trim();
-  const logs = await getAuditLogs({ 
-    limit, 
-    offset, 
-    search, 
-    action, 
+  const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined;
+  const dateTo = req.query.dateTo ? String(req.query.dateTo).trim() : undefined;
+  const logs = await getAuditLogs({
+    limit,
+    offset,
+    search,
+    action,
     entity,
+    dateFrom,
+    dateTo,
     userId: req.auth?.userId,
     role: req.auth?.role
   });

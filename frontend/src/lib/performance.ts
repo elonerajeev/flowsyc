@@ -1,5 +1,7 @@
 import { appEnv, isProduction } from "@/lib/env";
 
+type Metric = { value: number };
+
 // Performance monitoring utilities
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor
@@ -36,44 +38,62 @@ export class PerformanceMonitor {
     }
   }
 
-  // Record Core Web Vitals
-  recordWebVitals(): void {
-    if (typeof window !== 'undefined') {
-      // Largest Contentful Paint
-      new PerformanceObserver((list) => {
-        const entries = list.getEntries()
-        const lastEntry = entries[entries.length - 1]
-        if (lastEntry) {
-          this.recordMetric('lcp', lastEntry.startTime)
-        }
-      }).observe({ entryTypes: ['largest-contentful-paint'] })
+  // Record Core Web Vitals using web-vitals library or fallback
+  async recordWebVitals(): Promise<void> {
+    if (typeof window === 'undefined') return;
 
-      // First Input Delay
-      new PerformanceObserver((list) => {
-        const entries = list.getEntries()
-        entries.forEach((entry) => {
-          if ('processingStart' in entry) {
-            const firstInputEntry = entry as PerformanceEventTiming
-            this.recordMetric('fid', firstInputEntry.processingStart - firstInputEntry.startTime)
-          }
-        })
-      }).observe({ entryTypes: ['first-input'] })
-
-      // Cumulative Layout Shift
-      new PerformanceObserver((list) => {
-        let clsValue = 0
-        const entries = list.getEntries()
-        entries.forEach((entry) => {
-          if ('hadRecentInput' in entry && 'value' in entry) {
-            const layoutShiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number }
-            if (!layoutShiftEntry.hadRecentInput) {
-              clsValue += layoutShiftEntry.value ?? 0
-            }
-          }
-        })
-        this.recordMetric('cls', clsValue)
-      }).observe({ entryTypes: ['layout-shift'] })
+    try {
+      const { getCLS, getFID, getFCP, getLCP, getTTFB } = await import('web-vitals');
+      getCLS((metric: Metric) => this.recordMetric('cls', metric.value));
+      getFID((metric: Metric) => this.recordMetric('fid', metric.value));
+      getFCP((metric: Metric) => this.recordMetric('fcp', metric.value));
+      getLCP((metric: Metric) => this.recordMetric('lcp', metric.value));
+      getTTFB((metric: Metric) => this.recordMetric('ttfb', metric.value));
+    } catch (error) {
+      // Fallback to manual implementation
+      console.warn('web-vitals not available, using manual performance monitoring');
+      this.recordWebVitalsManual();
     }
+  }
+
+  // Manual implementation as fallback
+  private recordWebVitalsManual(): void {
+    if (typeof window === 'undefined') return;
+
+    // Largest Contentful Paint
+    new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      const lastEntry = entries[entries.length - 1];
+      if (lastEntry) {
+        this.recordMetric('lcp', lastEntry.startTime);
+      }
+    }).observe({ entryTypes: ['largest-contentful-paint'] });
+
+    // First Input Delay
+    new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      entries.forEach((entry) => {
+        if ('processingStart' in entry) {
+          const firstInputEntry = entry as PerformanceEventTiming;
+          this.recordMetric('fid', firstInputEntry.processingStart - firstInputEntry.startTime);
+        }
+      });
+    }).observe({ entryTypes: ['first-input'] });
+
+    // Cumulative Layout Shift
+    new PerformanceObserver((list) => {
+      let clsValue = 0;
+      const entries = list.getEntries();
+      entries.forEach((entry) => {
+        if ('hadRecentInput' in entry && 'value' in entry) {
+          const layoutShiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number };
+          if (!layoutShiftEntry.hadRecentInput) {
+            clsValue += layoutShiftEntry.value ?? 0;
+          }
+        }
+      });
+      this.recordMetric('cls', clsValue);
+    }).observe({ entryTypes: ['layout-shift'] });
   }
 
   private recordMetric(name: string, value: number): void {

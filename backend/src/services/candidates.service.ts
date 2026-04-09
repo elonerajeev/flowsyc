@@ -3,6 +3,7 @@ import { Prisma, type CandidateStage } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { sendMail } from "../utils/mailer";
+import { sendHireEmail, sendRejectionEmail, sendInterviewInvitationEmail } from "../utils/email-templates";
 
 type CandidateRecord = {
   id: number;
@@ -289,7 +290,7 @@ export const candidatesService = {
       const updatedCandidate = await tx.candidate.update({
         where: { id: candidateId },
         data: { stage: nextStage },
-        include: { JobPosting: { select: { title: true } } },
+        include: { JobPosting: { select: { title: true, department: true, location: true } } },
       });
 
       // 2. Log activity
@@ -336,6 +337,35 @@ export const candidatesService = {
 
       return updatedCandidate;
     });
+
+    // Send interview invitation when candidate moves to interview stage
+    if (nextStage === "interview") {
+      sendInterviewInvitationEmail({
+        name: result.name,
+        email: result.email,
+        jobTitle: result.JobPosting.title,
+      }).catch(() => {});
+    }
+
+    // Send hire email automatically when candidate is hired
+    if (nextStage === "hired") {
+      // Get HR details (assuming current user is HR)
+      // For now, use placeholder HR details
+      const hrName = "HR Manager";
+      const hrDesignation = "Human Resources";
+
+      sendHireEmail({
+        name: result.name,
+        email: result.email,
+        jobTitle: result.JobPosting.title,
+        department: result.JobPosting.department,
+        location: result.JobPosting.location,
+        joiningDate: result.joiningDate || "TBD",
+        offeredSalary: result.offeredSalary ? `₹${result.offeredSalary}` : "TBD",
+        hrName,
+        hrDesignation,
+      }).catch(() => {});
+    }
 
     return mapCandidate(result);
   },
@@ -433,6 +463,14 @@ export const candidatesService = {
       data: { stage: "rejected" },
       include: { JobPosting: { select: { title: true } } },
     });
+
+    // Send rejection email
+    sendRejectionEmail({
+      name: candidate.name,
+      email: candidate.email,
+      jobTitle: candidate.JobPosting.title,
+    }, reason).catch(() => {});
+
     try {
       await (prisma as any).candidateActivity.create({
         data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },

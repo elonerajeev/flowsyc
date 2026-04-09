@@ -12,6 +12,10 @@ export const authRouter = Router();
 authRouter.use(authRateLimiter);
 
 authRouter.post("/signup", validateBody(signupSchema), asyncHandler(authController.signup));
+authRouter.post("/verify-email", asyncHandler(authController.verifyEmail));
+authRouter.post("/resend-verification", asyncHandler(authController.resendVerification));
+authRouter.post("/forgot-password", asyncHandler(authController.forgotPassword));
+authRouter.post("/reset-password", asyncHandler(authController.resetPassword));
 authRouter.post("/login", validateBody(loginSchema), asyncHandler(authController.login));
 authRouter.get("/me", requireAuth, asyncHandler(authController.me));
 authRouter.patch("/me", requireAuth, validateBody(updateProfileSchema), asyncHandler(authController.updateProfile));

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export default function RestrictedPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from || "this section";
+  const from = (location.state as { from?: string })?.from || "this section";
 
   return (
     <div className="flex min-h-[80vh] flex-col items-center justify-center p-6 text-center">

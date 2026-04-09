@@ -409,7 +409,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return validBackgrounds.includes(saved) ? saved : "ocean";
   });
   const [role, setRoleState] = useState<UserRole>(() => {
-    const storedUser = readStoredJSON<any>("crm-auth-user", null);
+    const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
     return (storedUser?.role as UserRole) || (readStoredString("crm-role", "admin") as UserRole) || "admin";
   });
 
@@ -424,7 +424,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (data["crm-color"]) setColorState(data["crm-color"] as ThemeColor);
         if (data["crm-background"]) setBackgroundState(data["crm-background"] as BackgroundStyle);
         // Auth user role always wins over stored preference
-        const storedUser = readStoredJSON<any>("crm-auth-user", null);
+        const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
         if (storedUser?.role) {
           setRoleState(storedUser.role as UserRole);
         } else if (data["crm-role"]) {
@@ -434,7 +434,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
         console.warn("Failed to sync preferences from backend:", err);
         // Still apply auth user role even if preferences fail
-        const storedUser = readStoredJSON<any>("crm-auth-user", null);
+        const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
         if (storedUser?.role) setRoleState(storedUser.role as UserRole);
       }
     };

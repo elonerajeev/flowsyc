@@ -164,7 +164,7 @@ function ReportsPageInner() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
                   {reports.slice(0, visibleReportCount).map((report) => (
                     <article key={report.title} className="rounded-[1.5rem] border border-border/70 bg-card shadow-card overflow-hidden">
-                      <div className={`bg-gradient-to-br ${report.gradient} p-6`}>
+                      <div className={cn("bg-gradient-to-br p-6", report.gradient ?? "from-primary/10 via-primary/5 to-transparent")}>
                         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-card/75 text-primary shadow-sm">
                           <FileText className="h-5 w-5" />
                         </div>

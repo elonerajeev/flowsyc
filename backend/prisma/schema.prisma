@@ -254,6 +254,7 @@ model User {
   name           String
   email          String         @unique
   passwordHash   String
+  emailVerified  Boolean        @default(false)
   role           UserRole
   employeeId     String         @unique
   department     String

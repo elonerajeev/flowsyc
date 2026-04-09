@@ -52,13 +52,15 @@ function splitName(fullName: string) {
 
 export const staticCrmService = {
   async listLeads() {
-    // TODO: Add Lead table to database and implement CRUD
-    return [];
+    // Import leadsService dynamically to avoid circular imports
+    const { leadsService } = await import("./leads.service");
+    return leadsService.list(null as any); // Admin access for internal use
   },
 
   async listDeals() {
-    // TODO: Add Deal table to database and implement CRUD
-    return [];
+    // Import dealsService dynamically to avoid circular imports
+    const { dealsService } = await import("./deals.service");
+    return dealsService.list(null as any); // Admin access for internal use
   },
 
   async listCompanies() {
