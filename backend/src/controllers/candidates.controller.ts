@@ -64,7 +64,7 @@ export const candidatesController = {
   },
   moveToNextStage: async (req: Request, res: Response): Promise<void> => {
     const candidateId = readCandidateId(req);
-    const candidate = await candidatesService.moveToNextStage(candidateId);
+    const candidate = await candidatesService.moveToNextStage(candidateId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -73,6 +73,28 @@ export const candidatesController = {
         entityId: candidateId,
         detail: `Moved to ${candidate.stage}: ${candidate.name}`,
       });
+
+      // Trigger Zapier webhook for candidate_hired event
+      if (candidate.stage === "hired") {
+        const { systemService } = await import("../services/system.service");
+        const zapierConfig = await systemService.getZapierIntegration(req.auth.userId, "candidate_hired");
+        if (zapierConfig) {
+          systemService.sendZapierEvent(zapierConfig.webhookUrl, "candidate_hired", {
+            candidate: {
+              id: candidate.id,
+              name: candidate.name,
+              email: candidate.email,
+              stage: candidate.stage,
+              jobTitle: candidate.jobTitle,
+              department: (candidate as any).JobPosting?.department || "Unknown",
+            },
+            user: {
+              id: req.auth.userId,
+              role: req.auth.role,
+            },
+          });
+        }
+      }
     }
     res.status(200).json(candidate);
   },

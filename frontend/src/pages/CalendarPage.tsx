@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, T
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { CalendarSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -292,7 +293,7 @@ export default function CalendarPage() {
     deleteMutation.mutate(eventId);
   };
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <CalendarSkeleton />;
   if (fetchError) {
     return (
       <ErrorFallback

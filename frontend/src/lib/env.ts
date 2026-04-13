@@ -1,6 +1,7 @@
 type AppEnv = {
   appEnv: string;
   apiBaseUrl: string;
+  socketUrl: string;
   useRemoteApi: boolean;
   enableAnalytics: boolean;
   analyticsEndpoint: string;
@@ -25,6 +26,7 @@ function requireEnv(key: string): string {
 export const appEnv: AppEnv = {
   appEnv: readEnv("VITE_APP_ENV", "development"),
   apiBaseUrl: requireEnv("VITE_API_BASE_URL"),
+  socketUrl: readEnv("VITE_SOCKET_URL", ""),
   useRemoteApi: readEnv("VITE_USE_REMOTE_API", "false") === "true",
   enableAnalytics: readEnv("VITE_ENABLE_ANALYTICS", "false") === "true",
   analyticsEndpoint: readEnv("VITE_ANALYTICS_ENDPOINT", ""),

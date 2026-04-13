@@ -48,6 +48,27 @@ export const clientsController = {
     const client = await clientsService.create(req.body);
     if (req.auth) {
       await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "create", entity: "Client", entityId: client.id, detail: `Created: ${client.name}` });
+
+      // Trigger Zapier webhook for new_client event
+      const { systemService } = await import("../services/system.service");
+      const zapierConfig = await systemService.getZapierIntegration(req.auth.userId, "new_client");
+      if (zapierConfig) {
+        systemService.sendZapierEvent(zapierConfig.webhookUrl, "new_client", {
+          client: {
+            id: client.id,
+            name: client.name,
+            email: client.email,
+            company: client.company,
+            industry: client.industry,
+            status: client.status,
+            tier: client.tier,
+          },
+          user: {
+            id: req.auth.userId,
+            role: req.auth.role,
+          },
+        });
+      }
     }
     res.status(201).json(client);
   },

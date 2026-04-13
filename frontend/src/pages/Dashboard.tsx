@@ -15,9 +15,11 @@ import { Button } from "@/components/ui/button";
 import StatCard from "@/components/shared/StatCard";
 import ProgressRing from "@/components/shared/ProgressRing";
 import StatusBadge from "@/components/shared/StatusBadge";
-import PageLoader from "@/components/shared/PageLoader";
+import { DashboardSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
 import PersonalizedFocus from "@/components/dashboard/PersonalizedFocus";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -112,6 +114,7 @@ export default function Dashboard() {
   const projectsQuery = useProjects({ enabled: role !== "client" });
   const canSeeCommercialInsights = role === "admin" || role === "manager";
   const canSeeProjectBudget = role !== "employee";
+  const { refresh, isRefreshing } = useRefresh();
 
   const loading = dashboardQuery.isLoading || (role !== "client" && projectsQuery.isLoading);
 
@@ -122,16 +125,16 @@ export default function Dashboard() {
   const [visibleProjectCount, setVisibleProjectCount] = useState(4);
 
   const handleRefresh = async () => {
-    // Add a minimum duration for the animation to feel real
-    const startTime = Date.now();
-    await Promise.all([
-      dashboardQuery.refetch(),
-      role !== "client" ? projectsQuery.refetch() : Promise.resolve(),
-    ]);
-    const duration = Date.now() - startTime;
-    if (duration < 600) {
-      await new Promise(resolve => setTimeout(resolve, 600 - duration));
-    }
+    await refresh(
+      () => Promise.all([
+        dashboardQuery.refetch(),
+        role !== "client" ? projectsQuery.refetch() : Promise.resolve(),
+      ]),
+      {
+        message: getRefreshMessage("dashboard"),
+        successMessage: getRefreshSuccessMessage("dashboard"),
+      }
+    );
   };
 
   useEffect(() => {
@@ -179,7 +182,7 @@ export default function Dashboard() {
     );
   }
   if (loading || !dashboard) {
-    return <PageLoader />;
+    return <DashboardSkeleton />;
   }
   const widgetDefinitions = [
     {
@@ -224,14 +227,14 @@ export default function Dashboard() {
                   <Button
                     variant="outline"
                     onClick={handleRefresh}
-                    disabled={loading}
+                    disabled={isRefreshing}
                     className={cn(
                       "premium-hover flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition",
                       RADIUS.lg, SPACING.button, TEXT.body
                     )}
                   >
-                    <RefreshCw className={cn("h-4 w-4 text-primary", loading && "animate-spin")} />
-                    {loading ? "Refreshing..." : "Refresh Overview"}
+                    <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                    {isRefreshing ? "Refresh Overview" : "Refresh Overview"}
                   </Button>
                 </motion.div>
               </div>

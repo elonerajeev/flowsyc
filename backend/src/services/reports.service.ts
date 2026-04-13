@@ -141,24 +141,81 @@ export const reportsService = {
   },
 
   async getAnalytics() {
-    const [invoices, clients] = await Promise.all([
+    const [invoices, clients, projects, candidates, teamMembers, payroll] = await Promise.all([
       prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
       prisma.client.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
+      prisma.project.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
+      prisma.candidate.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
+      prisma.teamMember.findMany({ where: { deletedAt: null } }),
+      prisma.payroll.findMany({ where: { deletedAt: null }, orderBy: { period: "asc" } }),
     ]);
 
-    const months: Record<string, { month: string; revenue: number; clients: number }> = {};
+    // Monthly revenue and growth
+    const months: Record<string, { month: string; revenue: number; clients: number; projects: number; candidates: number }> = {};
     invoices.forEach((inv) => {
-      const m = inv.createdAt.toLocaleDateString("en-US", { month: "short" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0 };
+      const m = inv.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
       const n = Number(String(inv.amount).replace(/[^0-9.]/g, ""));
       months[m].revenue += Number.isFinite(n) ? n : 0;
     });
     clients.forEach((c) => {
-      const m = c.createdAt.toLocaleDateString("en-US", { month: "short" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0 };
+      const m = c.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
       months[m].clients += 1;
     });
+    projects.forEach((p) => {
+      const m = p.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
+      months[m].projects += 1;
+    });
+    candidates.forEach((ca) => {
+      const m = ca.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
+      months[m].candidates += 1;
+    });
 
-    return Object.values(months);
+    // Conversion rates
+    const hiredCandidates = candidates.filter(c => c.stage === "hired").length;
+    const totalCandidates = candidates.length;
+    const conversionRate = totalCandidates > 0 ? (hiredCandidates / totalCandidates) * 100 : 0;
+
+    // Team performance
+    const departmentStats = teamMembers.reduce((acc, member) => {
+      if (!acc[member.department]) {
+        acc[member.department] = { department: member.department, count: 0, present: 0 };
+      }
+      acc[member.department].count += 1;
+      if (member.attendance === "present") acc[member.department].present += 1;
+      return acc;
+    }, {} as Record<string, { department: string; count: number; present: number }>);
+
+    // Revenue by client tier
+    const revenueByTier = clients.reduce((acc, client) => {
+      const tier = client.tier || "Unknown";
+      const revenue = Number(String(client.revenue || "$0").replace(/[^0-9.]/g, "")) || 0;
+      acc[tier] = (acc[tier] || 0) + revenue;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Project completion trends
+    const projectStatusStats = projects.reduce((acc, project) => {
+      acc[project.status] = (acc[project.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      monthlyTrends: Object.values(months),
+      conversionRate,
+      departmentStats: Object.values(departmentStats),
+      revenueByTier,
+      projectStatusStats,
+      totalStats: {
+        clients: clients.length,
+        projects: projects.length,
+        candidates: candidates.length,
+        teamMembers: teamMembers.length,
+        totalRevenue: invoices.reduce((sum, inv) => sum + Number(String(inv.amount).replace(/[^0-9.]/g, "")), 0),
+      },
+    };
   },
 };

@@ -60,32 +60,6 @@ export const dealsService = {
     }
 
     try {
-      const count = await prisma.deal.count({ where: { deletedAt: null } });
-
-      // Auto-seed if empty
-      if (count === 0 && (access?.role === "admin" || !access)) {
-        const { dealRecords } = await import("../data/crm-static");
-        await prisma.$transaction(
-          dealRecords.map((d) => {
-            let dbStage: any = d.stage.replace("-", "_"); // e.g. closed-won -> closed_won
-            
-            return prisma.deal.create({
-              data: {
-                title: d.title,
-                value: d.value,
-                stage: dbStage,
-                probability: d.probability,
-                expectedClose: new Date(d.expectedCloseDate),
-                description: d.description,
-                assignedTo: d.assignedTo,
-                createdAt: new Date(d.createdAt),
-                updatedAt: new Date(d.updatedAt),
-              }
-            });
-          })
-        );
-      }
-
       const deals = await prisma.deal.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -93,25 +67,11 @@ export const dealsService = {
 
       return deals.map(mapDeal);
     } catch (error: any) {
-      // P2021 = Table does not exist (migration hasn't been run)
       if (error?.code === "P2021" || error?.message?.includes("relation \"Deal\" does not exist")) {
-        console.warn("Deals table missing. Falling back to mock data for Phase 1 transition.");
-        const { dealRecords } = await import("../data/crm-static");
-        return dealRecords.map((d) => ({
-          ...d,
-          createdAt: d.createdAt,
-          updatedAt: d.updatedAt,
-        }));
+        throw new AppError("Deal data is unavailable until the sales schema is migrated", 503, "SERVICE_UNAVAILABLE");
       }
 
-      console.error("Deals service error:", error.message);
-      // Fallback on ANY error during this transition phase to prevent 500s for the user
-      const { dealRecords } = await import("../data/crm-static");
-      return dealRecords.map((d) => ({
-        ...d,
-        createdAt: d.createdAt,
-        updatedAt: d.updatedAt,
-      }));
+      throw error;
     }
   },
 
@@ -157,6 +117,30 @@ export const dealsService = {
         updatedAt: new Date(),
       },
     });
+
+    // Trigger Zapier webhook for deal_stage_change event
+    if (patch.stage && patch.stage !== existing.stage && access?.userId) {
+      const { systemService } = await import("./system.service");
+      const zapierConfig = await systemService.getZapierIntegration(access.userId, "deal_stage_change");
+      if (zapierConfig) {
+        systemService.sendZapierEvent(zapierConfig.webhookUrl, "deal_stage_change", {
+          deal: {
+            id: deal.id,
+            name: deal.title,
+            stage: deal.stage,
+            previousStage: existing.stage,
+            value: deal.value,
+            probability: deal.probability,
+            assignedTo: deal.assignedTo,
+          },
+          user: {
+            id: access.userId,
+            role: access.role,
+          },
+        });
+      }
+    }
+
     return mapDeal(deal);
   },
 

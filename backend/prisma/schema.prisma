@@ -56,6 +56,7 @@ model Client {
   phone       String        @default("")
   company     String        @default("")
   tags        String[]      @default([])
+  contacts    Contact[]
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
@@ -169,6 +170,8 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
   tasks       Task[]
+  comments    Comment[]
+  attachments Attachment[]
 
   @@index([deletedAt])
   @@index([stage])
@@ -202,11 +205,57 @@ model Task {
   updatedAt   DateTime
   projectId   Int?
   project     Project?     @relation(fields: [projectId], references: [id], onUpdate: NoAction)
+  comments    Comment[]
+  attachments Attachment[]
 
   @@index([column])
   @@index([deletedAt])
   @@index([priority])
   @@index([projectId])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  authorId  String
+  taskId    Int?
+  projectId Int?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  task      Task?     @relation(fields: [taskId], references: [id], onUpdate: NoAction)
+  project   Project?  @relation(fields: [projectId], references: [id], onUpdate: NoAction)
+
+  @@index([authorId])
+  @@index([taskId])
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+model Attachment {
+  id          Int      @id @default(autoincrement())
+  filename    String
+  originalName String
+  url         String
+  size        Int
+  mimetype    String
+  authorId    String
+  taskId      Int?
+  projectId   Int?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  task        Task?     @relation(fields: [taskId], references: [id], onUpdate: NoAction)
+  project     Project?  @relation(fields: [projectId], references: [id], onUpdate: NoAction)
+
+  @@index([authorId])
+  @@index([taskId])
+  @@index([projectId])
+  @@index([deletedAt])
 }
 
 model TeamMember {
@@ -254,6 +303,7 @@ model User {
   name           String
   email          String         @unique
   passwordHash   String
+  emailVerified  Boolean        @default(false)
   role           UserRole
   employeeId     String         @unique
   department     String
@@ -276,6 +326,8 @@ model User {
   updatedAt      DateTime
   signatureUrl   String?
   RefreshToken   RefreshToken[]
+  comments       Comment[]
+  attachments    Attachment[]
 }
 
 model UserPreference {
@@ -311,6 +363,25 @@ model Lead {
   @@index([deletedAt])
   @@index([status])
   @@index([source])
+}
+
+model Contact {
+  id           Int      @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  email        String   @unique
+  phone        String?
+  jobTitle     String?
+  department   String?
+  clientId     Int?
+  client       Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([clientId])
+  @@index([email])
 }
 
 model Deal {
@@ -372,13 +443,18 @@ model CandidateActivity {
 }
 
 model Integration {
-  id        Int      @id @default(autoincrement())
-  name      String
-  type      String
-  status    String   @default("active")
-  config    Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id // composite key via @@unique
+  userId      String
+  name        String
+  status      String   @default("disconnected")
+  config      Json     @default("{}")
+  connectedAt DateTime?
+  lastSynced  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+
+  @@unique([id, userId])
+  @@index([userId])
 }
 
 enum UserRole {

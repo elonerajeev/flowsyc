@@ -8,6 +8,7 @@ import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { SimpleBarChart, SimpleSparkline } from "@/components/shared/SimpleCharts";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
+import { TruncatedText } from "@/components/ui/truncated-text";
 import type { ClientRecord } from "@/types/crm";
 
 const ACCOUNTS_PAGE_SIZE = 4;
@@ -270,8 +271,16 @@ export default function DashboardCharts({
                       {client.avatar}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{client.name}</p>
-                      <p className={cn("text-muted-foreground truncate", TEXT.meta)}>{client.industry}</p>
+                      <TruncatedText
+                        text={client.name}
+                        maxLength={25}
+                        className="text-sm font-semibold text-foreground"
+                      />
+                      <TruncatedText
+                        text={client.industry}
+                        maxLength={25}
+                        className={cn("text-muted-foreground", TEXT.meta)}
+                      />
                     </div>
                   </div>
                   <div className="flex-shrink-0 text-right">
@@ -311,8 +320,16 @@ export default function DashboardCharts({
                 {atRiskClients.slice(0, visibleRiskCount).map((client) => (
                   <div key={client.id} className={cn("border border-border/60 bg-secondary/15 flex items-center justify-between gap-3", RADIUS.lg, SPACING.inset)}>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{client.name}</p>
-                      <p className={cn("text-muted-foreground truncate", TEXT.meta)}>{client.nextAction}</p>
+                      <TruncatedText
+                        text={client.name}
+                        maxLength={25}
+                        className="text-sm font-semibold text-foreground"
+                      />
+                      <TruncatedText
+                        text={client.nextAction}
+                        maxLength={30}
+                        className={cn("text-muted-foreground", TEXT.meta)}
+                      />
                     </div>
                     <span className={cn("flex-shrink-0 bg-warning/12 font-semibold text-warning", RADIUS.pill, SPACING.buttonCompact, TEXT.meta)}>
                       {client.healthScore}/100

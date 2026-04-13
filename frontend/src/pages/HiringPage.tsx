@@ -4,7 +4,7 @@ import { BriefcaseBusiness, ClipboardList, UsersRound, ChevronDown, ChevronUp, C
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import PageLoader from "@/components/shared/PageLoader";
+import { HiringSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { useCandidates, useJobPostings, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
 
 type CandidateStage = "applied" | "screening" | "interview" | "offer" | "hired" | "rejected";
 type JobPriority = "urgent" | "high" | "normal" | "low";
@@ -63,15 +65,17 @@ export default function HiringPage() {
   const [visibleJobCount, setVisibleJobCount] = useState(4);
   const JOB_PAGE_SIZE = 4;
   const queryClient = useQueryClient();
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await Promise.all([refetchJobs(), refetchCandidates()]);
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => Promise.all([refetchJobs(), refetchCandidates()]),
+      {
+        message: getRefreshMessage("hiring"),
+        successMessage: getRefreshSuccessMessage("hiring"),
+      }
+    );
   };
-
-  const isRefreshing = jobsLoading || candidatesLoading;
 
   const toggleStatusMutation = useMutation({
     mutationFn: (jobId: number) => crmService.toggleJobStatus(jobId),
@@ -111,7 +115,7 @@ export default function HiringPage() {
     [candidates],
   );
 
-  if (jobsLoading || candidatesLoading) return <PageLoader />;
+  if (jobsLoading || candidatesLoading) return <HiringSkeleton />;
 
   if (jobsError) {
     return (
@@ -158,7 +162,7 @@ export default function HiringPage() {
                 className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
               >
                 <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                {isRefreshing ? "Refreshing..." : "Refresh Pipeline"}
+                "Refresh Pipeline"
               </Button>
             </motion.div>
           </div>

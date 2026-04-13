@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2, RefreshCw, MessageSquare, Download, CheckCircle2, Clock, ListTodo } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import ErrorFallback from "@/components/shared/ErrorFallback";
+import TaskDetailModal from "@/components/crm/TaskDetailModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { crmKeys, useProjects, useTasks } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import type { TaskColumn, TaskRecord } from "@/types/crm";
 import { cn } from "@/lib/utils";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { Button } from "@/components/ui/button";
 import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
 
 const priorityConfig = {
   high:   { color: "text-destructive bg-destructive/10 border-destructive/20", dot: "bg-destructive" },
@@ -46,6 +50,7 @@ function TaskCard({
   onDelete,
   onDragStart,
   onDropCard,
+  onClick,
 }: {
   task: TaskRecord;
   column: TaskColumn;
@@ -58,17 +63,24 @@ function TaskCard({
   onDelete: (taskId: number) => void;
   onDragStart: (taskId: number) => void;
   onDropCard: (taskId: number, targetColumn: TaskColumn) => void;
+  onClick: (task: TaskRecord) => void;
 }) {
   const { openQuickCreate } = useWorkspace();
+  const [isDragging, setIsDragging] = useState(false);
 
   return (
     <article
       draggable
-      onDragStart={() => onDragStart(task.id)}
+      onMouseDown={() => setIsDragging(false)}
+      onMouseMove={() => setIsDragging(true)}
+      onDragStart={() => {
+        setIsDragging(true);
+        onDragStart(task.id);
+      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={() => onDropCard(task.id, column)}
       className={cn(
-        "rounded-[1.25rem] border border-border/70 bg-card p-4 shadow-card transition hover:border-border",
+        "rounded-[1.25rem] border border-border/70 bg-card p-4 shadow-card transition hover:border-border touch-manipulation",
         pinned ? "ring-1 ring-primary/20" : "",
       )}
     >
@@ -139,21 +151,32 @@ function TaskCard({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => onMove(task.id, "left")}
-            disabled={column === "todo"}
-            className="rounded-full border border-border/60 p-1 text-muted-foreground transition hover:text-foreground disabled:opacity-30"
+            onClick={() => onClick(task)}
+            className="rounded-full border border-border/60 p-2 sm:p-1 text-muted-foreground transition hover:text-foreground hover:bg-secondary/50 touch-manipulation"
+            title="Add comments"
           >
-            <ChevronLeft className="h-3 w-3" />
+            <MessageSquare className="h-3 w-3" />
           </button>
-          <span className="text-[10px] text-muted-foreground">{task.dueDate}</span>
-          <button
-            type="button"
-            onClick={() => onMove(task.id, "right")}
-            disabled={column === "done"}
-            className="rounded-full border border-border/60 p-1 text-muted-foreground transition hover:text-foreground disabled:opacity-30"
-          >
-            <ChevronRight className="h-3 w-3" />
-          </button>
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onMove(task.id, "left")}
+              disabled={column === "todo"}
+              className="rounded-full border border-border/60 p-1 text-muted-foreground transition hover:text-foreground disabled:opacity-30"
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </button>
+            <span className="text-[10px] text-muted-foreground">{task.dueDate}</span>
+            <button
+              type="button"
+              onClick={() => onMove(task.id, "right")}
+              disabled={column === "done"}
+              className="rounded-full border border-border/60 p-1 text-muted-foreground transition hover:text-foreground disabled:opacity-30"
+            >
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <span className="sm:hidden text-[10px] text-muted-foreground">{task.dueDate}</span>
         </div>
       </div>
     </article>
@@ -164,10 +187,10 @@ export default function TasksPage() {
   const queryClient = useQueryClient();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const { role } = useTheme();
-  const { data: projects = [] } = useProjects();
   const [selectedProject, setSelectedProject] = useState<string>("all");
-  const activeProjectId = selectedProject === "all" ? undefined : Number(selectedProject);
-  const { data, isLoading, error: tasksError, refetch } = useTasks(activeProjectId);
+  const projectId = selectedProject === "all" ? undefined : Number(selectedProject);
+  const { data, isLoading, error: tasksError, refetch } = useTasks(projectId);
+  const { data: projects = [] } = useProjects();
   const [search, setSearch] = useState("");
   const [board, setBoard] = useState<Record<TaskColumn, TaskRecord[]> | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
@@ -176,13 +199,19 @@ export default function TasksPage() {
   const TASK_PAGE_SIZE = 4;
   const [todoVisible, setTodoVisible] = useState(4);
   const [inProgressVisible, setInProgressVisible] = useState(4);
+  const [selectedTask, setSelectedTask] = useState<TaskRecord | null>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [doneVisible, setDoneVisible] = useState(4);
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("tasks"),
+        successMessage: getRefreshSuccessMessage("tasks"),
+      }
+    );
   };
 
   const canEdit = role === "admin" || role === "manager";
@@ -197,7 +226,7 @@ export default function TasksPage() {
     setTodoVisible(TASK_PAGE_SIZE);
     setInProgressVisible(TASK_PAGE_SIZE);
     setDoneVisible(TASK_PAGE_SIZE);
-  }, [data, activeProjectId]);
+  }, [data]);
 
   const effectiveBoard = board ?? data ?? null;
   const projectNameById = useMemo(
@@ -293,6 +322,18 @@ export default function TasksPage() {
     updateTaskColumn(taskId, targetColumn);
   };
 
+  const stats = useMemo(() => {
+    if (!data) return { todo: 0, inProgress: 0, done: 0, total: 0 };
+    const todo = data.todo.length;
+    const inProgress = data["in-progress"].length;
+    const done = data.done.length;
+    const total = todo + inProgress + done;
+    return { todo, inProgress, done, total };
+  }, [data]);
+
+  const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
+  const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.3 } } };
+
   if (tasksError) {
     return (
       <ErrorFallback
@@ -314,86 +355,97 @@ export default function TasksPage() {
       : "No tasks available yet. Create one via Quick Create.";
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-border/60 bg-card p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/45 px-3 py-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-              <Flag className="h-3.5 w-3.5 text-primary" />
-              Execution Board
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">Functional task operations, not just static cards.</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Tasks can move through execution states, be pinned to the top, and be reordered with drag and drop. That gives you a realistic interaction model for future integrations, optimistic updates, and audit logging.
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+      {/* Hero Section */}
+      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
+        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
+        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
+        <div className="absolute -left-20 -bottom-20 h-60 w-60 rounded-full bg-gradient-to-tr from-success/5 to-primary/5 blur-3xl" />
+
+        <div className={cn("relative", SPACING.card)}>
+          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <ListTodo className="h-3.5 w-3.5 text-primary" />
+                Workspace
+              </div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">
+                Task <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Board</span>
+              </h1>
+              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
+                Track tasks through execution states with drag-and-drop, pinning, and real-time updates.
               </p>
             </div>
-          </div>
-          {canUseQuickCreate ? (
-            <div className="flex gap-2">
-              <motion.div whileTap={{ scale: 0.94 }}>
-                <Button
-                  variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
-                >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh Board"}
-                </Button>
-              </motion.div>
-              <button
-                type="button"
-                onClick={openQuickCreate}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="gap-2"
               >
-                <Plus className="h-4 w-4" />
-                New Task
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <motion.div whileTap={{ scale: 0.94 }}>
-                <Button
-                  variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
-                >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh Board"}
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                Refresh
+              </Button>
+              {canUseQuickCreate && (
+                <Button size="sm" onClick={openQuickCreate} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  New Task
                 </Button>
-              </motion.div>
-              <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
-                Read only
-              </div>
+              )}
             </div>
-          )}
-        </div>
-        <div className="relative mt-6 max-w-lg">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search task title, owner, or tag"
-            className="h-12 w-full rounded-2xl border border-border/70 bg-background/55 pl-11 pr-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
-        </div>
-        <div className="mt-4 max-w-xs">
-          <select
-            value={selectedProject}
-            onChange={(event) => setSelectedProject(event.target.value)}
-            className="h-11 w-full rounded-2xl border border-border/70 bg-background/55 px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="all">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={String(project.id)}>
-                {project.name}
-              </option>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: "To Do", value: stats.todo, icon: Clock, gradient: "from-warning to-warning/60" },
+              { label: "In Progress", value: stats.inProgress, icon: ListTodo, gradient: "from-info to-info/60" },
+              { label: "Completed", value: stats.done, icon: CheckCircle2, gradient: "from-success to-success/60" },
+              { label: "Total", value: stats.total, icon: Flag, gradient: "from-primary to-primary/60" },
+            ].map((stat) => (
+              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
+                <div className="flex items-center gap-2">
+                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
+                    <stat.icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
+                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
+                  </div>
+                </div>
+              </div>
             ))}
-          </select>
+          </div>
+
+          {/* Filters */}
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search tasks..."
+                className="h-10 w-full rounded-xl border border-border/40 bg-background/70 pl-10 pr-4 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <select
+              value={selectedProject}
+              onChange={(event) => setSelectedProject(event.target.value)}
+              className="h-10 rounded-xl border border-border/40 bg-background/70 px-4 text-sm outline-none transition-colors focus:border-primary/50"
+            >
+              <option value="all">All projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={String(project.id)}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </section>
+      </motion.section>
 
       {!hasVisibleTasks && (
         <div className="rounded-2xl border border-border/60 bg-secondary/10 p-6 text-center text-sm text-muted-foreground">
@@ -448,6 +500,10 @@ export default function TasksPage() {
                       }}
                       onDragStart={(taskId) => setDraggedTaskId(taskId)}
                       onDropCard={handleDropToColumn}
+                      onClick={(task) => {
+                        setSelectedTask(task);
+                        setTaskDetailOpen(true);
+                      }}
                     />
                   ));
                 })()
@@ -485,6 +541,12 @@ export default function TasksPage() {
           </div>
         ))}
       </section>
-    </div>
+
+      <TaskDetailModal
+        task={selectedTask}
+        open={taskDetailOpen}
+        onOpenChange={setTaskDetailOpen}
+      />
+    </motion.div>
   );
 }

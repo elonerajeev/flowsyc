@@ -7,8 +7,11 @@ import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
 import { apiRateLimiter } from "./middleware/rate-limit.middleware";
+import { attachmentsRouter } from "./routes/attachments.routes";
 import { authRouter } from "./routes/auth.routes";
+import { commentsRouter } from "./routes/comments.routes";
 import { communicationRouter } from "./routes/communication.routes";
+import contactsRouter from "./routes/contacts.routes";
 import { leadsRouter } from "./routes/leads.routes";
 import { dealsRouter } from "./routes/deals.routes";
 import { clientsRouter } from "./routes/clients.routes";
@@ -70,7 +73,10 @@ export function createApp() {
     res.status(200).send(await prometheusRegistry.metrics());
   });
 
+  app.use("/api/attachments", attachmentsRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/comments", commentsRouter);
+  app.use("/api/contacts", contactsRouter);
   app.use("/api/leads", leadsRouter);
   app.use("/api/deals", dealsRouter);
   app.use("/api/clients", clientsRouter);

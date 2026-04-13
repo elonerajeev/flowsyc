@@ -74,7 +74,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.992 }}
             transition={{ type: "spring", stiffness: 260, damping: 28, mass: 0.85 }}
-            className="mx-auto w-full max-w-[1600px] p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-6 md:p-8 md:pb-8"
+            className="mx-auto w-full max-w-[1600px] p-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-6 lg:p-8 md:pb-8"
           >
             {children}
           </motion.main>

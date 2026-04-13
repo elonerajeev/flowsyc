@@ -17,6 +17,9 @@ const mockState = {
 };
 
 const mockPrisma = {
+  client: {
+    findFirst: jest.fn(async () => ({ email: "client@example.com" })),
+  },
   invoice: {
     findUnique: jest.fn(async ({ where }: { where: { id: string } }) => mockState.invoices.find((invoice) => invoice.id === where.id) ?? null),
     count: jest.fn(async () => mockState.invoices.filter((invoice) => !invoice.deletedAt).length),

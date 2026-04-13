@@ -4,6 +4,7 @@ import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
 import { getEmployeeAssigneeScope, getEmployeeProjectScope } from "../utils/access-control";
+import { sendProjectUpdateEmail } from "../utils/email-templates";
 
 type ProjectRecord = {
   id: number;
@@ -194,6 +195,24 @@ export const projectsService = {
         ...(patch.tasksTotal !== undefined ? { tasksTotal: patch.tasksTotal } : {}),
       },
     });
+
+    // Send email if status changed
+    if (patch.status && patch.status !== fromDbStatus(existing.status)) {
+      // Get team members for the project
+      const teamMembers = await prisma.teamMember.findMany({
+        where: { department: existing.team?.[0] || "All" }, // Simple match, can be improved
+        select: { email: true, name: true },
+        take: 10, // Limit to avoid too many emails
+      });
+
+      if (teamMembers.length > 0) {
+        sendProjectUpdateEmail({
+          name: project.name,
+          status: patch.status,
+          teamMembers,
+        }).catch(() => {});
+      }
+    }
 
     return mapProject(project);
   },

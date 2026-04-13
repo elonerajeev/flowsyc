@@ -14,6 +14,10 @@ import { useInvoices, crmKeys } from "@/hooks/use-crm-data";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { crmService } from "@/services/crm";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
+import { cn } from "@/lib/utils";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -26,12 +30,16 @@ export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(4);
   const PAGE_SIZE = 4;
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("invoices"),
+        successMessage: getRefreshSuccessMessage("invoices"),
+      }
+    );
   };
 
   const canEdit = role === "admin" || role === "manager";
@@ -64,24 +72,7 @@ export default function InvoicesPage() {
   }, [invoices]);
 
   const handleExportCSV = () => {
-    if (!invoices.length) return;
-    const headers = ["Invoice ID", "Client", "Amount", "Date", "Due", "Status"];
-    const rows = invoices.map(inv => [
-      inv.id,
-      inv.client,
-      inv.amount,
-      inv.date,
-      inv.due || "-",
-      inv.status,
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(r => r.map(v => String(v).replace(/,/g, "")).join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `crm_invoices_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
+    window.open("/api/system/export/invoices/csv", "_blank");
     document.body.removeChild(link);
     toast.success("Invoice CSV export started");
   };
@@ -103,11 +94,11 @@ export default function InvoicesPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.section variants={item} className="rounded-[2rem] border border-border/70 bg-[linear-gradient(135deg,hsl(var(--card)_/_0.98),hsl(var(--card)_/_0.84))] p-8 shadow-card">
+      <motion.section variants={item} className={cn("border border-border/70 bg-card shadow-card", RADIUS.xl, SPACING.card)}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
             <h1 className="font-display text-3xl font-semibold text-foreground">Finance operations with cleaner visibility.</h1>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            <p className={cn("max-w-2xl text-muted-foreground", TEXT.bodyRelaxed)}>
               Billing is structured to become a real frontend shell for finance APIs later, with searchable invoice rows and status-safe presentation now.
             </p>
           </div>
@@ -117,11 +108,11 @@ export default function InvoicesPage() {
                 <Button
                   variant="outline"
                   onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                  disabled={isRefreshing}
+                  className={cn("flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button)}
                 >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh Billing"}
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                  Refresh Billing
                 </Button>
               </motion.div>
 
@@ -130,21 +121,17 @@ export default function InvoicesPage() {
                   <Button
                     variant="outline"
                     onClick={handleExportCSV}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                    className={cn("flex items-center gap-2 border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button)}
                   >
                     <Download className="h-4 w-4 text-primary" />
                     Export CSV
                   </Button>
                 </motion.div>
               )}
-              <button
-                type="button"
-                onClick={openQuickCreate}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
-              >
+              <Button onClick={openQuickCreate} className={cn("inline-flex items-center gap-2 font-semibold", RADIUS.lg, SPACING.button)}>
                 <Plus className="h-4 w-4" />
                 Invoice Draft
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -152,11 +139,11 @@ export default function InvoicesPage() {
                 <Button
                   variant="outline"
                   onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
+                  disabled={isRefreshing}
+                  className={cn("flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button)}
                 >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh Billing"}
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                  Refresh Billing
                 </Button>
               </motion.div>
 
@@ -165,14 +152,14 @@ export default function InvoicesPage() {
                   <Button
                     variant="outline"
                     onClick={handleExportCSV}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                    className={cn("flex items-center gap-2 border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button)}
                   >
                     <Download className="h-4 w-4 text-primary" />
                     Export CSV
                   </Button>
                 </motion.div>
               )}
-              <div className="inline-flex items-center rounded-2xl border border-border/70 bg-secondary/30 px-5 py-3 text-sm font-semibold text-muted-foreground">
+              <div className={cn("inline-flex items-center border border-border/70 bg-secondary/30 font-semibold text-muted-foreground", RADIUS.lg, SPACING.button)}>
                 Read only
               </div>
             </div>
@@ -185,16 +172,16 @@ export default function InvoicesPage() {
             { label: "Pending", value: String(summary.pending) },
             { label: "Rejected", value: String(summary.rejected) },
           ].map((card) => (
-            <div key={card.label} className="rounded-[1.5rem] border border-border/70 bg-secondary/28 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{card.label}</p>
+            <div key={card.label} className={cn("border border-border/70 bg-secondary/28", RADIUS.lg, SPACING.cardCompact)}>
+              <p className={cn("text-muted-foreground", TEXT.eyebrow)}>{card.label}</p>
               <p className="mt-2 font-display text-2xl font-semibold text-foreground">{card.value}</p>
             </div>
           ))}
         </div>
       </motion.section>
 
-      <motion.section variants={item} className="rounded-[1.75rem] border border-border/70 bg-card/88 shadow-card backdrop-blur-xl">
-        <div className="border-b border-border/70 p-5">
+      <motion.section variants={item} className={cn("border border-border/70 bg-card shadow-card backdrop-blur-xl", RADIUS.xl)}>
+        <div className={cn("border-b border-border/70", SPACING.cardCompact)}>
           <div className="relative max-w-md">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -205,13 +192,13 @@ export default function InvoicesPage() {
             />
           </div>
         </div>
-        <div className="relative overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/80 p-4">
+        <div className={cn("relative overflow-hidden border border-border/70 bg-card/80", RADIUS.lg, SPACING.inset)}>
           <div className="overflow-x-auto" style={{ touchAction: "pan-y" }}>
             <table className="w-full min-w-[760px]">
             <thead className="bg-secondary/24">
               <tr>
                 {["Invoice", "Client", "Amount", "Issued", "Due", "Status", "Action"].map((heading) => (
-                  <th key={heading} className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <th key={heading} className={cn("px-6 py-4 text-left font-semibold text-muted-foreground", TEXT.eyebrow)}>
                     {heading}
                   </th>
                 ))}
@@ -221,10 +208,10 @@ export default function InvoicesPage() {
               {filteredInvoices.length > 0 ? (
                 filteredInvoices.slice(0, visibleCount).map((invoice) => (
                   <tr key={invoice.id} className="border-t border-border/70 transition hover:bg-secondary/18">
-                    <td className="px-6 py-4 text-sm font-semibold text-primary">{invoice.id}</td>
-                    <td className="px-6 py-4 text-sm text-foreground">{invoice.client}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-foreground"><PrivacyValue value={invoice.amount} /></td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.date}</td>
+                    <td className={cn("py-4 text-sm font-semibold text-primary", TEXT.body)}>{invoice.id}</td>
+                    <td className={cn("px-6 py-4 text-sm text-foreground", TEXT.body)}>{invoice.client}</td>
+                    <td className={cn("px-6 py-4 text-sm font-semibold text-foreground", TEXT.body)}><PrivacyValue value={invoice.amount} /></td>
+                    <td className={cn("px-6 py-4 text-sm text-muted-foreground", TEXT.body)}>{invoice.date}</td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.due}</td>
                     <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
                     <td className="px-6 py-4">

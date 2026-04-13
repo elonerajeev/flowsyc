@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
+import { RealtimeProvider } from "@/contexts/RealtimeContext";
 import AppLayout from "@/components/layout/AppLayout";
 import RouteAccessGuard from "@/components/layout/RouteAccessGuard";
 import PageLoader from "@/components/shared/PageLoader";
@@ -25,6 +26,8 @@ const TeamPage = lazy(() => import("@/pages/TeamPage"));
 const TeamsPage = lazy(() => import("@/pages/TeamsPage"));
 const EmployeesPage = lazy(() => import("@/pages/TeamPage"));
 const ClientsPage = lazy(() => import("@/pages/ClientsPage"));
+const ContactsPage = lazy(() => import("@/pages/ContactsPage"));
+const LeadsPage = lazy(() => import("@/pages/LeadsPage"));
 const SalesPage = lazy(() => import("@/pages/SalesPage"));
 const AttendancePage = lazy(() => import("@/pages/AttendancePage"));
 const TasksPage = lazy(() => import("@/pages/TasksPage"));
@@ -66,15 +69,16 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ThemeProvider>
-          <WorkspaceProvider>
-            <NotificationProvider>
-            <TooltipProvider>
-              <AppErrorBoundary>
-                <Toaster />
-                <Sonner />
-                <NetworkErrorBridge />
-                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <Routes>
+          <RealtimeProvider>
+            <WorkspaceProvider>
+              <NotificationProvider>
+              <TooltipProvider>
+                <AppErrorBoundary>
+                  <Toaster />
+                  <Sonner />
+                  <NetworkErrorBridge />
+                  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                  <Routes>
                   <Route
                     path="/login"
                     element={
@@ -120,6 +124,8 @@ const App = () => {
                               <Route path="/workspace/notes" element={<RouteAccessGuard><NotesPage /></RouteAccessGuard>} />
 
                               <Route path="/sales/clients" element={<RouteAccessGuard><ClientsPage /></RouteAccessGuard>} />
+                              <Route path="/sales/contacts" element={<RouteAccessGuard><ContactsPage /></RouteAccessGuard>} />
+                              <Route path="/sales/leads" element={<RouteAccessGuard><LeadsPage /></RouteAccessGuard>} />
                               <Route path="/sales/pipelines" element={<RouteAccessGuard><SalesPage /></RouteAccessGuard>} />
 
                               <Route path="/finance/invoices" element={<RouteAccessGuard><InvoicesPage /></RouteAccessGuard>} />
@@ -148,7 +154,7 @@ const App = () => {
                               <Route path="/members" element={<Navigate to="/people/members" replace />} />
                               <Route path="/employees" element={<Navigate to="/people/members" replace />} />
                               <Route path="/clients" element={<Navigate to="/sales/clients" replace />} />
-                              <Route path="/leads" element={<Navigate to="/sales/pipelines" replace />} />
+                               <Route path="/leads" element={<Navigate to="/sales/leads" replace />} />
                               <Route path="/deals" element={<Navigate to="/sales/pipelines" replace />} />
                               <Route path="/sales" element={<Navigate to="/sales/pipelines" replace />} />
                               <Route path="/attendance" element={<Navigate to="/people/attendance" replace />} />
@@ -179,12 +185,13 @@ const App = () => {
                       </>
                     }
                   />
-                </Routes>
-              </BrowserRouter>
-            </AppErrorBoundary>
-          </TooltipProvider>
-        </NotificationProvider>
-      </WorkspaceProvider>
+                  </Routes>
+                </BrowserRouter>
+              </AppErrorBoundary>
+            </TooltipProvider>
+          </NotificationProvider>
+        </WorkspaceProvider>
+      </RealtimeProvider>
     </ThemeProvider>
   </AuthProvider>
 </QueryClientProvider>

@@ -3,6 +3,7 @@ import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
 import { getInvoiceClientLabels } from "../utils/access-control";
+import { sendInvoiceSentEmail } from "../utils/email-templates";
 
 type InvoiceRecord = {
   id: string;
@@ -104,6 +105,18 @@ export const invoicesService = {
         updatedAt: new Date(),
       },
     });
+
+    // Send invoice sent email
+    const client = await prisma.client.findFirst({ where: { name: input.client }, select: { email: true } });
+    if (client) {
+      sendInvoiceSentEmail({
+        id: invoice.id,
+        client: invoice.client,
+        amount: invoice.amount,
+        due: invoice.due,
+      }, client.email).catch(() => {});
+    }
+
     return {
       id: invoice.id,
       client: invoice.client,

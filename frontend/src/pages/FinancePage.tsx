@@ -5,22 +5,29 @@ import {
   CreditCard,
   FileText,
   Receipt,
+  ShieldCheck,
   Wallet,
 } from "lucide-react";
 
-import PageLoader from "@/components/shared/PageLoader";
+import { FinanceSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import AdminOnly from "@/components/shared/AdminOnly";
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
-import { useInvoices } from "@/hooks/use-crm-data";
+import { useInvoices, usePayroll } from "@/hooks/use-crm-data";
 import { TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
+import type { PayrollRecord } from "@/types/crm";
 
 function parseAmount(raw: string): number {
   const numeric = Number(String(raw).replace(/[^0-9.]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getCurrentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export default function FinancePage() {
@@ -29,6 +36,12 @@ export default function FinancePage() {
 
 function FinancePageInner() {
   const { data: invoices = [], isLoading, error, refetch } = useInvoices();
+  const {
+    data: payrollRecords = [],
+    isLoading: payrollLoading,
+    error: payrollError,
+    refetch: refetchPayroll,
+  } = usePayroll();
   const [visibleCount, setVisibleCount] = useState(8);
   const PAGE_SIZE = 8;
 
@@ -41,6 +54,40 @@ function FinancePageInner() {
     return { completed, pending, active, totalCollected, totalOutstanding, total: invoices.length };
   }, [invoices]);
 
+  const payrollStats = useMemo(() => {
+    const currentPeriod = getCurrentPeriod();
+    const currentPayroll = payrollRecords.filter((record) => record.period === currentPeriod);
+    const payrollBasis = currentPayroll.length > 0 ? currentPayroll : payrollRecords;
+
+    const totalSpend = payrollBasis.reduce((sum, record) => sum + record.netPay, 0);
+    const paidSpend = payrollBasis
+      .filter((record) => record.status === "paid")
+      .reduce((sum, record) => sum + record.netPay, 0);
+    const pendingSpend = payrollBasis
+      .filter((record) => record.status !== "paid")
+      .reduce((sum, record) => sum + record.netPay, 0);
+
+    const teamSpend = payrollBasis.reduce<Record<string, number>>((acc, record) => {
+      const teamName = record.member?.team?.trim() || "Unassigned";
+      acc[teamName] = (acc[teamName] ?? 0) + record.netPay;
+      return acc;
+    }, {});
+
+    const spendBreakout = Object.entries(teamSpend)
+      .map(([team, amount]) => ({ team, amount }))
+      .sort((left, right) => right.amount - left.amount)
+      .slice(0, 5);
+
+    return {
+      currentPeriod,
+      totalSpend,
+      paidSpend,
+      pendingSpend,
+      payrollCount: payrollBasis.length,
+      spendBreakout,
+    };
+  }, [payrollRecords]);
+
   // Sparkline: last 6 invoice amounts regardless of status
   const revenueSparkline = useMemo(
     () =>
@@ -51,14 +98,14 @@ function FinancePageInner() {
     [invoices],
   );
 
-  if (isLoading) return <PageLoader />;
-  if (error) {
+  if (isLoading || payrollLoading) return <FinanceSkeleton />;
+  if (error || payrollError) {
     return (
       <ErrorFallback
         title="Finance data failed to load"
-        error={error}
-        description="Could not load invoice and payment data. Retry to refresh."
-        onRetry={() => refetch()}
+        error={error ?? payrollError}
+        description="Could not load invoice or payroll data. Retry to refresh."
+        onRetry={() => Promise.all([refetch(), refetchPayroll()])}
         retryLabel="Retry finance"
       />
     );
@@ -162,16 +209,46 @@ function FinancePageInner() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Expenses</p>
-                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Spend breakouts</h2>
+                <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Payroll-backed operating spend</h2>
               </div>
+              <ShieldCheck className="h-5 w-5 text-primary" />
             </div>
-            <div className="mt-4 rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
-              <Calculator className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
-              <p className="text-sm font-semibold text-foreground">No expense records</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Expense tracking will appear here once records are added.
-              </p>
-            </div>
+            {payrollStats.payrollCount > 0 ? (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    { label: "Payroll spend", value: `$${payrollStats.totalSpend.toLocaleString()}`, hint: `${payrollStats.currentPeriod} cycle` },
+                    { label: "Paid out", value: `$${payrollStats.paidSpend.toLocaleString()}`, hint: "Completed salary disbursements" },
+                    { label: "Remaining", value: `$${payrollStats.pendingSpend.toLocaleString()}`, hint: "Pending or overdue payroll" },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
+                      <p className="mt-1 font-display text-xl font-semibold text-foreground">{item.value}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  {payrollStats.spendBreakout.map(({ team, amount }) => (
+                    <div key={team} className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/15 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{team}</p>
+                        <p className="text-xs text-muted-foreground">Live payroll-derived team cost</p>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">${amount.toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
+                <Calculator className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
+                <p className="text-sm font-semibold text-foreground">No payroll spend recorded</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Generate payroll to populate the operating spend view from real salary records.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -214,20 +291,28 @@ function FinancePageInner() {
           <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
             <div className="flex items-center gap-3">
               <Receipt className="h-5 w-5 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Finance policy</p>
+              <p className="text-sm font-semibold text-foreground">Current cost controls</p>
             </div>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              {[
-                "Capture approvals before invoicing so variance reports stay clean.",
-                "Route reimbursements through finance once receipts are approved.",
-                "Flag renewals 60 days ahead so procurement has time to negotiate.",
-              ].map((policy) => (
-                <li key={policy} className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                  <span>{policy}</span>
-                </li>
-              ))}
-            </ul>
+            {payrollRecords.length > 0 ? (
+              <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/20 px-4 py-3">
+                  <span>Payroll records tracked</span>
+                  <span className="font-semibold text-foreground">{payrollRecords.length}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/20 px-4 py-3">
+                  <span>Outstanding billing</span>
+                  <span className="font-semibold text-foreground">${stats.totalOutstanding.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/20 px-4 py-3">
+                  <span>Collections landed</span>
+                  <span className="font-semibold text-foreground">${stats.totalCollected.toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-dashed border-border/60 bg-secondary/10 p-4 text-center">
+                <p className="text-sm text-muted-foreground">Controls become richer once payroll cycles and invoices are recorded.</p>
+              </div>
+            )}
           </div>
         </aside>
       </section>

@@ -1,8 +1,15 @@
+import crypto from "crypto";
 import type { AuthUser, UserRole } from "../config/types";
 
-const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | "role">> = {
+function generateEmployeeId(role: UserRole) {
+  const prefix = role === "client" ? "CLT" : "EMP";
+  const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `${prefix}-${suffix}`;
+}
+
+const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | "role" | "employeeId">> = {
   admin: {
-    employeeId: "EMP-1001",
+    emailVerified: true,
     department: "Operations",
     team: "Platform Ops",
     designation: "Admin Lead",
@@ -20,7 +27,7 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
     location: "Head Office",
   },
   manager: {
-    employeeId: "EMP-2042",
+    emailVerified: true,
     department: "Management",
     team: "Growth Team",
     designation: "Workspace Manager",
@@ -38,7 +45,7 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
     location: "Hybrid",
   },
   employee: {
-    employeeId: "EMP-3187",
+    emailVerified: true,
     department: "Delivery",
     team: "Client Delivery",
     designation: "Product Specialist",
@@ -56,7 +63,7 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
     location: "Remote",
   },
   client: {
-    employeeId: "CLT-4408",
+    emailVerified: true,
     department: "Client Success",
     team: "Account Care",
     designation: "Client Contact",
@@ -76,5 +83,8 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
 };
 
 export function buildProfile(role: UserRole) {
-  return salaryProfiles[role];
+  return {
+    ...salaryProfiles[role],
+    employeeId: generateEmployeeId(role),
+  };
 }

@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus, RefreshCw } from "lucide-react";
+import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus, RefreshCw, MessageSquare, Download } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import ProjectDetailModal from "@/components/crm/ProjectDetailModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useProjects, useTasks, crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { cn } from "@/lib/utils";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { crmService } from "@/services/crm";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { Button } from "@/components/ui/button";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
+import { ProjectsSkeleton } from "@/components/skeletons";
+import type { ProjectRecord } from "@/types/crm";
 
 type ProjectStage = "Discovery" | "Build" | "Review" | "Launch";
 
@@ -46,12 +52,18 @@ export default function ProjectsPage() {
   const queryClient = useQueryClient();
   const [visibleCount, setVisibleCount] = useState(4);
   const [visibleTaskCount, setVisibleTaskCount] = useState(4);
+  const [selectedProjectForModal, setSelectedProjectForModal] = useState<ProjectRecord | null>(null);
+  const [projectDetailOpen, setProjectDetailOpen] = useState(false);
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("projects"),
+        successMessage: getRefreshSuccessMessage("projects"),
+      }
+    );
   };
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const PAGE_SIZE = 4;
@@ -101,7 +113,7 @@ export default function ProjectsPage() {
     [selectedProjectTasks],
   );
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <ProjectsSkeleton />;
   if (projectsError) return (
     <ErrorFallback title="Projects failed to load" error={projectsError} onRetry={() => refetch()} retryLabel="Retry" />
   );
@@ -119,30 +131,44 @@ export default function ProjectsPage() {
             <div className="flex items-center gap-2">
               <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
               <div className="flex items-center gap-2">
+                {(role === "admin" || role === "manager" || role === "employee") && (
+                  <motion.div whileTap={{ scale: 0.94 }}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open("/api/system/export/projects/csv", "_blank")}
+                      className="inline-flex items-center gap-1.5 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
+                    >
+                      <Download className="h-3 w-3 text-primary" />
+                      Export
+                    </Button>
+                  </motion.div>
+                )}
                 <motion.div whileTap={{ scale: 0.94 }}>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={isLoading}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-xl border-border/70 bg-background/50 px-3 text-[11px] font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
-                  >
-                    <RefreshCw className={cn("h-3 w-3 text-primary", isLoading && "animate-spin")} />
-                    {isLoading ? "Refreshing..." : "Refresh"}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      className="inline-flex items-center gap-1.5 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
+                    >
+                      <RefreshCw className={cn("h-3 w-3 text-primary", isRefreshing && "animate-spin")} />
+                      Refresh
                   </Button>
                 </motion.div>
                 {canUseQuickCreate && (
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
                     onClick={() => openQuickCreate("project")}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg active:scale-95"
+                    className="inline-flex items-center gap-1.5 font-semibold"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     New Project
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
-            <p className="max-w-xl text-sm text-muted-foreground">
+            <p className={cn("max-w-xl text-muted-foreground", TEXT.body)}>
               {canViewBudget
                 ? "Track delivery stages, budgets, and progress across all active programs."
                 : "Track the projects assigned to you without exposing portfolio budget details."}
@@ -312,18 +338,31 @@ export default function ProjectsPage() {
                   </div>
                 </div>
                 <div className="border-t border-border/30 px-5 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProjectId(project.id)}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-semibold transition",
-                      selectedProject?.id === project.id
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border/60 bg-secondary/25 text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    View related tasks
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProjectId(project.id)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                        selectedProject?.id === project.id
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-border/60 bg-secondary/25 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      View related tasks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProjectForModal(project);
+                        setProjectDetailOpen(true);
+                      }}
+                      className="rounded-full border border-border/60 bg-secondary/25 px-2 py-1 text-xs font-semibold text-muted-foreground transition hover:text-foreground hover:bg-secondary/50"
+                      title="Add comments"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
               </motion.article>
             );
@@ -406,6 +445,12 @@ export default function ProjectsPage() {
           </div>
         </motion.section>
       )}
+
+      <ProjectDetailModal
+        project={selectedProjectForModal}
+        open={projectDetailOpen}
+        onOpenChange={setProjectDetailOpen}
+      />
     </motion.div>
   );
 }

@@ -21,6 +21,8 @@ import { invoicesService } from "../src/services/invoices.service";
 import { notesService } from "../src/services/notes.service";
 import { conversationSeedRecords, messageSeedRecords } from "../src/data/crm-static";
 
+process.env.DISABLE_EMAIL_DELIVERY = "true";
+
 function assertNonProduction() {
   if (env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
     throw new Error("Never seed in production");
@@ -320,8 +322,8 @@ async function seedPayroll() {
   for (const member of members) {
     await prisma.payroll.create({
       data: {
-        memberId: member.id,
-        name: member.name,
+        memberId: String(member.id),
+        memberName: member.name,
         department: member.department,
         period: "2026-04",
         baseSalary: member.baseSalary,
@@ -335,8 +337,8 @@ async function seedPayroll() {
 
     await prisma.payroll.create({
       data: {
-        memberId: member.id,
-        name: member.name,
+        memberId: String(member.id),
+        memberName: member.name,
         department: member.department,
         period: "2026-03",
         baseSalary: member.baseSalary,

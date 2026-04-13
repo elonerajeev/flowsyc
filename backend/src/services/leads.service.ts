@@ -47,6 +47,11 @@ type AccessScope = {
 } | null | undefined;
 
 function mapLead(lead: any): LeadRecord {
+  // Map database status to frontend status
+  let status: any = lead.status;
+  if (status === "closed_won") status = "won";
+  if (status === "closed_lost") status = "lost";
+
   return {
     id: lead.id,
     firstName: lead.firstName,
@@ -56,7 +61,7 @@ function mapLead(lead: any): LeadRecord {
     company: lead.company,
     jobTitle: lead.jobTitle,
     source: lead.source,
-    status: lead.status,
+    status,
     score: lead.score,
     assignedTo: lead.assignedTo,
     notes: lead.notes,
@@ -78,36 +83,6 @@ export const leadsService = {
     }
 
     try {
-      const count = await prisma.lead.count({ where: { deletedAt: null } });
-      
-      // Auto-seed if empty (Phase 1 Wow factor)
-      if (count === 0 && (access?.role === "admin" || !access)) {
-        const { leadRecords } = await import("../data/crm-static");
-        await prisma.$transaction(
-          leadRecords.map((l) => {
-            let dbStatus: any = l.status;
-            if (dbStatus === "won") dbStatus = "closed_won";
-            if (dbStatus === "lost") dbStatus = "closed_lost";
-
-            return prisma.lead.create({
-              data: {
-                firstName: l.firstName,
-                lastName: l.lastName,
-                email: l.email,
-                company: l.company || "Unknown",
-                jobTitle: l.jobTitle,
-                source: l.source as any,
-                status: dbStatus,
-                score: l.score,
-                notes: l.notes,
-                createdAt: new Date(l.createdAt),
-                updatedAt: new Date(l.updatedAt),
-              }
-            });
-          })
-        );
-      }
-
       const leads = await prisma.lead.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -115,32 +90,11 @@ export const leadsService = {
 
       return leads.map(mapLead);
     } catch (error: any) {
-      // P2021 = Table does not exist (migration hasn't been run)
-      // P2009 / P2019 / etc = Validation failed
       if (error?.code === "P2021" || error?.message?.includes("relation \"Lead\" does not exist")) {
-        console.warn("Leads table missing. Falling back to mock data for Phase 1 transition.");
-        const { leadRecords } = await import("../data/crm-static");
-        return leadRecords.map((l) => ({
-          ...l,
-          tags: [],
-          convertedAt: null,
-          convertedToClientId: null,
-          createdAt: l.createdAt,
-          updatedAt: l.updatedAt,
-        }));
+        throw new AppError("Lead data is unavailable until the sales schema is migrated", 503, "SERVICE_UNAVAILABLE");
       }
-      
-      console.error("Leads service error:", error.message);
-      // Fallback on ANY error during this transition phase to prevent 500s for the user
-      const { leadRecords } = await import("../data/crm-static");
-      return leadRecords.map((l) => ({
-          ...l,
-          tags: [],
-          convertedAt: null,
-          convertedToClientId: null,
-          createdAt: l.createdAt,
-          updatedAt: l.updatedAt,
-      }));
+
+      throw error;
     }
   },
 
@@ -158,6 +112,11 @@ export const leadsService = {
   },
 
   async create(input: LeadInput) {
+    // Map frontend status to database status
+    let dbStatus: any = input.status ?? "new";
+    if (dbStatus === "won") dbStatus = "closed_won";
+    if (dbStatus === "lost") dbStatus = "closed_lost";
+
     const lead = await prisma.lead.create({
       data: {
         firstName: input.firstName,
@@ -167,7 +126,7 @@ export const leadsService = {
         jobTitle: input.jobTitle,
         phone: input.phone,
         source: input.source ?? "website",
-        status: input.status ?? "new",
+        status: dbStatus,
         score: input.score ?? 50,
         assignedTo: input.assignedTo,
         notes: input.notes,
@@ -181,12 +140,19 @@ export const leadsService = {
 
   async update(id: number, patch: Partial<LeadInput>, access?: AccessScope) {
     const existing = await this.getById(id, access);
+
+    // Map frontend status to database status if provided
+    const updateData: any = { ...patch, updatedAt: new Date() };
+    if (patch.status) {
+      const status = patch.status as string;
+      if (status === "won") updateData.status = "closed_won";
+      else if (status === "lost") updateData.status = "closed_lost";
+      else updateData.status = status;
+    }
+
     const lead = await prisma.lead.update({
       where: { id },
-      data: {
-        ...patch,
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
     return mapLead(lead);
   },

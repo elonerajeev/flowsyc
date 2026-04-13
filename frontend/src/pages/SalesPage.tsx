@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Plus, 
-  Filter, 
   Search, 
   DollarSign, 
   TrendingUp, 
@@ -14,16 +13,17 @@ import {
   Edit,
   Trash2,
   RefreshCw,
+  Target,
+  Handshake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ErrorFallback from "@/components/shared/ErrorFallback";
-import PageLoader from "@/components/shared/PageLoader";
+import { SalesSkeleton } from "@/components/skeletons";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
@@ -31,10 +31,6 @@ import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import AdminOnly from "@/components/shared/AdminOnly";
-import type { Deal, Lead, SalesMetrics, Pipeline } from "@/types/crm";
-
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
-const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 const SalesPage = () => {
   const { role } = useTheme();
@@ -85,10 +81,7 @@ const SalesPage = () => {
   });
 
   const handleRefresh = async () => {
-    const start = Date.now();
     await Promise.all([refetchDeals(), refetchLeads(), refetchMetrics()]);
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
   };
 
   const isRefreshing = dealsLoading || leadsLoading;
@@ -106,29 +99,29 @@ const SalesPage = () => {
     return matchesSearch;
   });
 
-  const getStageColor = (stage: string) => {
-    const colors: Record<string, string> = {
-      "prospecting": "border-border/70 bg-secondary/40 text-muted-foreground",
-      "qualification": "border-primary/20 bg-primary/10 text-primary",
-      "proposal": "border-warning/20 bg-warning/10 text-warning",
-      "negotiation": "border-info/20 bg-info/10 text-info",
-      "closed-won": "border-success/20 bg-success/10 text-success",
-      "closed-lost": "border-destructive/20 bg-destructive/10 text-destructive",
+  const getStageConfig = (stage: string) => {
+    const configs: Record<string, { bg: string; text: string; gradient: string }> = {
+      "prospecting": { bg: "bg-secondary/20", text: "text-muted-foreground", gradient: "from-secondary to-secondary/60" },
+      "qualification": { bg: "bg-primary/10", text: "text-primary", gradient: "from-primary to-primary/60" },
+      "proposal": { bg: "bg-warning/10", text: "text-warning", gradient: "from-warning to-warning/60" },
+      "negotiation": { bg: "bg-info/10", text: "text-info", gradient: "from-info to-info/60" },
+      "closed-won": { bg: "bg-success/10", text: "text-success", gradient: "from-success to-success/60" },
+      "closed-lost": { bg: "bg-destructive/10", text: "text-destructive", gradient: "from-destructive to-destructive/60" },
     };
-    return colors[stage] || "border-border/70 bg-secondary/40 text-muted-foreground";
+    return configs[stage] || { bg: "bg-secondary/20", text: "text-muted-foreground", gradient: "from-secondary to-secondary/60" };
   };
 
-  const getLeadStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      "new": "border-primary/20 bg-primary/10 text-primary",
-      "contacted": "border-warning/20 bg-warning/10 text-warning",
-      "qualified": "border-success/20 bg-success/10 text-success",
-      "proposal": "border-info/20 bg-info/10 text-info",
-      "negotiation": "border-accent/20 bg-accent/10 text-accent",
-      "won": "border-success/20 bg-success/10 text-success",
-      "lost": "border-destructive/20 bg-destructive/10 text-destructive",
+  const getLeadStatusConfig = (status: string) => {
+    const configs: Record<string, { bg: string; text: string; gradient: string }> = {
+      "new": { bg: "bg-primary/10", text: "text-primary", gradient: "from-primary to-primary/60" },
+      "contacted": { bg: "bg-warning/10", text: "text-warning", gradient: "from-warning to-warning/60" },
+      "qualified": { bg: "bg-success/10", text: "text-success", gradient: "from-success to-success/60" },
+      "proposal": { bg: "bg-info/10", text: "text-info", gradient: "from-info to-info/60" },
+      "negotiation": { bg: "bg-accent/10", text: "text-accent", gradient: "from-accent to-accent/60" },
+      "won": { bg: "bg-success/10", text: "text-success", gradient: "from-success to-success/60" },
+      "lost": { bg: "bg-destructive/10", text: "text-destructive", gradient: "from-destructive to-destructive/60" },
     };
-    return colors[status] || "border-border/70 bg-secondary/40 text-muted-foreground";
+    return configs[status] || { bg: "bg-secondary/20", text: "text-muted-foreground", gradient: "from-secondary to-secondary/60" };
   };
 
   const formatCurrency = (amount: number) => {
@@ -154,364 +147,324 @@ const SalesPage = () => {
     );
   }
 
-  if (dealsLoading || leadsLoading) return <PageLoader />;
+  if (dealsLoading || leadsLoading) return <SalesSkeleton />;
 
   return (
     <motion.div
-      variants={container}
-      initial="hidden"
-      animate="show"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       className="space-y-6"
     >
-      {/* Header */}
-      <motion.section variants={item} className={cn("border border-border/70 bg-card/90", RADIUS.xl, SPACING.card, "shadow-card")}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className={cn("inline-flex items-center gap-2 border border-border/70 bg-secondary/40 font-medium text-muted-foreground", RADIUS.pill, SPACING.buttonCompact, TEXT.eyebrow)}>
-              <DollarSign className="h-3.5 w-3.5 text-primary" />
-              Sales Workspace
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">Sales</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Manage your sales pipeline, track deals, and convert leads into customers.
+      <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
+        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
+        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
+        <div className="absolute -left-20 -bottom-20 h-60 w-60 rounded-full bg-gradient-to-tr from-success/5 to-primary/5 blur-3xl" />
+
+        <div className={cn("relative", SPACING.card)}>
+          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Target className="h-3.5 w-3.5 text-primary" />
+                Sales Workspace
+              </div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">
+                <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Sales</span> Pipeline
+              </h1>
+              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
+                Track deals through stages, manage leads, and monitor your sales performance.
               </p>
             </div>
-          </div>
-          {canUseQuickCreate ? (
-            <div className="flex gap-2">
-              <motion.div whileTap={{ scale: 0.94 }}>
-                <Button 
-                  variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className={cn("inline-flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button, TEXT.body)}
-                >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                  {isRefreshing ? "Refreshing..." : "Refresh Sales"}
-                </Button>
-              </motion.div>
-              <Button 
-                onClick={() => openQuickCreate("lead")}
-                className={cn("inline-flex items-center gap-2 bg-primary font-semibold text-primary-foreground shadow-lg transition hover:bg-primary/90", RADIUS.lg, SPACING.button, TEXT.body)}
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="gap-2"
               >
-                <Plus className="h-4 w-4" />
-                Add Deal
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                Refresh
               </Button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-               <motion.div whileTap={{ scale: 0.94 }}>
-                <Button 
-                  variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className={cn("inline-flex items-center gap-2 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition", RADIUS.lg, SPACING.button, TEXT.body)}
-                >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                  {isRefreshing ? "Refreshing..." : "Refresh Sales"}
+              {canUseQuickCreate ? (
+                <Button size="sm" onClick={() => openQuickCreate("lead")} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Deal
                 </Button>
-              </motion.div>
-              <div className={cn("inline-flex items-center border border-border/70 bg-secondary/30 font-semibold text-muted-foreground", RADIUS.lg, SPACING.button, TEXT.body)}>
-                Read only
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Sales Metrics */}
-        {metrics && (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className={cn("border border-border/70 bg-background/70 p-4", RADIUS.lg, "shadow-sm")}>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Pipeline Value</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {formatCurrency(metrics.pipelineValue)}
-              </p>
-            </div>
-            <div className={cn("border border-border/70 bg-background/70 p-4", RADIUS.lg, "shadow-sm")}>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-info/10 text-info">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Conversion Rate</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {metrics.conversionRate}%
-              </p>
-            </div>
-            <div className={cn("border border-border/70 bg-background/70 p-4", RADIUS.lg, "shadow-sm")}>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-success/10 text-success">
-                <Users className="h-5 w-5" />
-              </div>
-              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Deals Won</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {metrics.dealsWon}
-              </p>
-            </div>
-            <div className={cn("border border-border/70 bg-background/70 p-4", RADIUS.lg, "shadow-sm")}>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-warning/10 text-warning">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <p className="text-muted-foreground text-xs uppercase tracking-[0.16em]">Avg. Sales Cycle</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {metrics.salesCycle} days
-              </p>
-            </div>
-          </div>
-        )}
-      </motion.section>
-
-      {/* Tabs and Filters */}
-      <motion.section variants={item} className={cn("border border-border/70 bg-card/90", RADIUS.xl, SPACING.card, "shadow-card")}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <Button
-              variant={activeTab === "pipeline" ? "default" : "outline"}
-              onClick={() => setActiveTab("pipeline")}
-              className={cn(
-                "rounded-2xl transition-all",
-                activeTab === "pipeline"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "border-border/70 bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
-              )}
-            >
-              Pipeline
-            </Button>
-            <Button
-              variant={activeTab === "leads" ? "default" : "outline"}
-              onClick={() => setActiveTab("leads")}
-              className={cn(
-                "rounded-2xl transition-all",
-                activeTab === "leads"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "border-border/70 bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
-              )}
-            >
-              Leads
-            </Button>
-          </div>
-          
-          <div className="flex gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder={activeTab === "pipeline" ? "Search deals..." : "Search leads..."}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64 rounded-2xl border-border/70 bg-background/60"
-              />
-            </div>
-            {activeTab === "pipeline" && (
-              <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/60">
-                  <SelectValue placeholder="All Stages" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="prospecting">Prospecting</SelectItem>
-                  <SelectItem value="qualification">Qualification</SelectItem>
-                  <SelectItem value="proposal">Proposal</SelectItem>
-                  <SelectItem value="negotiation">Negotiation</SelectItem>
-                  <SelectItem value="closed-won">Closed Won</SelectItem>
-                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        </div>
-
-        {/* Pipeline View */}
-        {activeTab === "pipeline" && (
-          <div className="mt-6">
-            <div className="space-y-4">
-              {filteredDeals.length > 0 ? (
-                <>
-                {filteredDeals.slice(0, visibleDealsCount).map((deal) => (
-                  <Card key={deal.id} className="rounded-[1.5rem] border-border/70 bg-background/70 shadow-card transition hover:border-border">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h3 className="font-display text-lg font-semibold text-foreground">{deal.title}</h3>
-                            <Badge className={cn("border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", getStageColor(deal.stage))}>
-                              {deal.stage.replace("-", " ")}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">{deal.probability}% probability</span>
-                          </div>
-                          {deal.description && (
-                            <p className="text-sm text-muted-foreground mb-3">{deal.description}</p>
-                          )}
-                          <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-                            <div>
-                              <p className={cn(TEXT.eyebrow, "text-muted-foreground")}>Deal Value</p>
-                              <p className="font-semibold text-foreground">{formatCurrency(deal.value)}</p>
-                            </div>
-                            <div>
-                              <p className={cn(TEXT.eyebrow, "text-muted-foreground")}>Expected Close</p>
-                              <p className="font-semibold text-foreground">{new Date(deal.expectedCloseDate).toLocaleDateString()}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {deal.tags?.map(tag => (
-                                <Badge key={tag} variant="outline" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            {canEdit && (
-                            <DropdownMenuItem>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Deal
-                            </DropdownMenuItem>
-                            )}
-                            {canDelete && (
-                            <DropdownMenuItem 
-                              className="text-destructive" 
-                              onClick={() => {
-                                if (window.confirm(`Are you sure you want to remove deal "${deal.title}"?`)) {
-                                  deleteDealMutation.mutate(deal.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Deal
-                            </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                <ShowMoreButton
-                  total={filteredDeals.length}
-                  visible={visibleDealsCount}
-                  pageSize={SALES_PAGE_SIZE}
-                  onShowMore={() => setVisibleDealsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredDeals.length))}
-                  onShowLess={() => setVisibleDealsCount(SALES_PAGE_SIZE)}
-                />
-                </>
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-border/60 bg-secondary/10">
-                  <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                  <p className="text-lg font-medium text-foreground">No deals found</p>
-                  <p className="text-sm text-muted-foreground">Try adjusting your search or filters.</p>
+                <div className="inline-flex h-10 items-center rounded-xl border border-border/60 bg-secondary/40 px-4 text-xs font-medium text-muted-foreground">
+                  Read only
                 </div>
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {metrics && [
+              { label: "Pipeline Value", value: formatCurrency(metrics.pipelineValue), icon: DollarSign, gradient: "from-primary to-primary/60" },
+              { label: "Conversion", value: `${metrics.conversionRate}%`, icon: TrendingUp, gradient: "from-info to-info/60" },
+              { label: "Deals Won", value: String(metrics.dealsWon), icon: Handshake, gradient: "from-success to-success/60" },
+              { label: "Sales Cycle", value: `${metrics.salesCycle}d`, icon: Calendar, gradient: "from-warning to-warning/60" },
+            ].map((stat) => (
+              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
+                <div className="flex items-center gap-2">
+                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
+                    <stat.icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
+                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-2">
+              {["pipeline", "leads"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as "pipeline" | "leads")}
+                  className={cn(
+                    "rounded-xl px-4 py-2 text-sm font-semibold transition-all",
+                    activeTab === tab
+                      ? "bg-gradient-to-r from-primary to-info text-white shadow-md"
+                      : "border border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  )}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder={activeTab === "pipeline" ? "Search deals..." : "Search leads..."}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-10 pl-10 rounded-xl border border-border/40 bg-background/70 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+              {activeTab === "pipeline" && (
+                <select
+                  value={stageFilter}
+                  onChange={(event) => setStageFilter(event.target.value)}
+                  className="h-10 rounded-xl border border-border/40 bg-background/70 px-4 text-sm outline-none transition-colors focus:border-primary/50"
+                >
+                  <option value="all">All Stages</option>
+                  <option value="prospecting">Prospecting</option>
+                  <option value="qualification">Qualification</option>
+                  <option value="proposal">Proposal</option>
+                  <option value="negotiation">Negotiation</option>
+                  <option value="closed-won">Closed Won</option>
+                  <option value="closed-lost">Closed Lost</option>
+                </select>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.section>
+
+      <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+        {activeTab === "pipeline" && (
+          <div className="space-y-4">
+            {filteredDeals.length > 0 ? (
+              <>
+              {filteredDeals.slice(0, visibleDealsCount).map((deal) => {
+                const stageConfig = getStageConfig(deal.stage);
+                return (
+                  <motion.article
+                    key={deal.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn("group relative overflow-hidden rounded-2xl border border-border/60 bg-card p-6 shadow-card transition-all hover:border-border hover:shadow-lg", RADIUS.xl)}
+                  >
+                    <div className={cn("absolute left-0 top-0 h-0.5 w-0 bg-gradient-to-r transition-all duration-300 group-hover:w-full", stageConfig.gradient)} />
+                    
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <h3 className="font-display text-lg font-semibold text-foreground">{deal.title}</h3>
+                          <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold uppercase", stageConfig.bg, stageConfig.text)}>
+                            {deal.stage.replace("-", " ")}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{deal.probability}% probability</span>
+                        </div>
+                        {deal.description && (
+                          <p className="text-sm text-muted-foreground mb-4">{deal.description}</p>
+                        )}
+                        <div className="grid gap-4 text-sm sm:grid-cols-3">
+                          <div className={cn("rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                            <p className={cn("text-muted-foreground", TEXT.meta)}>Deal Value</p>
+                            <p className="mt-1 font-display text-lg font-semibold text-foreground">{formatCurrency(deal.value)}</p>
+                          </div>
+                          <div className={cn("rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                            <p className={cn("text-muted-foreground", TEXT.meta)}>Expected Close</p>
+                            <p className="mt-1 font-semibold text-foreground">{new Date(deal.expectedCloseDate).toLocaleDateString()}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {deal.tags?.map(tag => (
+                              <span key={tag} className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-xs text-muted-foreground">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="rounded-xl">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          {canEdit && (
+                          <DropdownMenuItem>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Deal
+                          </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                          <DropdownMenuItem 
+                            className="text-destructive" 
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to remove deal "${deal.title}"?`)) {
+                                deleteDealMutation.mutate(deal.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Deal
+                          </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </motion.article>
+                );
+              })}
+              <ShowMoreButton
+                total={filteredDeals.length}
+                visible={visibleDealsCount}
+                pageSize={SALES_PAGE_SIZE}
+                onShowMore={() => setVisibleDealsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredDeals.length))}
+                onShowLess={() => setVisibleDealsCount(SALES_PAGE_SIZE)}
+              />
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center rounded-3xl border border-dashed border-border/60 bg-card">
+                <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                <p className="text-lg font-medium text-foreground">No deals found</p>
+                <p className="text-sm text-muted-foreground">Try adjusting your search or filters.</p>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Leads View */}
         {activeTab === "leads" && (
-          <div className="mt-6">
-            <div className="space-y-4">
-              {filteredLeads.length > 0 ? (
-                <>
-                {filteredLeads.slice(0, visibleLeadsCount).map((lead) => (
-                  <Card key={lead.id} className="rounded-[1.5rem] border-border/70 bg-background/70 shadow-card transition hover:border-border">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
+          <div className="space-y-4">
+            {filteredLeads.length > 0 ? (
+              <>
+              {filteredLeads.slice(0, visibleLeadsCount).map((lead) => {
+                const statusConfig = getLeadStatusConfig(lead.status);
+                return (
+                  <motion.article
+                    key={lead.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn("group relative overflow-hidden rounded-2xl border border-border/60 bg-card p-6 shadow-card transition-all hover:border-border hover:shadow-lg", RADIUS.xl)}
+                  >
+                    <div className={cn("absolute left-0 top-0 h-0.5 w-0 bg-gradient-to-r transition-all duration-300 group-hover:w-full", statusConfig.gradient)} />
+                    
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-info/10 font-display text-lg font-bold text-foreground">
+                            {lead.firstName[0]}{lead.lastName[0]}
+                          </div>
+                          <div>
                             <h3 className="font-display text-lg font-semibold text-foreground">
                               {lead.firstName} {lead.lastName}
                             </h3>
-                            <Badge className={cn("border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", getLeadStatusColor(lead.status))}>
-                              {lead.status}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">Score: {lead.score}</span>
+                            <p className="text-sm text-muted-foreground">{lead.jobTitle} at {lead.company}</p>
                           </div>
-                          <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-                            <div>
-                              <p className={cn(TEXT.eyebrow, "text-muted-foreground")}>Company</p>
-                              <p className="font-semibold text-foreground">{lead.company}</p>
-                            </div>
-                            <div>
-                              <p className={cn(TEXT.eyebrow, "text-muted-foreground")}>Role</p>
-                              <p className="font-semibold text-foreground">{lead.jobTitle}</p>
-                            </div>
-                            <div>
-                              <p className={cn(TEXT.eyebrow, "text-muted-foreground")}>Contact</p>
-                              <p className="font-semibold text-foreground">{lead.email}</p>
-                            </div>
+                          <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold uppercase", statusConfig.bg, statusConfig.text)}>
+                            {lead.status}
+                          </span>
+                          <span className="rounded-full bg-secondary/40 px-3 py-1 text-xs font-semibold text-muted-foreground">
+                            Score: {lead.score}
+                          </span>
+                        </div>
+                        <div className="grid gap-4 text-sm sm:grid-cols-2">
+                          <div className={cn("rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                            <p className={cn("text-muted-foreground", TEXT.meta)}>Email</p>
+                            <p className="mt-1 font-semibold text-foreground">{lead.email}</p>
                           </div>
-                          <div className="mt-3">
-                            <Badge variant="outline" className="text-xs">
-                              {lead.source}
-                            </Badge>
+                          <div className={cn("rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                            <p className={cn("text-muted-foreground", TEXT.meta)}>Source</p>
+                            <p className="mt-1 font-semibold text-foreground">{lead.source}</p>
                           </div>
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Lead
-                            </DropdownMenuItem>
-                            {canEdit && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                toast.info("Edit mode coming via Quick Create extension");
-                                openQuickCreate("lead", lead);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Lead
-                            </DropdownMenuItem>
-                            )}
-                            {canDelete && (
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => {
-                                if (window.confirm(`Are you sure you want to remove lead "${lead.firstName} ${lead.lastName}"?`)) {
-                                  deleteLeadMutation.mutate(lead.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Lead
-                            </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                <ShowMoreButton
-                  total={filteredLeads.length}
-                  visible={visibleLeadsCount}
-                  pageSize={SALES_PAGE_SIZE}
-                  onShowMore={() => setVisibleLeadsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredLeads.length))}
-                  onShowLess={() => setVisibleLeadsCount(SALES_PAGE_SIZE)}
-                />
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-border/60 bg-secondary/10">
-                  <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                  <p className="text-lg font-medium text-foreground">No leads found</p>
-                  <p className="text-sm text-muted-foreground">Try adjusting your search.</p>
-                </div>
-              )}
-            </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="rounded-xl">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Lead
+                          </DropdownMenuItem>
+                          {canEdit && (
+                          <DropdownMenuItem onClick={() => openQuickCreate("lead", lead)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Lead
+                          </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to remove lead "${lead.firstName} ${lead.lastName}"?`)) {
+                                deleteLeadMutation.mutate(lead.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Lead
+                          </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </motion.article>
+                );
+              })}
+              <ShowMoreButton
+                total={filteredLeads.length}
+                visible={visibleLeadsCount}
+                pageSize={SALES_PAGE_SIZE}
+                onShowMore={() => setVisibleLeadsCount(v => Math.min(v + SALES_PAGE_SIZE, filteredLeads.length))}
+                onShowLess={() => setVisibleLeadsCount(SALES_PAGE_SIZE)}
+              />
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center rounded-3xl border border-dashed border-border/60 bg-card">
+                <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                <p className="text-lg font-medium text-foreground">No leads found</p>
+                <p className="text-sm text-muted-foreground">Try adjusting your search.</p>
+              </div>
+            )}
           </div>
         )}
       </motion.section>

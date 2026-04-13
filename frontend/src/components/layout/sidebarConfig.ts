@@ -90,6 +90,8 @@ export const sidebarSections: SidebarSection[] = [
     icon: BadgeDollarSign,
     items: [
       { to: "/sales/clients", icon: UserCheck, label: "Clients", roles: ["admin", "manager", "client"] },
+      { to: "/sales/contacts", icon: Users, label: "Contacts", roles: ["admin", "manager", "employee"] },
+      { to: "/sales/leads", icon: CirclePlus, label: "Leads", roles: ["admin", "manager", "employee"] },
       { to: "/sales/pipelines", icon: PieChart, label: "Pipelines", roles: ["admin", "manager", "employee"] },
     ],
   },

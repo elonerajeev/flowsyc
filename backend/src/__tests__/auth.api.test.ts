@@ -112,6 +112,10 @@ const mockPrisma = {
       return record;
     }),
   },
+  auditLog: {
+    create: jest.fn(async () => {}),
+  },
+  $transaction: jest.fn(async (fn: (...args: any[]) => any) => fn(mockPrisma)),
 };
 
 jest.mock("../config/prisma", () => ({

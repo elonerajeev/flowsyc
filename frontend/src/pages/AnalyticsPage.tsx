@@ -1,22 +1,36 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import {
+  TrendingUp, Users, DollarSign, FolderOpen, RefreshCw,
+  Activity, BarChart2, Target, Briefcase, HeartPulse, ShieldCheck,
+} from "lucide-react";
 import { motion } from "framer-motion";
-import { TrendingUp, Users, DollarSign, FolderOpen, BarChart2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleSparkline } from "@/components/shared/SimpleCharts";
-import PageLoader from "@/components/shared/PageLoader";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell,
+  BarChart, Bar,
+} from "recharts";
+
+import { AnalyticsSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import AdminOnly from "@/components/shared/AdminOnly";
-import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useClients, useProjects, useInvoices, useTeamMembers } from "@/hooks/use-crm-data";
+import { crmService } from "@/services/crm";
+import { TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
 
-function parseAmount(raw: string): number {
-  const numeric = Number(String(raw).replace(/[^0-9.]/g, ""));
-  return Number.isFinite(numeric) ? numeric : 0;
+const PIE_COLORS = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.3 } } };
+const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } };
+
+function parseAmount(raw: unknown): number {
+  const n = Number(String(raw ?? "0").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
 }
-
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
-const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function AnalyticsPage() {
   return <AdminOnly><AnalyticsPageInner /></AdminOnly>;
@@ -24,221 +38,320 @@ export default function AnalyticsPage() {
 
 function AnalyticsPageInner() {
   const { data: clients = [], isLoading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
-  const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
-  const { data: teamMembers = [], isLoading: teamLoading } = useTeamMembers();
-  const [visibleClientCount, setVisibleClientCount] = useState(4);
-  const ANALYTICS_PAGE_SIZE = 4;
+  const { data: projects = [], isLoading: projectsLoading, refetch: refetchProjects } = useProjects();
+  const { data: invoices = [], isLoading: invoicesLoading, refetch: refetchInvoices } = useInvoices();
+  const { data: teamMembers = [], isLoading: teamLoading, refetch: refetchTeam } = useTeamMembers();
+
+  const { data: analytics, isLoading: analyticsLoading, refetch: refetchAnalytics } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: crmService.getAnalytics,
+  });
+
+  const { refresh, isRefreshing } = useRefresh();
+
+  const isLoading = clientsLoading || projectsLoading || invoicesLoading || teamLoading || analyticsLoading;
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await Promise.all([refetchClients()]);
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => Promise.all([refetchClients(), refetchProjects(), refetchInvoices(), refetchTeam(), refetchAnalytics()]),
+      {
+        message: getRefreshMessage("analytics"),
+        successMessage: getRefreshSuccessMessage("analytics"),
+      }
+    );
   };
 
-  const isRefreshing = clientsLoading || projectsLoading || invoicesLoading || teamLoading;
-
-  const isLoading = clientsLoading || projectsLoading || invoicesLoading || teamLoading;
-
-  const stats = useMemo(() => {
-    const activeClients = clients.filter((c) => c.status === "active").length;
-    const activeProjects = projects.filter((p) => p.status === "active").length;
-    const totalInvoiceValue = invoices.reduce((sum, inv) => sum + parseAmount(inv.amount), 0);
-    const teamSize = teamMembers.length;
-    return { activeClients, activeProjects, totalInvoiceValue, teamSize };
+  // ── Derived stats from local data (always available) ──
+  const kpis = useMemo(() => {
+    const totalRevenue = invoices.reduce((s, inv) => s + parseAmount(inv.amount), 0);
+    const collected = invoices.filter(i => i.status === "completed").reduce((s, i) => s + parseAmount(i.amount), 0);
+    const outstanding = invoices.filter(i => i.status === "pending").reduce((s, i) => s + parseAmount(i.amount), 0);
+    const activeClients = clients.filter(c => c.status === "active").length;
+    const activeProjects = projects.filter(p => p.status === "active" || p.status === "in-progress").length;
+    const avgHealth = clients.length
+      ? Math.round(clients.reduce((s, c) => s + (c.healthScore ?? 0), 0) / clients.length)
+      : 0;
+    const present = teamMembers.filter(m => m.attendance === "present").length;
+    const attendanceRate = teamMembers.length ? Math.round((present / teamMembers.length) * 100) : 0;
+    return { totalRevenue, collected, outstanding, activeClients, activeProjects, avgHealth, attendanceRate };
   }, [clients, projects, invoices, teamMembers]);
 
-  // Sparklines from real data
-  const invoiceSparkline = useMemo(
-    () => invoices.slice(-8).map((inv) => parseAmount(inv.amount)),
-    [invoices],
-  );
+  // ── Project status breakdown ──
+  const projectStatusData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    projects.forEach(p => { counts[p.status] = (counts[p.status] ?? 0) + 1; });
+    return Object.entries(counts).map(([status, count]) => ({ status, count }));
+  }, [projects]);
 
-  const healthSparkline = useMemo(
-    () =>
-      clients
-        .filter((c) => c.status === "active")
-        .slice(-8)
-        .map((c) => c.healthScore),
-    [clients],
-  );
-
-  // Top clients by health score
+  // ── Top clients by health score ──
   const topClients = useMemo(
-    () =>
-      [...clients]
-        .sort((a, b) => b.healthScore - a.healthScore),
+    () => [...clients].sort((a, b) => b.healthScore - a.healthScore).slice(0, 6),
     [clients],
   );
 
-  if (isLoading) return <PageLoader />;
+  // ── Invoice status breakdown ──
+  const invoiceStatusData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    invoices.forEach(i => { counts[i.status] = (counts[i.status] ?? 0) + 1; });
+    return Object.entries(counts).map(([status, count]) => ({ name: status, value: count }));
+  }, [invoices]);
+
+  if (isLoading) return <AnalyticsSkeleton />;
 
   if (clientsError) {
     return (
       <ErrorFallback
-        title="Analytics data failed to load"
+        title="Analytics failed to load"
         error={clientsError}
-        onRetry={() => refetchClients()}
+        onRetry={handleRefresh}
         retryLabel="Retry"
       />
     );
   }
 
-  const kpiCards = [
-    {
-      label: "Active Clients",
-      value: stats.activeClients > 0 ? String(stats.activeClients) : "0",
-      sub: `${clients.length} total`,
-      icon: Users,
-    },
-    {
-      label: "Active Projects",
-      value: stats.activeProjects > 0 ? String(stats.activeProjects) : "0",
-      sub: `${projects.length} total`,
-      icon: FolderOpen,
-    },
-    {
-      label: "Invoice Value",
-      value: stats.totalInvoiceValue > 0 ? `$${stats.totalInvoiceValue.toLocaleString()}` : "$0",
-      sub: `${invoices.length} invoice${invoices.length !== 1 ? "s" : ""}`,
-      icon: DollarSign,
-    },
-    {
-      label: "Team Size",
-      value: stats.teamSize > 0 ? String(stats.teamSize) : "0",
-      sub: "active members",
-      icon: TrendingUp,
-    },
-  ];
+  const monthlyTrends = analytics?.monthlyTrends ?? [];
+  const departmentStats = analytics?.departmentStats ?? [];
+  const revenueByTier = Object.entries(analytics?.revenueByTier ?? {}).map(([name, value]) => ({ name, value }));
+  const conversionRate = analytics?.conversionRate ?? 0;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.div variants={item}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-display font-bold text-foreground">Analytics</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Live snapshot of your business performance</p>
+
+      {/* ── Header ── */}
+      <motion.section variants={item} className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-5">
+          <div className={cn("inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground", TEXT.eyebrow)}>
+            <BarChart2 className="h-3.5 w-3.5 text-primary" />
+            Business Intelligence
           </div>
-          <motion.div whileTap={{ scale: 0.94 }}>
-            <Button
-              variant="outline"
+
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1">
+              <h1 className="font-display text-3xl font-semibold text-foreground">Analytics</h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                Live snapshot of revenue, clients, projects, and team performance.
+              </p>
+            </div>
+            <button
+              type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+              className="inline-flex h-11 w-fit items-center gap-2 rounded-2xl border border-border/70 bg-background/50 px-4 text-sm font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary disabled:opacity-50"
             >
               <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-              {isRefreshing ? "Refreshing..." : "Refresh Stats"}
-            </Button>
-          </motion.div>
-        </div>
-      </motion.div>
+              "Refresh"
+            </button>
+          </div>
 
-      {/* KPI Cards */}
-      <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((m) => (
-          <div key={m.label} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-5 shadow-card card-hover">
-            <div className="flex items-start justify-between">
-              <m.icon className="h-5 w-5 text-primary" />
-            </div>
-            <p className="text-2xl font-display font-bold text-foreground mt-3">{m.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{m.label}</p>
-            <p className="text-xs text-muted-foreground/60 mt-0.5">{m.sub}</p>
+          {/* KPI stat cards */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Total Revenue",    value: `$${kpis.totalRevenue.toLocaleString()}`,  sub: `$${kpis.collected.toLocaleString()} collected`,   icon: DollarSign },
+              { label: "Active Clients",   value: String(kpis.activeClients),                sub: `${clients.length} total accounts`,                icon: Users },
+              { label: "Active Projects",  value: String(kpis.activeProjects),               sub: `${projects.length} total projects`,               icon: FolderOpen },
+              { label: "Attendance Rate",  value: `${kpis.attendanceRate}%`,                 sub: `${teamMembers.length} team members`,              icon: Activity },
+            ].map(s => (
+              <div key={s.label} className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <s.icon className="h-5 w-5" />
+                </div>
+                <p className={cn("uppercase tracking-[0.14em] text-muted-foreground", TEXT.eyebrow)}>{s.label}</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-foreground">{s.value}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ── Secondary KPIs ── */}
+      <motion.div variants={item} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Outstanding",       value: `$${kpis.outstanding.toLocaleString()}`, icon: DollarSign,  tone: "bg-warning/10 border-warning/20 text-warning" },
+          { label: "Avg Client Health", value: `${kpis.avgHealth}%`,                    icon: HeartPulse,  tone: "bg-success/10 border-success/20 text-success" },
+          { label: "Hiring Conversion", value: `${conversionRate.toFixed(1)}%`,          icon: Target,      tone: "bg-primary/10 border-primary/20 text-primary" },
+          { label: "Total Invoices",    value: String(invoices.length),                  icon: Briefcase,   tone: "bg-info/10 border-info/20 text-info" },
+        ].map(s => (
+          <div key={s.label} className={cn("rounded-[1.25rem] border p-4", s.tone)}>
+            <s.icon className="h-5 w-5 mb-2" />
+            <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
+            <p className="text-2xl font-bold">{s.value}</p>
           </div>
         ))}
       </motion.div>
 
-      {/* Charts */}
-      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-3xl border border-border/70 bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-display text-lg font-semibold text-foreground">Invoice Value Trend</h3>
-              <p className="text-sm text-muted-foreground">Most recent invoices by amount</p>
-            </div>
-            <span className="rounded-full border border-border/60 bg-secondary/25 px-3 py-1 text-xs font-medium text-muted-foreground">
-              USD
-            </span>
+      {/* ── Revenue & Growth Trend ── */}
+      {monthlyTrends.length > 0 && (
+        <motion.section variants={item} className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+          <h2 className="mb-5 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Revenue & Growth Trends
+          </h2>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyTrends}>
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-10" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Line yAxisId="left"  type="monotone" dataKey="revenue"    stroke="#2563eb" strokeWidth={2} dot={false} name="Revenue ($)" />
+                <Line yAxisId="right" type="monotone" dataKey="clients"    stroke="#10b981" strokeWidth={2} dot={false} name="New Clients" />
+                <Line yAxisId="right" type="monotone" dataKey="projects"   stroke="#f59e0b" strokeWidth={2} dot={false} name="New Projects" />
+                <Line yAxisId="right" type="monotone" dataKey="candidates" stroke="#8b5cf6" strokeWidth={2} dot={false} name="Candidates" />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
-          {invoiceSparkline.length > 0 ? (
-            <SimpleSparkline data={invoiceSparkline} className="mt-2" />
-          ) : (
-            <div className="mt-4 rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
-              <BarChart2 className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">No invoice data yet</p>
-            </div>
-          )}
-        </div>
+        </motion.section>
+      )}
 
-        <div className="rounded-3xl border border-border/70 bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-display text-lg font-semibold text-foreground">Client Health Scores</h3>
-              <p className="text-sm text-muted-foreground">Active clients sorted by health score</p>
+      {/* ── Two-column: Department + Revenue by Tier ── */}
+      <motion.div variants={item} className="grid gap-5 lg:grid-cols-2">
+
+        {/* Department performance */}
+        {departmentStats.length > 0 && (
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+            <h2 className="mb-5 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+              <Users className="h-5 w-5 text-primary" />
+              Team by Department
+            </h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={departmentStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-10" />
+                  <XAxis dataKey="department" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="count"   fill="#2563eb" name="Total" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="present" fill="#10b981" name="Present" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <span className="rounded-full border border-border/60 bg-secondary/25 px-3 py-1 text-xs font-medium text-muted-foreground">
-              Active
-            </span>
-          </div>
-          {healthSparkline.length > 0 ? (
-            <SimpleSparkline
-              data={healthSparkline}
-              stroke="hsl(var(--accent))"
-              fill="hsl(var(--accent) / 0.3)"
-              accentFill="hsl(var(--accent) / 0.15)"
-              className="mt-2"
-            />
-          ) : (
-            <div className="mt-4 rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
-              <BarChart2 className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">No active clients yet</p>
+          </section>
+        )}
+
+        {/* Revenue by client tier */}
+        {revenueByTier.length > 0 && (
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+            <h2 className="mb-5 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Revenue by Client Tier
+            </h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={revenueByTier}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {revenueByTier.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-          )}
-        </div>
+          </section>
+        )}
       </motion.div>
 
-      {/* Top Clients */}
-      <motion.div variants={item} className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-card">
-        <h3 className="font-display font-semibold text-foreground mb-4">Top Clients by Health Score</h3>
-        {topClients.length > 0 ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {topClients.slice(0, visibleClientCount).map((client, i) => (
-                <div key={client.id} className="rounded-xl border border-border bg-secondary/30 p-4 text-center card-hover">
-                  <div className="relative mx-auto w-fit mb-3">
-                    <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-lg font-bold text-foreground">
-                      {client.avatar || client.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    {i === 0 && (
-                      <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-accent/20 border-2 border-accent flex items-center justify-center text-[10px] font-bold text-accent">
-                        1
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-semibold text-sm text-foreground">{client.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{client.industry} · {client.tier}</p>
-                  <p className="text-xs text-success font-medium mt-1">Health {client.healthScore}%</p>
+      {/* ── Two-column: Invoice status + Project status ── */}
+      <motion.div variants={item} className="grid gap-5 lg:grid-cols-2">
+
+        {/* Invoice breakdown */}
+        {invoiceStatusData.length > 0 && (
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Invoice Status
+            </h2>
+            <div className="space-y-3">
+              {invoiceStatusData.map(({ name, value }) => (
+                <div key={name} className="flex items-center justify-between rounded-xl border border-border/70 bg-secondary/22 px-4 py-3">
+                  <span className="text-sm font-medium capitalize text-foreground">{name}</span>
+                  <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary">
+                    {value} invoice{value !== 1 ? "s" : ""}
+                  </span>
                 </div>
               ))}
             </div>
-            <ShowMoreButton
-              total={topClients.length}
-              visible={visibleClientCount}
-              pageSize={ANALYTICS_PAGE_SIZE}
-              onShowMore={() => setVisibleClientCount(v => Math.min(v + ANALYTICS_PAGE_SIZE, topClients.length))}
-              onShowLess={() => setVisibleClientCount(ANALYTICS_PAGE_SIZE)}
-            />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-8 text-center">
-            <Users className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
-            <p className="text-sm font-semibold text-foreground">No clients yet</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Add clients to see analytics data here.
-            </p>
-          </div>
+          </section>
+        )}
+
+        {/* Project breakdown */}
+        {projectStatusData.length > 0 && (
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+              <FolderOpen className="h-5 w-5 text-primary" />
+              Project Status
+            </h2>
+            <div className="space-y-3">
+              {projectStatusData.map(({ status, count }) => {
+                const total = projects.length;
+                const pct = total ? Math.round((count / total) * 100) : 0;
+                return (
+                  <div key={status}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium capitalize text-foreground">{status.replace("-", " ")}</span>
+                      <span className="text-muted-foreground">{count} / {total}</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
       </motion.div>
+
+      {/* ── Top clients by health score ── */}
+      {topClients.length > 0 && (
+        <motion.section variants={item} className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+          <h2 className="mb-5 flex items-center gap-2 font-display text-lg font-semibold text-foreground">
+            <HeartPulse className="h-5 w-5 text-primary" />
+            Top Clients by Health Score
+          </h2>
+          <div className="space-y-2">
+            {topClients.map((client, i) => (
+              <div key={client.id} className="flex items-center gap-4 rounded-xl border border-border/70 bg-secondary/22 px-4 py-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-medium text-foreground truncate">{client.name}</p>
+                    <span className="ml-3 shrink-0 text-sm font-bold text-primary">{client.healthScore}%</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60 transition-all"
+                      style={{ width: `${client.healthScore}%` }}
+                    />
+                  </div>
+                </div>
+                <span className={cn(
+                  "shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
+                  client.status === "active" ? "border-success/20 bg-success/10 text-success" : "border-border/60 bg-secondary/30 text-muted-foreground",
+                )}>
+                  {client.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
     </motion.div>
   );
 }

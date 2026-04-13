@@ -8,7 +8,7 @@ import {
   Search,
   Pin,
   ShieldCheck,
-  Sparkles,
+  Users,
   Edit2,
   Trash2,
   RefreshCw,
@@ -28,7 +28,10 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useClients, crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
-import { TEXT } from "@/lib/design-tokens";
+import { useRefresh } from "@/hooks/use-refresh";
+import { useExport } from "@/hooks/use-export";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 import { crmService } from "@/services/crm";
 
@@ -38,28 +41,28 @@ export default function ClientsPage() {
   const { data: clients = [], isLoading, error: clientsError, refetch } = useClients();
   const { role } = useTheme();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
+  const canViewCommercialInsights = role === "admin" || role === "manager";
+  const canEdit = role === "admin" || role === "manager";
+  const canDelete = role === "admin" || role === "manager";
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [statusFilter, setStatusFilter] = useState("all");
   const [segment, setSegment] = useState<(typeof segmentOptions)[number]>("all");
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(4);
-  const [visibleActionCount, setVisibleActionCount] = useState(4);
   const PAGE_SIZE = 4;
-  const ACTION_PAGE_SIZE = 4;
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("clients"),
+        successMessage: getRefreshSuccessMessage("clients"),
+      }
+    );
   };
-  const deferredSearch = useDeferredValue(search);
-  
-  const canEdit = role === "admin" || role === "manager";
-  const canDelete = role === "admin";
-  const canViewCommercialInsights = role === "admin" || role === "manager";
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.removeClient(id),
     onSuccess: () => {
@@ -68,6 +71,8 @@ export default function ClientsPage() {
     },
     onError: () => toast.error("Failed to remove client"),
   });
+
+  const { exportData, isExporting, LoadingProgressComponent } = useExport();
 
   const { orderedItems: preferredClients, pinnedIds, togglePin, move } = useListPreferences(
     `crm-clients-preferences-${role}`,
@@ -153,98 +158,99 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-5">
-          <div className={cn("inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground", TEXT.eyebrow)}>
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Client Portfolio
-          </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
+        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
+        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
+        <div className="absolute -left-20 -bottom-20 h-60 w-60 rounded-full bg-gradient-to-tr from-success/5 to-primary/5 blur-3xl" />
 
-          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div className="space-y-1">
-              <h1 className="font-display text-3xl font-semibold text-foreground">Clients</h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                A clean relationship view for account health, ownership, and next actions.
-                {!canViewCommercialInsights ? " Your client view is limited to account-safe details only." : ""}
+        <div className={cn("relative", SPACING.card)}>
+          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Users className="h-3.5 w-3.5 text-primary" />
+                Portfolio
+              </div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">
+                <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Client</span> Accounts
+              </h1>
+              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
+                Track account health, ownership, and next actions across your client portfolio.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <motion.div whileTap={{ scale: 0.94 }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="gap-2"
+              >
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                Refresh
+              </Button>
+              {(role === "admin" || role === "manager") && (
                 <Button
                   variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
+                  size="sm"
+                  onClick={() => exportData("/api/system/export/clients/csv", "clients.csv", {
+                    entityName: "clients",
+                    estimatedTime: "15 seconds"
+                  })}
+                  disabled={isExporting}
+                  className="gap-2"
                 >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh Portfolio"}
+                  <Download className="h-4 w-4" />
+                  {isExporting ? "Exporting..." : "Export"}
                 </Button>
-              </motion.div>
-
-              {(role === "admin" || role === "manager") && (
-                <motion.div whileTap={{ scale: 0.94 }}>
-                  <Button
-                    variant="outline"
-                    onClick={handleExportCSV}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
-                  >
-                    <Download className="h-4 w-4 text-primary" />
-                    Export CSV
-                  </Button>
-                </motion.div>
               )}
-              
               {canUseQuickCreate ? (
-                <button
-                  type="button"
-                  onClick={() => openQuickCreate("client")}
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 px-5 text-sm font-semibold text-white shadow-lg transition"
-                >
+                <Button size="sm" onClick={() => openQuickCreate("client")} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Add Client
-                </button>
+                </Button>
               ) : (
-                <div className="inline-flex h-11 items-center rounded-2xl border border-border bg-secondary px-5 text-sm font-semibold text-muted-foreground">
+                <div className="inline-flex h-10 items-center rounded-xl border border-border/60 bg-secondary/40 px-4 text-xs font-medium text-muted-foreground">
                   Read only
                 </div>
               )}
             </div>
           </div>
-        </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            canViewCommercialInsights
-              ? { label: "Total Accounts", value: String(overview.total), icon: Building2 }
-              : { label: "My Accounts", value: String(overview.total), icon: Building2 },
-            canViewCommercialInsights
-              ? { label: "Enterprise Tier", value: String(overview.enterprise), icon: ShieldCheck }
-              : { label: "Active Accounts", value: String(overview.enterprise), icon: ShieldCheck },
-            canViewCommercialInsights
-              ? { label: "Average Health", value: `${overview.avgHealth}/100`, icon: HeartPulse }
-              : { label: "Pending Updates", value: String(overview.avgHealth), icon: HeartPulse },
-            canViewCommercialInsights
-              ? { label: "Expansion Plays", value: String(overview.expansion), icon: ArrowUpRight }
-              : { label: "Locations", value: String(overview.expansion), icon: MapPin },
-          ].map((item) => (
-            <div key={item.label} className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-5 w-5" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              canViewCommercialInsights
+                ? { label: "Total Accounts", value: String(overview.total), icon: Building2, gradient: "from-primary to-primary/60" }
+                : { label: "My Accounts", value: String(overview.total), icon: Building2, gradient: "from-primary to-primary/60" },
+              canViewCommercialInsights
+                ? { label: "Enterprise Tier", value: String(overview.enterprise), icon: ShieldCheck, gradient: "from-info to-info/60" }
+                : { label: "Active Accounts", value: String(overview.enterprise), icon: ShieldCheck, gradient: "from-info to-info/60" },
+              canViewCommercialInsights
+                ? { label: "Avg Health", value: `${overview.avgHealth}%`, icon: HeartPulse, gradient: "from-success to-success/60" }
+                : { label: "Pending", value: String(overview.avgHealth), icon: HeartPulse, gradient: "from-success to-success/60" },
+              canViewCommercialInsights
+                ? { label: "Expansion", value: String(overview.expansion), icon: ArrowUpRight, gradient: "from-warning to-warning/60" }
+                : { label: "Locations", value: String(overview.expansion), icon: MapPin, gradient: "from-warning to-warning/60" },
+            ].map((stat) => (
+              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
+                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
+                <div className="flex items-center gap-2">
+                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
+                    <stat.icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
+                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
+                  </div>
+                </div>
               </div>
-              <p className={cn("uppercase tracking-[0.14em] text-muted-foreground", TEXT.eyebrow)}>{item.label}</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">{item.value}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
 
-      <section className="rounded-[1.5rem] border border-border/70 bg-card/90 p-4 shadow-card">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 value={search}
@@ -252,14 +258,14 @@ export default function ClientsPage() {
                   const next = event.target.value;
                   startTransition(() => setSearch(next));
                 }}
-                placeholder="Search accounts, industries, or owners"
-                className="h-11 w-full rounded-2xl border border-border/70 bg-background/55 pl-11 pr-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="Search accounts, industries, or owners..."
+                className="h-10 w-full rounded-xl border border-border/40 bg-background/70 pl-10 pr-4 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="h-11 rounded-2xl border border-border/70 bg-background/55 px-4 pr-10 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="h-10 rounded-xl border border-border/40 bg-background/70 px-4 text-sm outline-none transition-colors focus:border-primary/50"
             >
               <option value="all">All statuses</option>
               <option value="active">Active</option>
@@ -267,44 +273,48 @@ export default function ClientsPage() {
               <option value="completed">Completed</option>
             </select>
           </div>
-
-          <div className="flex flex-wrap gap-2">
-            {segmentOptions.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setSegment(option)}
-                className={cn(
-                  "rounded-full px-4 py-2 text-xs font-semibold transition",
-                  segment === option
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border/70 bg-secondary/30 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
         </div>
+      </motion.section>
+
+      <section className="flex flex-wrap gap-2">
+        {segmentOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setSegment(option)}
+            className={cn(
+              "rounded-full px-4 py-2 text-xs font-semibold transition",
+              segment === option
+                ? "bg-gradient-to-r from-primary to-info text-white shadow-md"
+                : "border border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+            )}
+          >
+            {option}
+          </button>
+        ))}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-3">
           {clients.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-8 text-center shadow-card">
-              <Building2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+            <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-card p-8 text-center shadow-card">
+              <div className="absolute left-0 top-0 h-0.5 w-full bg-gradient-to-r from-primary via-info to-success" />
+              <Building2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
               <p className="font-display text-xl font-semibold text-foreground">No clients yet</p>
               <p className="mt-2 text-sm text-muted-foreground">Add your first client to start tracking the portfolio.</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-8 text-center shadow-card">
+            <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-card p-8 text-center shadow-card">
+              <div className="absolute left-0 top-0 h-0.5 w-full bg-gradient-to-r from-primary via-info to-success" />
               <p className="font-display text-xl font-semibold text-foreground">No clients found</p>
               <p className="mt-2 text-sm text-muted-foreground">Try a different search term or clear the filters.</p>
             </div>
           ) : (
             filtered.slice(0, visibleCount).map((client) => (
-              <article
+              <motion.article
                 key={client.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 draggable
                 onDragStart={() => setDraggedClientId(String(client.id))}
                 onDragOver={(event) => event.preventDefault()}
@@ -313,8 +323,13 @@ export default function ClientsPage() {
                   setDraggedClientId(null);
                 }}
                 onDragEnd={() => setDraggedClientId(null)}
-                className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card transition hover:border-border hover:bg-card"
+                className={cn(
+                  "group relative overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all hover:border-border hover:shadow-lg",
+                  pinnedIds.includes(String(client.id)) && "ring-1 ring-primary/20"
+                )}
               >
+                <div className="absolute left-0 top-0 h-0.5 w-0 bg-gradient-to-r from-primary to-info transition-all duration-300 group-hover:w-full" />
+                
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <button
@@ -324,12 +339,12 @@ export default function ClientsPage() {
                         "flex h-8 w-8 items-center justify-center rounded-xl border transition",
                         pinnedIds.includes(String(client.id))
                           ? "border-primary/30 bg-primary/10 text-primary"
-                          : "border-border/70 bg-secondary/30 text-muted-foreground hover:text-foreground",
+                          : "border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground",
                       )}
                     >
                       <Pin className="h-3.5 w-3.5" />
                     </button>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/55 font-display text-lg font-bold text-foreground">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-info/10 font-display text-lg font-bold text-foreground">
                       {client.avatar}
                     </div>
                     <div>
@@ -344,10 +359,7 @@ export default function ClientsPage() {
                     <div className="flex items-center gap-2">
                       {canEdit && (
                         <button
-                          onClick={() => {
-                            toast.info("Edit mode coming via Quick Create extension");
-                            openQuickCreate("client", client);
-                          }}
+                          onClick={() => openQuickCreate("client", client)}
                           className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
                           title="Edit client"
                         >
@@ -387,8 +399,8 @@ export default function ClientsPage() {
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/40">
                       <div
                         className={cn("h-full rounded-full transition-all",
-                          client.healthScore >= 80 ? "bg-success/70" :
-                          client.healthScore >= 60 ? "bg-warning/70" : "bg-destructive/70"
+                          client.healthScore >= 80 ? "bg-gradient-to-r from-success to-success/60" :
+                          client.healthScore >= 60 ? "bg-gradient-to-r from-warning to-warning/60" : "bg-gradient-to-r from-destructive to-destructive/60"
                         )}
                         style={{ width: `${client.healthScore}%` }}
                       />
@@ -397,11 +409,11 @@ export default function ClientsPage() {
                   </div>
                 ) : (
                   <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                    <div className="rounded-xl border border-border/70 bg-secondary/15 px-3 py-2">{client.email}</div>
-                    <div className="rounded-xl border border-border/70 bg-secondary/15 px-3 py-2">{client.phone}</div>
+                    <div className="rounded-lg border border-border/40 bg-secondary/20 px-3 py-2">{client.email}</div>
+                    <div className="rounded-lg border border-border/40 bg-secondary/20 px-3 py-2">{client.phone}</div>
                   </div>
                 )}
-              </article>
+              </motion.article>
             ))
           )}
           <ShowMoreButton
@@ -414,10 +426,16 @@ export default function ClientsPage() {
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card"
+          >
+            <div className="absolute left-0 top-0 h-0.5 w-full bg-gradient-to-r from-primary to-info" />
             <div className="mb-4">
-              <p className={cn("uppercase tracking-[0.14em] text-muted-foreground", TEXT.eyebrow)}>Portfolio Notes</p>
-              <h2 className="mt-1 font-display text-xl font-semibold text-foreground">What matters here</h2>
+              <p className={cn("uppercase tracking-[0.14em] text-muted-foreground", TEXT.eyebrow)}>Insights</p>
+              <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Portfolio Overview</h2>
             </div>
             <div className="space-y-3 text-sm leading-6 text-muted-foreground">
               {canViewCommercialInsights ? (
@@ -434,9 +452,15 @@ export default function ClientsPage() {
                 </>
               )}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="rounded-[1.5rem] border border-border/70 bg-card/90 p-5 shadow-card">
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card"
+          >
+            <div className="absolute left-0 top-0 h-0.5 w-full bg-gradient-to-r from-info to-success" />
             <div className="mb-4">
               <p className={cn("uppercase tracking-[0.14em] text-muted-foreground", TEXT.eyebrow)}>Action Queue</p>
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Top follow-ups</h2>
@@ -444,8 +468,8 @@ export default function ClientsPage() {
             <div className="space-y-3">
               {filtered.length > 0 ? (
                 <>
-                {filtered.slice(0, visibleActionCount).map((client) => (
-                  <div key={client.id} className="rounded-2xl border border-border/70 bg-secondary/20 p-4">
+                {filtered.slice(0, visibleCount).map((client) => (
+                  <div key={client.id} className="rounded-xl border border-border/40 bg-secondary/20 p-4 transition-colors hover:bg-secondary/30">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-foreground">{client.name}</p>
@@ -454,7 +478,7 @@ export default function ClientsPage() {
                         </p>
                       </div>
                       {canViewCommercialInsights ? (
-                        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                        <span className="rounded-full bg-gradient-to-r from-primary/10 to-info/10 px-3 py-1 text-xs font-semibold text-primary">
                           {client.healthScore}
                         </span>
                       ) : (
@@ -465,10 +489,10 @@ export default function ClientsPage() {
                 ))}
                 <ShowMoreButton
                   total={filtered.length}
-                  visible={visibleActionCount}
-                  pageSize={ACTION_PAGE_SIZE}
-                  onShowMore={() => setVisibleActionCount(v => Math.min(v + ACTION_PAGE_SIZE, filtered.length))}
-                  onShowLess={() => setVisibleActionCount(ACTION_PAGE_SIZE)}
+                  visible={visibleCount}
+                  pageSize={PAGE_SIZE}
+                  onShowMore={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filtered.length))}
+                  onShowLess={() => setVisibleCount(PAGE_SIZE)}
                 />
                 </>
               ) : (
@@ -479,9 +503,11 @@ export default function ClientsPage() {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         </aside>
       </section>
-    </div>
+
+      {LoadingProgressComponent}
+    </motion.div>
   );
 }

@@ -3,6 +3,8 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { getEmployeeMemberRecord, type AccessActor } from "../utils/access-control";
 import { fromDbPaymentMode } from "../utils/payment-mode";
+import { sendSalaryPaidEmail } from "../utils/email-templates";
+import { logAudit } from "../utils/audit";
 
 function derivePayrollDueDate(period: string) {
   const match = /^(\d{4})-(\d{2})$/.exec(period);
@@ -158,12 +160,45 @@ export const payrollService = {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
+    const payroll = await prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) {
+      throw new AppError("Payroll record not found", 404, "NOT_FOUND");
+    }
+
+    const teamMember = await prisma.teamMember.findUnique({
+      where: { id: Number(payroll.memberId) },
+      select: { name: true, email: true },
+    });
+    if (!teamMember) {
+      throw new AppError("Team member not found", 404, "NOT_FOUND");
+    }
+
     const updated = await prisma.payroll.update({
       where: { id },
       data: {
         status: "paid" as PayrollStatus,
         paidAt: new Date(),
       },
+    });
+
+    // Send salary paid email with invoice details
+    sendSalaryPaidEmail({
+      name: teamMember.name,
+      email: teamMember.email,
+      period: payroll.period as string,
+      baseSalary: payroll.baseSalary,
+      allowances: payroll.allowances,
+      deductions: payroll.deductions,
+      netPay: payroll.netPay,
+      paidAt: updated.paidAt!,
+    }).catch(() => {});
+
+    await logAudit({
+      userId: access.userId as string,
+      action: "update",
+      entity: "Payroll",
+      entityId: id,
+      detail: `Marked salary as paid for ${teamMember.name} (${payroll.period})`,
     });
 
     return updated;

@@ -7,6 +7,7 @@ type SendMailInput = {
   subject: string;
   text: string;
   html: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 };
 
 let cachedTransporter: nodemailer.Transporter | null = null;
@@ -53,6 +54,10 @@ function getTransporter() {
 }
 
 export async function sendMail(input: SendMailInput) {
+  if (process.env.DISABLE_EMAIL_DELIVERY === "true") {
+    return;
+  }
+
   let config;
   try {
     config = readMailConfig();
@@ -69,6 +74,7 @@ export async function sendMail(input: SendMailInput) {
       subject: input.subject,
       text: input.text,
       html: input.html,
+      attachments: input.attachments,
     });
   } catch (err) {
     console.warn("Failed to deliver email:", (err as any).message);

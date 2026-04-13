@@ -46,6 +46,26 @@ export const invoicesController = {
         entityId: invoice.id,
         detail: `Created invoice ${invoice.id} for ${invoice.client}`,
       });
+
+      // Trigger Zapier webhook for invoice_sent event
+      const { systemService } = await import("../services/system.service");
+      const zapierConfig = await systemService.getZapierIntegration(req.auth.userId, "invoice_sent");
+      if (zapierConfig) {
+        systemService.sendZapierEvent(zapierConfig.webhookUrl, "invoice_sent", {
+          invoice: {
+            id: invoice.id,
+            client: invoice.client,
+            amount: invoice.amount,
+            date: invoice.date,
+            due: invoice.due,
+            status: invoice.status,
+          },
+          user: {
+            id: req.auth.userId,
+            role: req.auth.role,
+          },
+        });
+      }
     }
     res.status(201).json(invoice);
   },

@@ -6,11 +6,12 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
-import PageLoader from "@/components/shared/PageLoader";
+import { TeamPageSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useTeamMembers, useTeams, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
@@ -18,6 +19,9 @@ import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { normalizeTeamMember } from "@/lib/team-roster";
 import type { TeamMemberRecord } from "@/types/crm";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts";
 
 const roleTone: Record<string, string> = {
   Admin: "bg-accent/10 text-accent border-accent/20",
@@ -86,9 +90,76 @@ function normalizeMember(member: TeamMemberRecord): TeamMemberRecord {
 }
 
 export default function TeamPage() {
-  const navigate = useNavigate();
   const { data: members = [], isLoading, error: teamError, refetch: refetchTeamMembers } = useTeamMembers();
   const { data: teams = [], isLoading: teamsLoading } = useTeams();
+  const { refresh, isRefreshing } = useRefresh();
+
+  // Productivity metrics calculation
+  const productivityMetrics = useMemo(() => {
+    const totalMembers = members.length;
+    const presentMembers = members.filter(m => m.attendance === "present").length;
+    const attendanceRate = totalMembers > 0 ? Math.round((presentMembers / totalMembers) * 100) : 0;
+
+    // Department productivity with enhanced metrics
+    const departmentStats = members.reduce((acc, member) => {
+      if (!acc[member.department]) {
+        acc[member.department] = {
+          department: member.department,
+          count: 0,
+          present: 0,
+          productivity: 0,
+          avgWorkload: 0,
+          totalCompensation: 0,
+          totalWorkload: 0,
+          roleDistribution: { Admin: 0, Manager: 0, Employee: 0 },
+          compositeProductivity: 0
+        };
+      }
+      acc[member.department].count += 1;
+      if (member.attendance === "present") acc[member.department].present += 1;
+      acc[member.department].totalWorkload += member.workload;
+      acc[member.department].totalCompensation += member.baseSalary + member.allowances - member.deductions;
+      acc[member.department].roleDistribution[member.role as 'admin' | 'manager' | 'employee' | 'client'] += 1;
+
+      return acc;
+    }, {} as Record<string, {
+      department: string;
+      count: number;
+      present: number;
+      productivity: number;
+      avgWorkload: number;
+      totalCompensation: number;
+      totalWorkload: number;
+      roleDistribution: { admin: number; manager: number; employee: number; client: number };
+      compositeProductivity: number;
+    }>);
+
+    // Calculate derived metrics
+    Object.values(departmentStats).forEach(dept => {
+      // Basic productivity based on attendance
+      dept.productivity = dept.count > 0 ? Math.round((dept.present / dept.count) * 100) : 0;
+
+      // Average workload
+      dept.avgWorkload = dept.count > 0 ? Math.round(dept.totalWorkload / dept.count) : 0;
+
+      // Composite productivity score (weighted formula)
+      // Attendance: 40%, Workload efficiency: 30%, Role diversity bonus: 30%
+      const attendanceScore = dept.productivity;
+      const workloadScore = Math.min(100, dept.avgWorkload); // Cap at 100%
+      const roleDiversity = (dept.roleDistribution.admin > 0 ? 20 : 0) +
+                           (dept.roleDistribution.manager > 0 ? 20 : 0) +
+                           (dept.roleDistribution.employee > 0 ? 10 : 0) +
+                           (dept.roleDistribution.client > 0 ? 5 : 0);
+      dept.compositeProductivity = Math.round((attendanceScore * 0.4) + (workloadScore * 0.3) + (roleDiversity * 0.3));
+    });
+
+    return {
+      attendanceRate,
+      totalMembers,
+      presentMembers,
+      departmentStats: Object.values(departmentStats).sort((a, b) => b.compositeProductivity - a.compositeProductivity), // Sort by composite score
+    };
+  }, [members]);
   const { role } = useTheme();
   const queryClient = useQueryClient();
   const canEditTeam = role === "admin" || role === "manager";
@@ -99,7 +170,8 @@ export default function TeamPage() {
   const [draggedMemberId, setDraggedMemberId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const PAGE_SIZE = 8;
+  const [showDepartmentDetails, setShowDepartmentDetails] = useState(false);
+  const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [noteDraft, setNoteDraft] = useState("");
   
@@ -145,38 +217,17 @@ export default function TeamPage() {
   });
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetchTeamMembers();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetchTeamMembers(),
+      {
+        message: getRefreshMessage("team"),
+        successMessage: getRefreshSuccessMessage("team"),
+      }
+    );
   };
 
   const handleExportCSV = () => {
-    if (!normalizedMembers.length) return;
-    const headers = ["ID", "Name", "Email", "Role", "Department", "Designation", "Team", "Manager", "Salary", "Location", "Attendance"];
-    const rows = normalizedMembers.map(m => [
-      m.id,
-      m.name,
-      m.email,
-      m.role,
-      m.department,
-      m.designation,
-      m.team,
-      m.manager,
-      m.baseSalary,
-      m.officeLocation,
-      m.attendance,
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(r => r.map(v => String(v).replace(/,/g, "")).join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `crm_team_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("Team CSV export started");
+    window.open("/api/system/export/team-members/csv", "_blank");
   };
 
   const getMemberId = useCallback((member: TeamMemberRecord) => String(member.id), []);
@@ -438,7 +489,7 @@ export default function TeamPage() {
   const visibleActions = actionSets[role];
 
   if (isLoading) {
-    return <PageLoader />;
+    return <TeamPageSkeleton />;
   }
   if (teamError) {
     return (
@@ -476,11 +527,11 @@ export default function TeamPage() {
                   <Button
                     variant="outline"
                     onClick={handleRefresh}
-                    disabled={isLoading}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
+                    disabled={isRefreshing}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
                   >
-                    <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                    {isLoading ? "Refreshing..." : "Refresh Members"}
+                    <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                    "Refresh Members"
                   </Button>
                 </motion.div>
                 
@@ -538,6 +589,130 @@ export default function TeamPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Team Productivity Overview */}
+      <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-foreground">Team Productivity</h2>
+            <p className="text-sm text-muted-foreground mt-1">Attendance rates and departmental performance metrics</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Attendance Rate</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.attendanceRate}%</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center">
+                <UserRoundCheck className="h-5 w-5 text-success" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Present Today</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.presentMembers}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-info/20 flex items-center justify-center">
+                <BadgeCheck className="h-5 w-5 text-info" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Members</p>
+                <p className="text-2xl font-bold text-foreground">{productivityMetrics.totalMembers}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <UserRoundCheck className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Avg Workload</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {productivityMetrics.totalMembers > 0
+                    ? Math.round(members.reduce((sum, m) => sum + m.workload, 0) / productivityMetrics.totalMembers)
+                    : 0}%
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-warning/20 flex items-center justify-center">
+                <Clock3 className="h-5 w-5 text-warning" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {productivityMetrics.departmentStats.length > 0 && (
+          <div>
+            <h3 className="font-semibold text-foreground mb-4">Department Performance (Composite Score)</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={productivityMetrics.departmentStats}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="department" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value, name, props) => [
+                      `${value}%`,
+                      name,
+                      `Attendance: ${props.payload.productivity}%, Workload: ${props.payload.avgWorkload}%, Team: ${props.payload.count}`
+                    ]}
+                    labelFormatter={(label) => `Department: ${label}`}
+                  />
+                  <Bar dataKey="compositeProductivity" fill="#2563eb" name="Composite Productivity %" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {showDepartmentDetails && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {productivityMetrics.departmentStats.slice(0, 6).map((dept) => (
+                  <div key={dept.department} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
+                    <h4 className="font-semibold text-foreground mb-2">{dept.department}</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Team Size:</span>
+                        <span className="font-medium">{dept.count}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Attendance:</span>
+                        <span className="font-medium">{dept.productivity}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Avg Workload:</span>
+                        <span className="font-medium">{dept.avgWorkload}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Composite Score:</span>
+                        <span className="font-medium text-primary">{dept.compositeProductivity}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => setShowDepartmentDetails(!showDepartmentDetails)}
+                className="rounded-2xl border-border/70 bg-background/60 px-4 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
+              >
+                {showDepartmentDetails ? 'Show Less' : 'Show More'}
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       {showAddForm && canEditTeam && (

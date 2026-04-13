@@ -3,12 +3,14 @@ import { BookText, FileText, NotepadText, Sparkles, Trash2, RefreshCw } from "lu
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
-import PageLoader from "@/components/shared/PageLoader";
+import { NotesSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useNotes } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
 
 const noteColorMap: Record<string, { card: string; dot: string }> = {
   default: { card: "border-border/70 bg-card/90",                    dot: "bg-muted-foreground/40" },
@@ -41,12 +43,16 @@ export default function NotesPage() {
   const [saving, setSaving] = useState(false);
   const [visibleCount, setVisibleCount] = useState(4);
   const PAGE_SIZE = 4;
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("notes"),
+        successMessage: getRefreshSuccessMessage("notes"),
+      }
+    );
   };
 
   const addNote = async () => {
@@ -83,7 +89,7 @@ export default function NotesPage() {
       />
     );
   }
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <NotesSkeleton />;
 
   return (
     <div className="space-y-6">
@@ -104,11 +110,11 @@ export default function NotesPage() {
               <Button
                 variant="outline"
                 onClick={handleRefresh}
-                disabled={isLoading}
+                disabled={isRefreshing}
                 className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
               >
-                <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                {isLoading ? "Refreshing..." : "Refresh Notes"}
+                <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                "Refresh Notes"
               </Button>
             </motion.div>
           </div>

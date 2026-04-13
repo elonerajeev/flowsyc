@@ -41,6 +41,15 @@ const mockPrisma = {
       return task;
     }),
   },
+  teamMember: {
+    findUnique: jest.fn(async ({ where }: { where: { email: string } }) => {
+      // Mock team member lookup
+      if (where.email === "test@example.com") {
+        return { name: "Test User", email: "test@example.com" };
+      }
+      return null;
+    }),
+  },
 };
 
 jest.mock("../config/prisma", () => ({

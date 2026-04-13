@@ -1,14 +1,14 @@
+# Allow all search engines for SEO
+User-agent: *
+Allow: /
+
+# Specific rules for crawlers
 User-agent: Googlebot
 Allow: /
 
 User-agent: Bingbot
 Allow: /
 
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
-User-agent: *
-Allow: /
+# Disallow sensitive areas (if any)
+Disallow: /admin/
+Disallow: /api/

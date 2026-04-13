@@ -7,7 +7,8 @@ import type { UserRole } from "../config/types";
 export type TokenPayload = {
   sub: string;
   email: string;
-  role: UserRole;
+  role?: UserRole;
+  type?: string;
 };
 
 export function signAccessToken(payload: TokenPayload) {
@@ -22,6 +23,17 @@ export function signRefreshToken(payload: TokenPayload) {
     expiresIn: "30d",
     jwtid: crypto.randomBytes(16).toString("hex"),
   });
+}
+
+export function signPasswordResetToken(payload: TokenPayload) {
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: "1h",
+    jwtid: crypto.randomBytes(16).toString("hex"),
+  });
+}
+
+export function verifyPasswordResetToken(token: string) {
+  return jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload & jwt.JwtPayload;
 }
 
 export function verifyAccessToken(token: string) {

@@ -95,6 +95,10 @@ export const crmService = {
     fetchApi<{ data: Array<{ id: string; name: string; status: string; config: Record<string, unknown>; connectedAt?: string; lastSynced?: string }> }>("/system/integrations"),
   updateIntegration: (id: string, payload: { status?: string; config?: Record<string, unknown>; name?: string }) =>
     requestJson(`/system/integrations/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  testSlackIntegration: (webhookUrl: string) =>
+    requestJson("/system/integrations/slack/test", { method: "POST", body: JSON.stringify({ webhookUrl }) }),
+  testZapierIntegration: (webhookUrl: string) =>
+    requestJson("/system/integrations/zapier/test", { method: "POST", body: JSON.stringify({ webhookUrl }) }),
 
   getPreferences: () => fetchApi<{ data: Record<string, unknown> }>("/preferences"),
   updatePreferences: (data: Record<string, unknown>) =>
@@ -147,6 +151,13 @@ export const crmService = {
       hr: { name: string; designation: string; email: string; signatureUrl: string | null };
       offer: { joiningDate: string; offeredSalary: string; jobTitle: string; department: string; location: string; type: string; generatedAt: string };
     }>(`/candidates/${candidateId}/offer-letter`, { method: "POST", body: JSON.stringify(data) }),
+
+  getContacts: () => fetchCollectionApi<Record<string, unknown>>("/contacts"),
+  createContact: (contact: Record<string, unknown>) =>
+    requestJson<Record<string, unknown>>("/contacts", { method: "POST", body: JSON.stringify(contact) }),
+  updateContact: (contactId: number, patch: Record<string, unknown>) =>
+    requestJson<Record<string, unknown>>(`/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteContact: (contactId: number) => requestJson<void>(`/contacts/${contactId}`, { method: "DELETE" }),
 
   getLeads: () => fetchCollectionApi<Lead>("/leads"),
   createLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) =>
@@ -232,6 +243,39 @@ export const crmService = {
     uploadFile<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>("/upload/document", file),
 
   getAlerts: () => requestJson<{ alerts: AlertRecord[]; summary: AlertsSummary }>("/system/alerts"),
+
+  listComments: (filters: { taskId?: number; projectId?: number; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.taskId) params.set("taskId", String(filters.taskId));
+    if (filters.projectId) params.set("projectId", String(filters.projectId));
+    if (filters.limit) params.set("limit", String(filters.limit));
+    if (filters.offset) params.set("offset", String(filters.offset));
+    return requestJson<{ data: CommentRecord[]; total: number; limit: number; offset: number }>(`/comments?${params}`);
+  },
+
+  createComment: (data: { content: string; taskId?: number; projectId?: number }) =>
+    requestJson<CommentRecord>("/comments", { method: "POST", body: JSON.stringify(data) }),
+
+  updateComment: (id: number, data: { content: string }) =>
+    requestJson<CommentRecord>(`/comments/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  deleteComment: (id: number) =>
+    requestJson<{ success: boolean }>(`/comments/${id}`, { method: "DELETE" }),
+
+  listAttachments: (filters: { taskId?: number; projectId?: number; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.taskId) params.set("taskId", String(filters.taskId));
+    if (filters.projectId) params.set("projectId", String(filters.projectId));
+    if (filters.limit) params.set("limit", String(filters.limit));
+    if (filters.offset) params.set("offset", String(filters.offset));
+    return requestJson<{ data: AttachmentRecord[]; total: number; limit: number; offset: number }>(`/attachments?${params}`);
+  },
+
+  createAttachment: (data: { filename: string; originalName: string; url: string; size: number; mimetype: string; taskId?: number; projectId?: number }) =>
+    requestJson<AttachmentRecord>("/attachments", { method: "POST", body: JSON.stringify(data) }),
+
+  deleteAttachment: (id: number) =>
+    requestJson<{ success: boolean; filename: string }>(`/attachments/${id}`, { method: "DELETE" }),
   getAlertsSummary: () => requestJson<AlertsSummary>("/system/alerts/summary"),
   autoUpdateProjectProgress: () => requestJson("/system/alerts/auto-update-progress", { method: "POST" }),
 };

@@ -26,6 +26,8 @@ export const crmKeys = {
   candidates: ["crm", "candidates"] as const,
   calendar: ["crm", "calendar"] as const,
   payroll: ["crm", "payroll"] as const,
+  comments: (taskId?: number, projectId?: number) => ["crm", "comments", taskId, projectId] as const,
+  attachments: (taskId?: number, projectId?: number) => ["crm", "attachments", taskId, projectId] as const,
 };
 
 export function useDashboardData() {

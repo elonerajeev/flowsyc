@@ -16,8 +16,12 @@ import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useCandidates, useJobPostings, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
+import { useRefresh } from "@/hooks/use-refresh";
+import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messages";
+import { CandidatesSkeleton } from "@/components/skeletons";
 import type { CandidateRecord } from "@/types/crm";
 
 type DisplayStage = CandidateRecord["stage"];
@@ -51,12 +55,16 @@ export default function CandidatesPage() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [visibleCount, setVisibleCount] = useState(4);
   const PAGE_SIZE = 4;
+  const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    const start = Date.now();
-    await refetch();
-    const duration = Date.now() - start;
-    if (duration < 600) await new Promise(r => setTimeout(r, 600 - duration));
+    await refresh(
+      () => refetch(),
+      {
+        message: getRefreshMessage("candidates"),
+        successMessage: getRefreshSuccessMessage("candidates"),
+      }
+    );
   };
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
@@ -298,7 +306,7 @@ export default function CandidatesPage() {
     return counts;
   }, [candidates]);
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <CandidatesSkeleton />;
 
   if (error) {
     return (
@@ -357,11 +365,11 @@ export default function CandidatesPage() {
                 <Button
                   variant="outline"
                   onClick={handleRefresh}
-                  disabled={isLoading}
+                  disabled={isRefreshing}
                   className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
                 >
-                  <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-                  {isLoading ? "Refreshing..." : "Refresh List"}
+                  <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+                  "Refresh List"
                 </Button>
               </motion.div>
             </div>

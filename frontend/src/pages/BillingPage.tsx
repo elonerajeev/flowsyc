@@ -5,6 +5,7 @@ import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { cn } from "@/lib/utils";
+import { BillingSkeleton } from "@/components/skeletons";
 
 const BILLING_PAGE_SIZE = 8;
 
@@ -12,7 +13,7 @@ export default function BillingPage() {
   const { data: invoices = [], isLoading, error, refetch } = useInvoices();
   const [visibleInvoiceCount, setVisibleInvoiceCount] = useState(BILLING_PAGE_SIZE);
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <BillingSkeleton />;
   if (error) return <ErrorFallback title="Billing data failed to load" error={error} onRetry={() => refetch()} retryLabel="Retry" />;
 
   const totalPaid = invoices

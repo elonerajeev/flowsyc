@@ -232,6 +232,40 @@ export interface TaskRecord {
 
 export type TaskColumn = "todo" | "in-progress" | "done";
 
+export interface CommentRecord {
+  id: number;
+  content: string;
+  authorId: string;
+  taskId?: number | null;
+  projectId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface AttachmentRecord {
+  id: number;
+  filename: string;
+  originalName: string;
+  url: string;
+  size: number;
+  mimetype: string;
+  authorId: string;
+  taskId?: number | null;
+  projectId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
 export interface ConversationRecord {
   id: number;
   name: string;
@@ -335,12 +369,21 @@ export interface TeamMemberRecord {
   workload: number;
 }
 
+export interface TeamMemberInfo {
+  id: number;
+  name: string;
+  email: string;
+  role: "Admin" | "Manager" | "Employee";
+  attendance: AttendanceStatus;
+  workload: number;
+}
+
 export interface TeamRecord {
   id: number;
   name: string;
   description: string | null;
   permissions: Record<string, boolean>;
-  members: Array<Pick<TeamMemberRecord, "id" | "name" | "email">>;
+  members: TeamMemberInfo[];
   createdAt: string;
   updatedAt: string;
 }

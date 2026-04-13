@@ -5,17 +5,22 @@ import { getEnvWarnings } from '@/lib/env'
 
 export function useMonitoring() {
   useEffect(() => {
-    const perfMonitor = PerformanceMonitor.getInstance()
-    const errorTracker = ErrorTracker.getInstance()
+    const initMonitoring = async () => {
+      const perfMonitor = PerformanceMonitor.getInstance()
+      const errorTracker = ErrorTracker.getInstance()
 
-    // Initialize monitoring
-    perfMonitor.recordWebVitals()
-    errorTracker.init()
+      // Initialize monitoring
+      await perfMonitor.recordWebVitals()
+      errorTracker.init()
 
-    const envWarnings = getEnvWarnings()
-    envWarnings.forEach((warning) => console.warn(warning))
+      const envWarnings = getEnvWarnings()
+      envWarnings.forEach((warning) => console.warn(warning))
+    }
+
+    initMonitoring()
 
     // Send metrics periodically
+    const perfMonitor = PerformanceMonitor.getInstance()
     const interval = setInterval(() => {
       perfMonitor.sendMetrics()
     }, 60000) // Every minute

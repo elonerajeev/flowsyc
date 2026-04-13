@@ -1,0 +1,11 @@
+First Name,Last Name,Email,Phone,Company,Job Title,Source,Status,Score,Assigned To,Notes
+John,Doe,john.doe@example.com,+1-555-0123,TechCorp,CTO,website,new,85,user-1,Interested in enterprise solution
+Jane,Smith,jane.smith@innovate.co,+1-555-0456,Innovate Inc,VP Engineering,referral,qualified,92,user-2,High-priority lead with budget approval
+Mike,Johnson,mike.j@startup.io,+1-555-0789,StartupIO,Founder,social,contacted,78,,Early stage startup looking for growth
+Sarah,Williams,sarah.w@enterprise.com,+1-555-0321,Enterprise Ltd,Director,email,proposal,88,user-1,Enterprise deal in progress
+David,Brown,david.brown@consulting.net,+1-555-0654,Consulting Pro,Partner,cold_call,negotiation,76,user-2,Complex multi-year contract
+Lisa,Davis,lisa.davis@marketing.agency,+1-555-0987,Marketing Agency,CEO,referral,won,95,user-1,Successful referral conversion
+Chris,Wilson,chris.wilson@finance.co,+1-555-0210,Finance Corp,CFO,social,qualified,82,,Needs detailed ROI analysis
+Emma,Taylor,emma.taylor@healthcare.org,+1-555-0543,Healthcare Plus,COO,email,contacted,79,user-2,Non-profit organization
+Ryan,Anderson,ryan.anderson@construction.com,+1-555-0876,BuildRight Inc,Owner,website,new,65,,Small business owner
+Olivia,Martinez,olivia.m@education.edu,+1-555-0309,EduTech University,Dean,referral,qualified,89,user-1,University partnership opportunity

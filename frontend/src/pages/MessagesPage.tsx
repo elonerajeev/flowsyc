@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, useMessages, useTeamMembers, crmKeys } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
+import { TruncatedText } from "@/components/ui/truncated-text";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
@@ -148,10 +149,18 @@ export default function MessagesPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-foreground truncate">{conv.name}</p>
+                            <TruncatedText
+                              text={conv.name}
+                              maxLength={20}
+                              className="text-sm font-semibold text-foreground"
+                            />
                             <span className="text-[10px] text-muted-foreground flex-shrink-0">{conv.time}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{conv.lastMessage}</p>
+                          <TruncatedText
+                            text={conv.lastMessage}
+                            maxLength={30}
+                            className="text-xs text-muted-foreground"
+                          />
                         </div>
                         {conv.unread > 0 && (
                           <span className="flex-shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">{conv.unread}</span>
@@ -187,8 +196,16 @@ export default function MessagesPage() {
                           {isOnline && <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground truncate">{member.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{member.designation} · {member.team}</p>
+                          <TruncatedText
+                            text={member.name}
+                            maxLength={20}
+                            className="text-sm font-semibold text-foreground"
+                          />
+                          <TruncatedText
+                            text={`${member.designation} · ${member.team}`}
+                            maxLength={25}
+                            className="text-xs text-muted-foreground"
+                          />
                         </div>
                         <span className={cn(
                           "flex-shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold capitalize",

@@ -1,8 +1,13 @@
 import type { Request, Response } from "express";
 
 import { authService } from "../services/auth.service";
+import { AppError } from "../middleware/error.middleware";
 import { logAudit } from "../utils/audit";
 import { env } from "../config/env";
+import { verifyAccessToken, signAccessToken, signPasswordResetToken, verifyPasswordResetToken } from "../utils/jwt";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../utils/email-templates";
+import { hashPassword } from "../utils/password";
+import { prisma } from "../config/prisma";
 
 const IS_PROD = env.NODE_ENV === "production";
 
@@ -13,7 +18,7 @@ const COOKIE_OPTIONS = {
   path: "/",
 };
 
-const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 mins
+const ACCESS_TOKEN_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const REFRESH_TOKEN_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
@@ -44,7 +49,122 @@ export const authController = {
       detail: `Signed up: ${session.user.email}`,
     });
     setAuthCookies(res, session.accessToken!, session.refreshToken!);
-    res.status(201).json({ user: session.user, accessToken: session.accessToken });
+    res.status(201).json({ user: session.user, accessToken: session.accessToken, refreshToken: session.refreshToken });
+  },
+
+  forgotPassword: async (req: Request, res: Response): Promise<void> => {
+    const { email } = req.body;
+    if (!email) {
+      throw new AppError("Email required", 400, "BAD_REQUEST");
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Don't reveal if email exists
+      res.status(200).json({ message: "If the email exists, a reset link has been sent" });
+      return;
+    }
+
+    const resetToken = signPasswordResetToken({ sub: user.id, email: user.email, type: 'password_reset' });
+    await sendPasswordResetEmail({ name: user.name, email: user.email }, resetToken);
+
+    res.status(200).json({ message: "If the email exists, a reset link has been sent" });
+  },
+
+  resetPassword: async (req: Request, res: Response): Promise<void> => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      throw new AppError("Token and new password required", 400, "BAD_REQUEST");
+    }
+
+    try {
+      const payload = verifyPasswordResetToken(token);
+      if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'password_reset' || !('sub' in payload)) {
+        throw new AppError("Invalid token", 400, "INVALID_TOKEN");
+      }
+
+      const userId = payload.sub as string;
+      const hashedPassword = await hashPassword(newPassword);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: hashedPassword },
+      });
+
+      // Revoke all refresh tokens for security
+      await prisma.refreshToken.updateMany({
+        where: { userId },
+        data: { revokedAt: new Date() },
+      });
+
+      await logAudit({
+        userId,
+        action: "update",
+        entity: "User",
+        entityId: userId,
+        detail: "Password reset",
+      });
+
+      res.status(200).json({ message: "Password reset successfully" });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid or expired token" });
+    }
+  },
+
+  verifyEmail: async (req: Request, res: Response): Promise<void> => {
+    const { token } = req.body;
+    if (!token) {
+      throw new AppError("Token required", 400, "BAD_REQUEST");
+    }
+
+    try {
+      const payload = verifyPasswordResetToken(token);
+      if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'email_verification' || !('sub' in payload)) {
+        throw new AppError("Invalid token", 400, "INVALID_TOKEN");
+      }
+
+      const userId = payload.sub as string;
+      await prisma.user.update({
+        where: { id: userId },
+        data: { emailVerified: true },
+      });
+
+      await logAudit({
+        userId,
+        action: "update",
+        entity: "User",
+        entityId: userId,
+        detail: "Email verified",
+      });
+
+      res.status(200).json({ message: "Email verified successfully" });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid or expired token" });
+    }
+  },
+
+  resendVerification: async (req: Request, res: Response): Promise<void> => {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: "Email required" });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (user.emailVerified) {
+      res.status(400).json({ error: "Email already verified" });
+      return;
+    }
+
+    const verificationToken = signPasswordResetToken({ sub: user.id, email: user.email, type: 'email_verification' });
+    await sendVerificationEmail({ name: user.name, email: user.email }, verificationToken);
+
+    res.status(200).json({ message: "Verification email sent" });
   },
 
   login: async (req: Request, res: Response): Promise<void> => {

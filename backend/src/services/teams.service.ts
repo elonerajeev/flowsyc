@@ -4,12 +4,21 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 
+type TeamMemberInfo = {
+  id: number;
+  name: string;
+  email: string;
+  role: "Admin" | "Manager" | "Employee";
+  attendance: "present" | "late" | "remote" | "absent";
+  workload: number;
+};
+
 type TeamRecord = {
   id: number;
   name: string;
   description: string | null;
   permissions: Record<string, boolean>; // e.g. { clients: true, tasks: false }
-  members: { id: number; name: string; email: string }[];
+  members: TeamMemberInfo[];
   createdAt: string;
   updatedAt: string;
 };
@@ -130,6 +139,9 @@ async function loadTeamsWithMembers() {
         id: true,
         name: true,
         email: true,
+        role: true,
+        attendance: true,
+        workload: true,
         team: true,
       },
       orderBy: { name: "asc" },
@@ -137,12 +149,19 @@ async function loadTeamsWithMembers() {
   ]);
 
   const storedTeams = readStoredTeams(store.data);
-  const memberMap = new Map<string, Array<{ id: number; name: string; email: string }>>();
+  const memberMap = new Map<string, TeamMemberInfo[]>();
 
   for (const member of members) {
     const teamName = member.team.trim() || "General";
     const bucket = memberMap.get(teamName) ?? [];
-    bucket.push({ id: member.id, name: member.name, email: member.email });
+    bucket.push({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      role: member.role as "Admin" | "Manager" | "Employee",
+      attendance: (member.attendance || "absent") as "present" | "late" | "remote" | "absent",
+      workload: member.workload || 0,
+    });
     memberMap.set(teamName, bucket);
   }
 
@@ -260,7 +279,7 @@ export const teamsService = {
 
     const members = await prisma.teamMember.findMany({
       where: { deletedAt: null, team: updated.name },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, role: true, attendance: true, workload: true },
       orderBy: { name: "asc" },
     });
 

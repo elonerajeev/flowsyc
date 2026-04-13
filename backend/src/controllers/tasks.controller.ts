@@ -36,7 +36,7 @@ export const tasksController = {
     res.status(200).json(task);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const task = await tasksService.create(req.body);
+    const task = await tasksService.create(req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -45,6 +45,27 @@ export const tasksController = {
         entityId: task.id,
         detail: `Created: ${task.title}`,
       });
+
+      // Trigger Zapier webhook for task_assigned event
+      const { systemService } = await import("../services/system.service");
+      const zapierConfig = await systemService.getZapierIntegration(req.auth.userId, "task_assigned");
+      if (zapierConfig) {
+        systemService.sendZapierEvent(zapierConfig.webhookUrl, "task_assigned", {
+          task: {
+            id: task.id,
+            title: task.title,
+            priority: task.priority,
+            dueDate: task.dueDate,
+            assignee: task.assignee,
+            tags: task.tags,
+            valueStream: task.valueStream,
+          },
+          user: {
+            id: req.auth.userId,
+            role: req.auth.role,
+          },
+        });
+      }
     }
     res.status(201).json(task);
   },
