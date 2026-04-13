@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, ClipboardList, CreditCard, FolderKanban, Zap, Users, BriefcaseBusiness } from "lucide-react";
+import { Building2, CheckCircle2, ClipboardList, CreditCard, FolderKanban, Zap, Users, BriefcaseBusiness, UserCheck, Handshake } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +14,8 @@ import { crmService } from "@/services/crm";
 const workflows = [
   { id: "client",  title: "Client",    description: "Add new client account", icon: Building2,   color: "text-blue-500",   activeBg: "bg-blue-500/10 border-blue-500/30" },
   { id: "lead",    title: "Lead",      description: "Add new sales lead",      icon: Users,       color: "text-rose-500",   activeBg: "bg-rose-500/10 border-rose-500/30" },
+  { id: "contact", title: "Contact",   description: "Add contact person",     icon: UserCheck,   color: "text-cyan-500",   activeBg: "bg-cyan-500/10 border-cyan-500/30" },
+  { id: "deal",    title: "Deal",      description: "Add new deal/opportunity", icon: Handshake,   color: "text-amber-500",  activeBg: "bg-amber-500/10 border-amber-500/30" },
   { id: "project", title: "Project",   description: "Create new project",      icon: FolderKanban, color: "text-violet-500", activeBg: "bg-violet-500/10 border-violet-500/30" },
   { id: "task",    title: "Task",      description: "Create new task",        icon: ClipboardList, color: "text-emerald-500", activeBg: "bg-emerald-500/10 border-emerald-500/30" },
   { id: "invoice", title: "Invoice",   description: "Create new invoice",      icon: CreditCard,   color: "text-orange-500", activeBg: "bg-orange-500/10 border-orange-500/30" },
@@ -26,6 +28,9 @@ const statusOptions = ["active", "pending", "completed"];
 const projectStatusOptions = ["active", "pending", "completed"];
 const projectStageOptions = ["Discovery", "Build", "Review", "Launch"];
 const priorityOptions = ["high", "medium", "low"];
+const contactJobTitleOptions = ["CEO", "CTO", "CFO", "COO", "CMO", "VP", "Director", "Manager", "Lead", "Senior", "Engineer", "Developer", "Designer", "Analyst", "Consultant", "Coordinator", "Assistant", "Other"];
+const contactDepartmentOptions = ["Engineering", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations", "Customer Success", "Support", "Legal", "Executive", "Other"];
+const dealStageOptions = ["prospecting", "qualification", "proposal", "negotiation", "closed-won", "closed-lost"];
 
 export default function QuickCreateDialog() {
   const { quickCreateOpen, closeQuickCreate, canUseQuickCreate, workflowToOpen, editData } = useWorkspace();
@@ -65,6 +70,17 @@ export default function QuickCreateDialog() {
         setInvoiceClient(editData.client || "");
         setAmount(editData.amount ? String(editData.amount).replace(/[^0-9.]/g, "") : "0");
         setInvoiceStatus(editData.status || "pending");
+        // Contact fields
+        setFirstName(editData.firstName || "");
+        setLastName(editData.lastName || "");
+        setContactJobTitle(editData.jobTitle || "");
+        setContactDepartment(editData.department || "");
+        setContactClient(editData.clientId ? String(editData.clientId) : "");
+        // Deal fields
+        setDealValue(editData.value ? String(editData.value).replace(/[^0-9.]/g, "") : "");
+        setDealStage(editData.stage || "prospecting");
+        setDealProbability(editData.probability ? String(editData.probability) : "50");
+        setDealExpectedClose(editData.expectedCloseDate ? String(editData.expectedCloseDate).slice(0, 10) : "");
       }
     }
   }, [quickCreateOpen, workflowToOpen, editData]);
@@ -107,6 +123,19 @@ export default function QuickCreateDialog() {
   const [invoiceDue, setInvoiceDue] = useState("");
   const [invoiceStatus, setInvoiceStatus] = useState<"pending" | "paid" | "overdue">("pending");
 
+  // Contact fields
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [contactJobTitle, setContactJobTitle] = useState("");
+  const [contactDepartment, setContactDepartment] = useState("");
+  const [contactClient, setContactClient] = useState("");
+
+  // Deal fields
+  const [dealValue, setDealValue] = useState("");
+  const [dealStage, setDealStage] = useState("prospecting");
+  const [dealProbability, setDealProbability] = useState("50");
+  const [dealExpectedClose, setDealExpectedClose] = useState("");
+
   const { data: projects = [] } = useProjects({ enabled: quickCreateOpen });
   const { data: clients = [] } = useClients({ enabled: quickCreateOpen });
   const { data: teamMembers = [] } = useTeamMembers({ enabled: quickCreateOpen });
@@ -132,6 +161,8 @@ export default function QuickCreateDialog() {
     setProjectStatus("pending"); setProjectStage("Discovery"); setBudget("$0"); setProjectTeam([]);
     setTaskAssigneeKind("member"); setTaskAssigneeValue(""); setTaskProjectId("none"); setValueStream("Growth");
     setInvoiceClient(""); setAmount("0"); setInvoiceDate(new Date().toISOString().slice(0, 10)); setInvoiceDue(""); setInvoiceStatus("pending");
+    setFirstName(""); setLastName(""); setContactJobTitle(""); setContactDepartment(""); setContactClient("");
+    setDealValue(""); setDealStage("prospecting"); setDealProbability("50"); setDealExpectedClose("");
   };
 
   const actionMutation = useMutation({
@@ -144,6 +175,8 @@ export default function QuickCreateDialog() {
           case "client": return crmService.updateClient(id, { name, company, industry, email, phone, location, tier, segment, status, revenue, manager });
           case "project": return crmService.updateProject(id, { name, description, status: projectStatus, team: projectTeam, dueDate, stage: projectStage, budget });
           case "task": return crmService.updateTask(id, { title: name, priority: priority as "high" | "medium" | "low", dueDate, tags: tags.split(",").map(t => t.trim()), valueStream: valueStream as string, projectId: taskProjectId === "none" ? null : Number(taskProjectId) });
+          case "contact": return crmService.updateContact(id, { firstName, lastName, email, phone, jobTitle: contactJobTitle, department: contactDepartment, clientId: contactClient ? Number(contactClient) : undefined });
+          case "deal": return crmService.updateDeal(id, { title: name, description, value: Number(dealValue) || 0, stage: dealStage, probability: Number(dealProbability) || 50, expectedCloseDate: dealExpectedClose || new Date().toISOString() });
           // Add others as needed
           default: throw new Error(`Editing ${workflowId} not supported yet in Quick Create.`);
         }
@@ -167,9 +200,9 @@ export default function QuickCreateDialog() {
             nextAction: description.trim() || "Follow up",
           });
         case "lead": {
-          const [firstName, ...rest] = name.trim().split(" ");
+          const [first, ...rest] = name.trim().split(" ");
           return crmService.createLead({
-            firstName: firstName || "New",
+            firstName: first || "New",
             lastName: rest.join(" ") || "Lead",
             email: email.trim() || `lead.${Date.now()}@example.local`,
             company: company.trim() || "Interest Co",
@@ -179,6 +212,31 @@ export default function QuickCreateDialog() {
             score: 50,
             assignedTo: manager.trim() || "Sarah Johnson",
             notes: description.trim(),
+          });
+        }
+        case "contact": {
+          if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+            throw new Error("First name, last name, and email are required for contacts");
+          }
+          return crmService.createContact({
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            email: email.trim(),
+            phone: phone.trim() || undefined,
+            jobTitle: contactJobTitle || undefined,
+            department: contactDepartment || undefined,
+            clientId: contactClient ? Number(contactClient) : undefined,
+          });
+        }
+        case "deal": {
+          return crmService.createDeal({
+            title: name.trim(),
+            description: description.trim(),
+            value: Number(dealValue) || 0,
+            stage: dealStage,
+            probability: Number(dealProbability) || 50,
+            expectedCloseDate: dealExpectedClose || new Date().toISOString(),
+            company: company.trim() || "Unknown",
           });
         }
         case "project":
@@ -237,6 +295,8 @@ export default function QuickCreateDialog() {
       const keyMap: Record<string, unknown[]> = { 
         client: crmKeys.clients, 
         lead: ["leads"],
+        contact: ["contacts"],
+        deal: ["deals"],
         project: crmKeys.projects, 
         task: crmKeys.tasks, 
         invoice: crmKeys.invoices,
@@ -325,11 +385,13 @@ export default function QuickCreateDialog() {
             </DialogHeader>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* Common: Name */}
-              <label className="space-y-1.5 sm:col-span-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Name *</span>
-                <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder={`Enter ${selectedWorkflow.title.toLowerCase()} name`} />
-              </label>
+              {/* Common: Name (hidden for contacts) */}
+              {selected !== "contact" && (
+                <label className="space-y-1.5 sm:col-span-2">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Name *</span>
+                  <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder={`Enter ${selectedWorkflow.title.toLowerCase()} name`} />
+                </label>
+              )}
 
               {/* CLIENT & LEAD FIELDS */}
               {(selected === "client" || selected === "lead") && (
@@ -399,6 +461,106 @@ export default function QuickCreateDialog() {
                       </label>
                     </>
                   )}
+                </>
+              )}
+
+              {/* CONTACT FIELDS */}
+              {selected === "contact" && (
+                <>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">First Name *</span>
+                    <input value={firstName} onChange={e => setFirstName(e.target.value)} className={inputCls} placeholder="John" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Last Name *</span>
+                    <input value={lastName} onChange={e => setLastName(e.target.value)} className={inputCls} placeholder="Doe" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email *</span>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="john.doe@company.com" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Phone</span>
+                    <input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="+1-555-0000" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Job Title</span>
+                    <Select value={contactJobTitle} onValueChange={setContactJobTitle}>
+                      <SelectTrigger className={selectCls}><SelectValue placeholder="Select job title..." /></SelectTrigger>
+                      <SelectContent>
+                        {contactJobTitleOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Department</span>
+                    <Select value={contactDepartment} onValueChange={setContactDepartment}>
+                      <SelectTrigger className={selectCls}><SelectValue placeholder="Select department..." /></SelectTrigger>
+                      <SelectContent>
+                        {contactDepartmentOptions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="space-y-1.5 sm:col-span-2">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Company (Client)</span>
+                    <Select value={contactClient} onValueChange={setContactClient}>
+                      <SelectTrigger className={selectCls}>
+                        <SelectValue placeholder="Select client..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No client linked</SelectItem>
+                        {clientOptions.map(c => (
+                          <SelectItem key={c.value} value={String(c.value)}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                </>
+              )}
+
+              {/* DEAL FIELDS */}
+              {selected === "deal" && (
+                <>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Deal Title *</span>
+                    <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="Enterprise License Deal" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Company</span>
+                    <input value={company} onChange={e => setCompany(e.target.value)} className={inputCls} placeholder="Company name" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Deal Value ($)</span>
+                    <input type="number" min="0" value={dealValue} onChange={e => setDealValue(e.target.value)} className={inputCls} placeholder="50000" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stage</span>
+                    <Select value={dealStage} onValueChange={setDealStage}>
+                      <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="prospecting">Prospecting</SelectItem>
+                        <SelectItem value="qualification">Qualification</SelectItem>
+                        <SelectItem value="proposal">Proposal</SelectItem>
+                        <SelectItem value="negotiation">Negotiation</SelectItem>
+                        <SelectItem value="closed-won">Closed Won</SelectItem>
+                        <SelectItem value="closed-lost">Closed Lost</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Probability (%)</span>
+                    <input type="number" min="0" max="100" value={dealProbability} onChange={e => setDealProbability(e.target.value)} className={inputCls} placeholder="50" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected Close</span>
+                    <input type="date" value={dealExpectedClose} onChange={e => setDealExpectedClose(e.target.value)} className={inputCls} />
+                  </label>
+                  <label className="space-y-1.5 sm:col-span-2">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</span>
+                    <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none" placeholder="Deal notes..." />
+                  </label>
                 </>
               )}
 
@@ -599,10 +761,12 @@ export default function QuickCreateDialog() {
               )}
 
               {/* Common: Description */}
-              <label className="space-y-1.5 sm:col-span-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</span>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none" placeholder="Optional description..." />
-              </label>
+              {selected !== "contact" && (
+                <label className="space-y-1.5 sm:col-span-2">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</span>
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none" placeholder="Optional description..." />
+                </label>
+              )}
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
@@ -611,7 +775,7 @@ export default function QuickCreateDialog() {
               </button>
               <button 
                 type="button" 
-                disabled={actionMutation.isPending || !name.trim()} 
+                disabled={actionMutation.isPending || (selected === "contact" ? (!firstName.trim() || !lastName.trim() || !email.trim()) : !name.trim())} 
                 onClick={() => actionMutation.mutate(selected)} 
                 className={cn(
                   "rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50", 

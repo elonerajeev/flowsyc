@@ -34,6 +34,15 @@ router.post(
   }),
 );
 
+router.post(
+  "/:id/gtm-sync",
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req, res) => {
+    const result = await dealsService.syncLifecycle(Number(req.params.id), req.auth);
+    res.json(result);
+  }),
+);
+
 router.patch(
   "/:id",
   requireRole(["admin", "manager"]),

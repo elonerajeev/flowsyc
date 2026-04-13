@@ -2,44 +2,15 @@ import { env } from "./config/env";
 import { createApp } from "./app";
 import { prisma } from "./config/prisma";
 import { logger } from "./utils/logger";
-import { Server } from "socket.io";
+import { initializeIO, getIO } from "./socket";
 import http from "http";
+import { startAutomationCron, stopAutomationCron } from "./services/automation-engine";
 
 const app = createApp();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL ?? "http://localhost:8080",
-    methods: ["GET", "POST"],
-  },
-});
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  logger.info('User connected', { socketId: socket.id });
-
-  socket.on('disconnect', () => {
-    logger.info('User disconnected', { socketId: socket.id });
-  });
-
-  // Join user room for personalized updates
-  socket.on('join', (userId: string) => {
-    socket.join(`user_${userId}`);
-  });
-
-  // Join project room
-  socket.on('joinProject', (projectId: number) => {
-    socket.join(`project_${projectId}`);
-  });
-
-  // Join task room
-  socket.on('joinTask', (taskId: number) => {
-    socket.join(`task_${taskId}`);
-  });
-});
-
-// Export io for use in services
-export { io };
+// Initialize Socket.io
+initializeIO(server);
 
 async function start() {
   await prisma.$connect();
@@ -51,8 +22,16 @@ async function start() {
     });
   });
 
+  // Start automation cron job
+  startAutomationCron();
+  logger.info("Automation engine started");
+
   async function gracefulShutdown(signal: string) {
     logger.info(`${signal} received, shutting down gracefully...`);
+    
+    // Stop automation cron
+    stopAutomationCron();
+    
     server.close(async () => {
       await prisma.$disconnect();
       logger.info("Prisma disconnected, process exiting.");

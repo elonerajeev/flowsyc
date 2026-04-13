@@ -167,6 +167,26 @@ export const crmService = {
   deleteLead: (leadId: number) => requestJson<void>(`/leads/${leadId}`, { method: "DELETE" }),
   removeLead: (leadId: number) => crmService.deleteLead(leadId),
 
+  // GTM Lead Actions
+  recalculateLeadScore: (leadId: number) =>
+    requestJson<{ score: number; breakdown: Record<string, number>; tags: string[] }>(`/leads/${leadId}/recalculate-score`, { method: "POST" }),
+  createLeadFollowUp: (leadId: number) =>
+    requestJson<{ success: boolean; message: string }>(`/leads/${leadId}/followup-sequence`, { method: "POST" }),
+  assignLeadToRep: (leadId: number) =>
+    requestJson<{ assigned: boolean; repEmail?: string }>(`/leads/${leadId}/assign`, { method: "POST" }),
+  convertLeadToClient: (leadId: number, clientData: { clientName: string; tier?: string }) =>
+    requestJson<{ lead: Lead; client: { id: number; name: string; email: string; tier: string; status: string } }>(`/leads/${leadId}/convert`, { method: "POST", body: JSON.stringify(clientData) }),
+  getHotLeads: () => fetchCollectionApi<Lead>("/leads/filters/hot"),
+  getColdLeads: (days?: number) => fetchCollectionApi<Lead>(`/leads/filters/cold${days ? `?days=${days}` : ''}`),
+  bulkRecalculateScores: () =>
+    requestJson<{ total: number; hotLeads: number; warmLeads: number; mediumLeads: number; coldLeads: number }>("/leads/bulk/recalculate-scores", { method: "POST" }),
+  getGTMOverview: () =>
+    requestJson<import("@/types/automation").GTMOverview>("/automation/gtm/overview"),
+  recalculateClientHealth: (clientId: number) =>
+    requestJson<{ score: number; grade: string; breakdown: Record<string, number> }>(`/clients/${clientId}/recalculate-health`, { method: "POST" }),
+  syncDealLifecycle: (dealId: number) =>
+    requestJson<Record<string, unknown>>(`/deals/${dealId}/gtm-sync`, { method: "POST" }),
+
   getDeals: () => fetchCollectionApi<Deal>("/deals"),
   createDeal: (deal: Omit<Deal, "id" | "createdAt" | "updatedAt">) =>
     requestJson<Deal>("/deals", { method: "POST", body: JSON.stringify(deal) }),

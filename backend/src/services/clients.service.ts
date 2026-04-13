@@ -4,6 +4,7 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { UserRole } from "../config/types";
 import { sendClientWelcomeEmail } from "../utils/email-templates";
+import { triggerAutomation, onClientCreated } from "./automation-engine";
 import {
   buildClientAvatar,
   fromDbClientSegment,
@@ -274,6 +275,16 @@ export const clientsService = {
         email: client.email,
       }).catch(() => {});
 
+      // Trigger automation: Client Created
+      onClientCreated(client.id, {
+        name: client.name,
+        email: client.email,
+        company: client.company,
+        tier: client.tier,
+        segment: client.segment,
+        assignedTo: client.assignedTo,
+      });
+
       return mapClient(client);
     } catch (error) {
       if (isEmailUniqueConstraintError(error)) {
@@ -320,6 +331,20 @@ export const clientsService = {
           ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         },
       });
+
+      // Trigger automation: Client Updated / Health Changed
+      if (patch.healthScore !== undefined) {
+        triggerAutomation("client_health_changed", {
+          trigger: "client_health_changed",
+          entityType: "Client",
+          entityId: updated.id,
+          data: {
+            healthScore: updated.healthScore,
+            previousScore: existing.healthScore,
+            name: updated.name
+          }
+        }).catch(err => console.error("Health automation failed:", err));
+      }
 
       return mapClient(updated);
     } catch (error) {

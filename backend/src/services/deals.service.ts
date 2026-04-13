@@ -2,6 +2,8 @@ import { Prisma, type DealStage } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { UserRole } from "../config/types";
+import { onDealStageChanged, triggerAutomation } from "./automation-engine";
+import { gtmLifecycleService } from "./gtm-lifecycle.service";
 
 type DealRecord = {
   id: number;
@@ -43,11 +45,24 @@ type AccessScope = {
 } | null | undefined;
 
 function mapDeal(deal: any): DealRecord {
+  let stage: string = deal.stage;
+  if (stage === "closed_won") stage = "closed-won";
+  if (stage === "closed_lost") stage = "closed-lost";
   return {
     ...deal,
+    stage: stage as DealStage,
+    expectedCloseDate: deal.expectedClose?.toISOString() ?? null,
+    actualCloseDate: deal.actualClose?.toISOString() ?? null,
     createdAt: deal.createdAt.toISOString(),
     updatedAt: deal.updatedAt.toISOString(),
   };
+}
+
+function toDbStage(stage?: string) {
+  if (!stage) return undefined;
+  if (stage === "closed-won") return "closed_won";
+  if (stage === "closed-lost") return "closed_lost";
+  return stage;
 }
 
 export const dealsService = {
@@ -94,7 +109,7 @@ export const dealsService = {
         title: input.title,
         value: input.value ?? 0,
         currency: input.currency ?? "USD",
-        stage: input.stage ?? "prospecting",
+        stage: (toDbStage(input.stage) as any) ?? "prospecting",
         probability: input.probability ?? 50,
         expectedClose: input.expectedCloseDate ? new Date(input.expectedCloseDate) : null,
         actualClose: input.actualCloseDate ? new Date(input.actualCloseDate) : null,
@@ -103,15 +118,33 @@ export const dealsService = {
         tags: input.tags ?? [],
       },
     });
+
+    // Trigger automation: Deal Created
+    triggerAutomation("deal_created", {
+      trigger: "deal_created",
+      entityType: "Deal",
+      entityId: deal.id,
+      data: {
+        title: deal.title,
+        value: deal.value,
+        stage: deal.stage,
+        probability: deal.probability,
+        assignedTo: deal.assignedTo,
+      },
+    }).catch((err) => console.error("Automation trigger failed:", err));
+
+    gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => console.error("Deal lifecycle sync failed:", err));
     return mapDeal(deal);
   },
 
   async update(id: number, patch: Partial<DealInput>, access?: AccessScope) {
     const existing = await this.getById(id, access);
+    const dbStage = toDbStage(patch.stage);
     const deal = await prisma.deal.update({
       where: { id },
       data: {
         ...patch,
+        ...(dbStage ? { stage: dbStage as any } : {}),
         ...(patch.expectedCloseDate && { expectedClose: new Date(patch.expectedCloseDate) }),
         ...(patch.actualCloseDate && { actualClose: new Date(patch.actualCloseDate) }),
         updatedAt: new Date(),
@@ -141,7 +174,18 @@ export const dealsService = {
       }
     }
 
+    // Trigger automation: Deal Stage Changed
+    if (patch.stage && patch.stage !== existing.stage) {
+      onDealStageChanged(deal.id, deal.stage, existing.stage).catch((err) => console.error("Automation trigger failed:", err));
+    }
+
+    gtmLifecycleService.syncDealLifecycle(deal.id, access?.email).catch((err) => console.error("Deal lifecycle sync failed:", err));
     return mapDeal(deal);
+  },
+
+  async syncLifecycle(id: number, access?: AccessScope) {
+    await this.getById(id, access);
+    return gtmLifecycleService.syncDealLifecycle(id, access?.email);
   },
 
   async delete(id: number, access?: AccessScope) {

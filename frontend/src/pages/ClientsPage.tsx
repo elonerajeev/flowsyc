@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -70,6 +71,15 @@ export default function ClientsPage() {
       toast.success("Client removed successfully");
     },
     onError: () => toast.error("Failed to remove client"),
+  });
+  const recalculateHealthMutation = useMutation({
+    mutationFn: (id: number) => crmService.recalculateClientHealth(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.clients });
+      queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+      toast.success("Client health recalculated");
+    },
+    onError: () => toast.error("Failed to recalculate client health"),
   });
 
   const { exportData, isExporting, LoadingProgressComponent } = useExport();
@@ -180,6 +190,12 @@ export default function ClientsPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Link to="/automation/gtm">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <ArrowUpRight className="h-4 w-4" />
+                  GTM Center
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="sm"
@@ -357,6 +373,15 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
                     <div className="flex items-center gap-2">
+                      {canEdit && (
+                        <button
+                          onClick={() => recalculateHealthMutation.mutate(client.id)}
+                          className="p-1.5 rounded-full hover:bg-info/10 text-muted-foreground hover:text-info transition"
+                          title="Recalculate health"
+                        >
+                          <HeartPulse className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {canEdit && (
                         <button
                           onClick={() => openQuickCreate("client", client)}

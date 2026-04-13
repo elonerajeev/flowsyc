@@ -482,3 +482,226 @@ export async function sendInvoiceSentEmail(invoice: { id: string; client: string
   };
   await sendMail(email);
 }
+
+// ============================================
+// CRM EMAIL TEMPLATES - LEADS, DEALS, CLIENTS
+// ============================================
+
+// Lead Welcome Email
+export async function sendLeadWelcomeEmail(lead: { name: string; email: string; company?: string }) {
+  try {
+    const email = {
+      to: lead.email,
+      subject: `Welcome - Thank You for Your Interest in ${APP_NAME}`,
+      text: `Dear ${lead.name},\n\nThank you for reaching out! We've received your inquiry and our team will be in touch with you shortly.\n\nWhat happens next:\n1. Our team will review your requirements\n2. A specialist will reach out within 24-48 hours\n3. We'll schedule a call to understand your needs better\n\nIn the meantime, feel free to explore our website.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #2563eb;">Welcome, ${lead.name}!</h2>
+          <p>Thank you for reaching out! We've received your inquiry and our team will be in touch with you shortly.</p>
+          
+          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin: 0 0 12px 0; color: #374151;">What happens next?</h3>
+            <ol style="margin: 0; padding-left: 20px; color: #6b7280;">
+              <li>Our team will review your requirements</li>
+              <li>A specialist will reach out within 24-48 hours</li>
+              <li>We'll schedule a call to understand your needs better</li>
+            </ol>
+          </div>
+          
+          <p>In the meantime, feel free to explore our website or follow us on social media.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send lead welcome email", { error: err instanceof Error ? err.message : String(err), email: lead.email });
+  }
+}
+
+// Lead Assigned Email (to Sales Rep)
+export async function sendLeadAssignedEmail(lead: { name: string; email: string; company?: string; source?: string }, assignee: { name: string; email: string }) {
+  try {
+    const email = {
+      to: assignee.email,
+      subject: `New Lead Assigned: ${lead.name} from ${lead.company || 'Unknown Company'}`,
+      text: `Hi ${assignee.name},\n\nA new lead has been assigned to you.\n\nLead Details:\nName: ${lead.name}\nEmail: ${lead.email}\nCompany: ${lead.company || 'N/A'}\nSource: ${lead.source || 'Direct'}\n\nPlease reach out within 24 hours.\n\nBest regards,\n${APP_NAME} System`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #2563eb;">New Lead Assigned</h2>
+          <p>Hi ${assignee.name},</p>
+          <p>A new lead has been assigned to you. Please follow up promptly.</p>
+          
+          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin: 0 0 12px 0; color: #374151;">Lead Details</h3>
+            <table style="width: 100%;">
+              <tr><td style="padding: 8px 0; color: #6b7280;">Name</td><td style="padding: 8px 0; font-weight: 600;">${lead.name}</td></tr>
+              <tr><td style="padding: 8px 0; color: #6b7280;">Email</td><td style="padding: 8px 0;"><a href="mailto:${lead.email}">${lead.email}</a></td></tr>
+              <tr><td style="padding: 8px 0; color: #6b7280;">Company</td><td style="padding: 8px 0;">${lead.company || 'N/A'}</td></tr>
+              <tr><td style="padding: 8px 0; color: #6b7280;">Source</td><td style="padding: 8px 0;">${lead.source || 'Direct'}</td></tr>
+            </table>
+          </div>
+          
+          <p style="color: #f59e0b; font-weight: 600;">Please reach out within 24 hours.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send lead assigned email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
+  }
+}
+
+// Deal Won Email
+export async function sendDealWonEmail(deal: { title: string; value: string; clientName?: string }, recipientEmail: string) {
+  try {
+    const email = {
+      to: recipientEmail,
+      subject: `🎉 Deal Won: ${deal.title}`,
+      text: `Congratulations!\n\nWe're thrilled to announce that the deal "${deal.title}" has been successfully closed!\n\nDeal Value: ${deal.value}\n${deal.clientName ? `Client: ${deal.clientName}` : ''}\n\nThis is a huge win for the team. Thank you for your hard work!\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #10b981;">🎉 Congratulations!</h2>
+          <p>We're thrilled to announce that the deal <strong>"${deal.title}"</strong> has been successfully closed!</p>
+          
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 24px; border-radius: 12px; margin: 20px 0; text-align: center;">
+            <p style="font-size: 14px; margin: 0 0 8px 0; opacity: 0.9;">DEAL VALUE</p>
+            <p style="font-size: 32px; font-weight: bold; margin: 0;">${deal.value}</p>
+            ${deal.clientName ? `<p style="font-size: 14px; margin: 16px 0 0 0; opacity: 0.9;">Client: ${deal.clientName}</p>` : ''}
+          </div>
+          
+          <p>This is a huge win for the team! Thank you for your dedication and hard work.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send deal won email", { error: err instanceof Error ? err.message : String(err), to: recipientEmail });
+  }
+}
+
+// Deal Lost Email
+export async function sendDealLostEmail(deal: { title: string; value?: string; reason?: string }, recipientEmail: string) {
+  try {
+    const email = {
+      to: recipientEmail,
+      subject: `Deal Update: ${deal.title}`,
+      text: `Hello,\n\nWe wanted to update you that the deal "${deal.title}" has been marked as closed/lost.\n\n${deal.reason ? `Reason: ${deal.reason}` : ''}\n\nWhile this deal didn't convert, every interaction is a learning opportunity. Let's discuss how we can improve our approach for future deals.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #6b7280;">Deal Update</h2>
+          <p>Hello,</p>
+          <p>We wanted to update you that the deal <strong>"${deal.title}"</strong> has been marked as closed/lost.</p>
+          ${deal.reason ? `<div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+            <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Reason</p>
+            <p style="margin: 4px 0 0 0; font-weight: 600;">${deal.reason}</p>
+          </div>` : ''}
+          <p>While this deal didn't convert, every interaction is a learning opportunity. Let's discuss how we can improve our approach for future deals.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send deal lost email", { error: err instanceof Error ? err.message : String(err), to: recipientEmail });
+  }
+}
+
+// Follow-up Reminder Email
+export async function sendFollowupEmail(lead: { name: string; email: string; company?: string }, assignee: { name: string; email: string }) {
+  try {
+    const email = {
+      to: assignee.email,
+      subject: `Follow-up Reminder: ${lead.name}`,
+      text: `Hi ${assignee.name},\n\nThis is a reminder to follow up with ${lead.name}${lead.company ? ` from ${lead.company}` : ''}.\n\nLast contacted: N/A\nStatus: Awaiting response\n\nDon't let this lead go cold!\n\nBest regards,\n${APP_NAME} System`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #f59e0b;">Follow-up Reminder</h2>
+          <p>Hi ${assignee.name},</p>
+          <p>This is a reminder to follow up with the lead below.</p>
+          
+          <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0 0 8px 0; font-weight: 600; color: #92400e;">${lead.name}</p>
+            <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 14px;">${lead.email}</p>
+            ${lead.company ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${lead.company}</p>` : ''}
+          </div>
+          
+          <p style="color: #dc2626; font-weight: 600;">Don't let this lead go cold!</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send follow-up email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
+  }
+}
+
+// Task Reminder Email
+export async function sendTaskReminderEmail(task: { title: string; dueDate?: string; priority?: string }, assignee: { name: string; email: string }) {
+  try {
+    const priorityColors: Record<string, string> = {
+      high: "#dc2626",
+      medium: "#f59e0b",
+      low: "#10b981"
+    };
+    const priorityColor = priorityColors[task.priority || "medium"] || "#6b7280";
+    
+    const email = {
+      to: assignee.email,
+      subject: `Task Reminder: ${task.title}`,
+      text: `Hi ${assignee.name},\n\nThis is a reminder about the following task:\n\nTask: ${task.title}\n${task.dueDate ? `Due: ${task.dueDate}` : ''}\n${task.priority ? `Priority: ${task.priority}` : ''}\n\nPlease complete this task on time.\n\nBest regards,\n${APP_NAME} System`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: ${priorityColor};">Task Reminder</h2>
+          <p>Hi ${assignee.name},</p>
+          <p>This is a reminder about the following task:</p>
+          
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${task.title}</p>
+            ${task.dueDate ? `<p style="margin: 0 0 8px 0; color: #6b7280;">📅 Due: <strong>${task.dueDate}</strong></p>` : ''}
+            ${task.priority ? `<p style="margin: 0; color: ${priorityColor};">⚡ Priority: <strong>${task.priority.toUpperCase()}</strong></p>` : ''}
+          </div>
+          
+          <p>Please complete this task on time.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send task reminder email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
+  }
+}
+
+// Renewal Reminder Email
+export async function sendRenewalReminderEmail(client: { name: string; email: string; renewalDate?: string }, assignee: { name: string; email: string }) {
+  try {
+    const email = {
+      to: assignee.email,
+      subject: `Renewal Alert: ${client.name}`,
+      text: `Hi ${assignee.name},\n\nThis is an automated reminder that a client renewal is approaching.\n\nClient: ${client.name}\n${client.renewalDate ? `Renewal Date: ${client.renewalDate}` : ''}\n\nPlease prepare for the renewal discussion.\n\nBest regards,\n${APP_NAME} System`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #7c3aed;">Renewal Alert</h2>
+          <p>Hi ${assignee.name},</p>
+          <p>This is an automated reminder that a client renewal is approaching.</p>
+          
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">CLIENT</p>
+            <p style="margin: 0 0 16px 0; font-size: 24px; font-weight: 600; color: #7c3aed;">${client.name}</p>
+            ${client.renewalDate ? `<p style="margin: 0; color: #6b7280;">Renewal Date: <strong>${client.renewalDate}</strong></p>` : ''}
+          </div>
+          
+          <p>Please prepare for the renewal discussion and reach out to the client in advance.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send renewal reminder email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
+  }
+}

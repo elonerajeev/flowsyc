@@ -47,6 +47,7 @@ model Client {
   avatar      String
   tier        ClientTier    @default(Growth)
   healthScore Int           @default(75)
+  healthGrade String        @default("B")     // A+, A, B, C, D, F
   nextAction  String        @default("Initial contact")
   segment     ClientSegment @default(new_business)
   companyId   String?
@@ -57,6 +58,15 @@ model Client {
   company     String        @default("")
   tags        String[]      @default([])
   contacts    Contact[]
+  
+  // Health tracking
+  lastContactDate DateTime?
+  engagementScore Int        @default(50)  // 0-100
+  
+  // Contract info for renewals
+  contractStartDate DateTime?
+  contractEndDate   DateTime?
+  
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
@@ -65,6 +75,11 @@ model Client {
   @@index([deletedAt])
   @@index([status])
   @@index([tier])
+  @@index([healthScore])
+  @@index([healthGrade])
+  @@index([assignedTo])
+  @@index([lastContactDate])
+  @@index([contractEndDate])
 }
 
 model Conversation {
@@ -352,6 +367,7 @@ model Lead {
   source     LeadSource @default(website)
   score      Int        @default(50)
   assignedTo String?
+  assignedAt DateTime?
   notes      String?
   tags       String[]   @default([])
   convertedAt DateTime?
@@ -360,9 +376,19 @@ model Lead {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
+  // Extended fields for scoring
+  companySize String?
+  budget      String?
+  timeline    String?
+
   @@index([deletedAt])
   @@index([status])
   @@index([source])
+  @@index([score])
+  @@index([assignedTo])
+  @@index([updatedAt])
+  @@index([createdAt])
+  @@index([company])
 }
 
 model Contact {
@@ -403,6 +429,8 @@ model Deal {
 
   @@index([deletedAt])
   @@index([stage])
+  @@index([assignedTo])
+  @@index([updatedAt])
 }
 
 model DealActivity {
@@ -637,4 +665,320 @@ model Team {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
+}
+
+// ============================================
+// AUTOMATION SYSTEM MODELS
+// ============================================
+
+// Trigger types for automation
+enum AutomationTrigger {
+  lead_created
+  lead_updated
+  lead_scored
+  lead_assigned
+  lead_score_above
+  lead_score_below
+  deal_created
+  deal_stage_changed
+  deal_closed
+  deal_stale
+  task_created
+  task_completed
+  task_overdue
+  client_created
+  client_health_changed
+  client_health_low
+  churn_risk
+  cold_lead_detected
+  followup_due
+  renewal_due
+  invoice_created
+  invoice_overdue
+  payroll_due
+  project_stalled
+  custom_schedule
+  manual
+}
+
+// Action types that automation can perform
+enum AutomationAction {
+  send_email
+  create_task
+  assign_lead
+  update_score
+  move_deal
+  create_client
+  send_notification
+  tag_entity
+  update_field
+  webhook
+}
+
+// Status of automation rules
+enum AutomationRuleStatus {
+  active
+  paused
+  archived
+}
+
+// Status of automation logs
+enum AutomationLogStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+// Automation Rules - Define what automation to run
+model AutomationRule {
+  id          Int                   @id @default(autoincrement())
+  name        String
+  description String?
+  trigger     AutomationTrigger
+  conditions  Json                  @default("[]") // Array of condition objects
+  actions     Json                  @default("[]") // Array of action objects
+  
+  // Scheduling (for custom_schedule trigger)
+  cronExpression String?            // e.g., "0 9 * * *" for daily at 9am
+  isActive       Boolean            @default(true)
+  status        AutomationRuleStatus @default(active)
+  
+  // Metadata
+  priority     Int                  @default(0) // Higher = runs first
+  maxRunsPerDay Int?               // Limit daily executions
+  
+  // Usage tracking
+  runCount     Int                  @default(0)
+  lastRunAt    DateTime?
+  lastRunError String?
+  
+  // Relations
+  logs         AutomationLog[]
+  createdBy    String?             // User email who created
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([trigger])
+  @@index([status])
+  @@index([isActive])
+}
+
+// Automation Logs - Track execution history
+model AutomationLog {
+  id          Int                   @id @default(autoincrement())
+  ruleId      Int
+  rule        AutomationRule       @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  
+  trigger     String                // The trigger that fired
+  triggerData Json                 @default("{}") // Original event data
+  actionData  Json                 @default("[]") // Actions executed
+  
+  status      AutomationLogStatus   @default(pending)
+  startedAt   DateTime              @default(now())
+  completedAt DateTime?
+  error       String?
+  
+  // What was affected
+  entityType  String?               // "Lead", "Deal", "Task", etc.
+  entityId    Int?
+  
+  // Execution details
+  durationMs  Int?                 // How long it took
+  
+  createdAt   DateTime             @default(now())
+
+  @@index([ruleId])
+  @@index([status])
+  @@index([entityType, entityId])
+  @@index([startedAt])
+}
+
+// Scheduled Jobs - For one-time or recurring scheduled tasks
+enum ScheduledJobType {
+  email
+  task
+  alert
+  webhook
+  reminder
+}
+
+enum ScheduledJobStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+model ScheduledJob {
+  id          Int                 @id @default(autoincrement())
+  
+  jobType     ScheduledJobType
+  name        String
+  description String?
+  
+  // Scheduling
+  scheduledFor DateTime           // When to run
+  cronExpression String?          // For recurring jobs
+  
+  // Payload - what to execute
+  payload     Json               @default("{}")
+  
+  // Status
+  status      ScheduledJobStatus  @default(pending)
+  
+  // For recurring jobs
+  isRecurring Boolean            @default(false)
+  nextRunAt   DateTime?
+  
+  // Execution tracking
+  runCount    Int                @default(0)
+  lastRunAt   DateTime?
+  lastError   String?
+  
+  // Who/What this is for
+  entityType  String?             // "Lead", "Deal", "Client", etc.
+  entityId    Int?
+  
+  // Who created this
+  createdBy   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([entityType, entityId])
+  @@index([isRecurring])
+}
+
+// Email Queue - For sending emails with retry logic
+enum EmailQueueStatus {
+  pending
+  sending
+  sent
+  failed
+  cancelled
+}
+
+model EmailQueue {
+  id          Int               @id @default(autoincrement())
+  
+  // Email details
+  to          String
+  cc          String?
+  bcc         String?
+  subject     String
+  body        String            @db.Text
+  htmlBody    String?           @db.Text
+  
+  // Template info
+  template    String?          // Template name if using template
+  templateData Json?            @default("{}")
+  
+  // Scheduling
+  scheduledFor DateTime?        // Optional delay
+  sendAfter    DateTime?        // Send after this time
+  
+  // Status
+  status      EmailQueueStatus  @default(pending)
+  
+  // Retry logic
+  retryCount  Int               @default(0)
+  maxRetries  Int               @default(3)
+  lastError   String?
+  nextRetryAt DateTime?
+  
+  // Tracking
+  sentAt      DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  
+  // Metadata
+  entityType  String?           // What this email is related to
+  entityId   Int?
+  
+  // Who it's for
+  recipientName String?
+  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([entityType, entityId])
+  @@index([to])
+}
+
+// Activity Log - Track all CRM activities for automation triggers
+model ActivityLog {
+  id          Int               @id @default(autoincrement())
+  
+  // What happened
+  action      String            // "created", "updated", "deleted", "viewed", etc.
+  entityType  String            // "Lead", "Deal", "Client", etc.
+  entityId    Int
+  
+  // Details
+  description String?            // Human readable description
+  changes    Json?              @default("{}") // What changed
+  metadata   Json?               @default("{}")
+  
+  // Who did it
+  performedBy String?           // User email
+  performedByName String?
+  
+  // For activity feed
+  isVisible  Boolean            @default(true)
+  icon       String?            // Icon name for UI
+  color      String?            // Color for UI
+  
+  createdAt  DateTime           @default(now())
+
+  @@index([entityType, entityId])
+  @@index([performedBy])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// Alert model for automation alerts
+enum AlertType {
+  health_warning
+  churn_risk
+  stale_deal
+  escalation
+  renewal_reminder
+  custom
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+model Alert {
+  id          Int          @id @default(autoincrement())
+  type        AlertType    @default(custom)
+  severity    AlertSeverity @default(warning)
+  title       String
+  message     String
+  entityType  String?      // "Lead", "Deal", "Client", etc.
+  entityId    Int?
+  
+  // Resolution
+  isResolved  Boolean      @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  
+  // Metadata
+  metadata    Json?        @default("{}")
+  
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([isResolved])
+  @@index([severity])
+  @@index([createdAt])
+  @@index([type])
 }

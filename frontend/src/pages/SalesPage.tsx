@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { 
   Plus, 
   Search, 
@@ -78,6 +79,16 @@ const SalesPage = () => {
       toast.success("Lead removed successfully");
     },
     onError: () => toast.error("Failed to remove lead"),
+  });
+
+  const syncDealMutation = useMutation({
+    mutationFn: (id: number) => crmService.syncDealLifecycle(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+      toast.success("Pipeline automation synced");
+    },
+    onError: () => toast.error("Failed to sync pipeline automation"),
   });
 
   const handleRefresh = async () => {
@@ -176,6 +187,12 @@ const SalesPage = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              <Link to="/automation/gtm">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Activity className="h-4 w-4" />
+                  GTM Center
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="sm"
@@ -326,8 +343,12 @@ const SalesPage = () => {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => syncDealMutation.mutate(deal.id)}>
+                            <RefreshCw className="h-4 w-4 mr-2 text-blue-500" />
+                            Run GTM Sync
+                          </DropdownMenuItem>
                           {canEdit && (
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openQuickCreate("lead", deal)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Deal
                           </DropdownMenuItem>
@@ -424,6 +445,22 @@ const SalesPage = () => {
                           <DropdownMenuItem>
                             <Eye className="h-4 w-4 mr-2" />
                             View Lead
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => crmService.recalculateLeadScore(lead.id).then(() => {
+                            queryClient.invalidateQueries({ queryKey: ["leads"] });
+                            queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                            toast.success("Lead score recalculated");
+                          }).catch(() => toast.error("Failed to recalculate score"))}>
+                            <RefreshCw className="h-4 w-4 mr-2 text-blue-500" />
+                            Recalculate Score
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => crmService.createLeadFollowUp(lead.id).then(() => {
+                            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                            queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                            toast.success("Follow-up sequence created");
+                          }).catch(() => toast.error("Failed to create follow-up sequence"))}>
+                            <Calendar className="h-4 w-4 mr-2 text-green-500" />
+                            Create Follow-up
                           </DropdownMenuItem>
                           {canEdit && (
                           <DropdownMenuItem onClick={() => openQuickCreate("lead", lead)}>

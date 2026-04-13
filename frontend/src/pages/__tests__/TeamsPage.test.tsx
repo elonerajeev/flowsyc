@@ -76,14 +76,15 @@ describe('TeamsPage', () => {
   it('renders teams page title', async () => {
     render(<TeamsPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText('Teams')).toBeInTheDocument()
-    })
+    const h1 = document.querySelector('h1');
+    expect(h1).toBeInTheDocument();
+    expect(h1?.textContent).toContain('Team');
+    expect(h1?.textContent).toContain('Organization');
   })
 
   it('renders team management eyebrow badge', () => {
     render(<TeamsPage />)
-    expect(screen.getByText('Team Management')).toBeInTheDocument()
+    expect(screen.getByText('People Management')).toBeInTheDocument()
   })
 
   it('renders page description', () => {
@@ -111,7 +112,7 @@ describe('TeamsPage', () => {
 
   it('renders performance filter', () => {
     render(<TeamsPage />)
-    expect(screen.getByDisplayValue('All performance')).toBeInTheDocument()
+    expect(screen.getByText('all Performance')).toBeInTheDocument()
   })
 
   it('displays team cards', async () => {

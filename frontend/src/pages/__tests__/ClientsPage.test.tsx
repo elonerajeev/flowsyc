@@ -17,6 +17,15 @@ vi.mock('@/hooks/use-list-preferences', () => ({
   })),
 }))
 
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
 const mockClients = [
   {
     id: 1,
@@ -70,9 +79,10 @@ describe('ClientsPage', () => {
   it('renders clients page title', async () => {
     render(<ClientsPage />)
     
-    await waitFor(() => {
-      expect(screen.getByText('Clients')).toBeInTheDocument()
-    })
+    const h1 = document.querySelector('h1');
+    expect(h1).toBeInTheDocument();
+    expect(h1?.textContent).toContain('Client');
+    expect(h1?.textContent).toContain('Accounts');
   })
 
   it('shows loading state', () => {

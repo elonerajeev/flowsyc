@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { PaymentMode } from "@prisma/client";
 import type { AuthUser, UserRole } from "../config/types";
 
 function generateEmployeeId(role: UserRole) {
@@ -7,7 +8,11 @@ function generateEmployeeId(role: UserRole) {
   return `${prefix}-${suffix}`;
 }
 
-const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | "role" | "employeeId">> = {
+type ProfileForDb = Omit<AuthUser, "id" | "name" | "email" | "role" | "employeeId" | "paymentMode"> & {
+  paymentMode: PaymentMode;
+};
+
+const salaryProfiles: Record<UserRole, ProfileForDb> = {
   admin: {
     emailVerified: true,
     department: "Operations",
@@ -20,7 +25,7 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
     baseSalary: 145000,
     allowances: 22000,
     deductions: 7800,
-    paymentMode: "bank-transfer",
+    paymentMode: "bank_transfer",
     payrollCycle: "Mar 2026",
     payrollDueDate: "Apr 05, 2026",
     joinedAt: "2023-09-18",
@@ -38,7 +43,7 @@ const salaryProfiles: Record<UserRole, Omit<AuthUser, "id" | "name" | "email" | 
     baseSalary: 128000,
     allowances: 18000,
     deductions: 6500,
-    paymentMode: "bank-transfer",
+    paymentMode: "bank_transfer",
     payrollCycle: "Mar 2026",
     payrollDueDate: "Apr 05, 2026",
     joinedAt: "2024-01-12",

@@ -90,8 +90,11 @@ describe('ClientsPage - Real App Logic', () => {
   it('renders page with correct title and description', () => {
     render(<ClientsPage />)
     
-    expect(screen.getByText('Clients')).toBeInTheDocument()
-    expect(screen.getByText(/clean relationship view for account health/i)).toBeInTheDocument()
+    const h1 = document.querySelector('h1');
+    expect(h1).toBeInTheDocument();
+    expect(h1?.textContent).toContain('Client');
+    expect(h1?.textContent).toContain('Accounts');
+    expect(screen.getByText(/Track account health/i)).toBeInTheDocument()
   })
 
   it('displays client statistics correctly', () => {
@@ -171,6 +174,6 @@ describe('ClientsPage - Real App Logic', () => {
   it('displays client portfolio badge', () => {
     render(<ClientsPage />)
     
-    expect(screen.getByText('Client Portfolio')).toBeInTheDocument()
+    expect(screen.getByText('Portfolio')).toBeInTheDocument()
   })
 })

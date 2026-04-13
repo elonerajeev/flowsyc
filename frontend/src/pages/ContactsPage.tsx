@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Plus,
   Filter,
@@ -94,6 +95,16 @@ const ContactsPage = () => {
     queryKey: ["clients"],
     queryFn: crmService.getClients,
     staleTime: 60000,
+  });
+
+  // Delete contact mutation
+  const deleteContactMutation = useMutation({
+    mutationFn: (id: number) => crmService.deleteContact(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success("Contact deleted successfully");
+    },
+    onError: () => toast.error("Failed to delete contact"),
   });
 
   // Type definitions for contact data
@@ -408,6 +419,12 @@ const ContactsPage = () => {
 
         {/* Actions */}
         <div className="mt-4 flex items-center gap-3">
+          <Link to="/automation/gtm">
+            <Button variant="outline">
+              <Target className="h-4 w-4 mr-2" />
+              GTM Center
+            </Button>
+          </Link>
           {canEdit && canUseQuickCreate && (
             <Button onClick={() => openQuickCreate?.("contact")}>
               <Plus className="h-4 w-4 mr-2" />
@@ -573,11 +590,18 @@ const ContactsPage = () => {
                           </DropdownMenuItem>
                           {canEdit && (
                             <>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openQuickCreate?.("contact", contact)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit Contact
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => {
+                                  if (window.confirm(`Delete contact "${contact.firstName} ${contact.lastName}"?`)) {
+                                    deleteContactMutation.mutate(contact.id);
+                                  }
+                                }}
+                              >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete Contact
                               </DropdownMenuItem>
@@ -671,11 +695,18 @@ const ContactsPage = () => {
                         </DropdownMenuItem>
                         {canEdit && (
                           <>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openQuickCreate?.("contact", contact)}>
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Contact
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => {
+                                if (window.confirm(`Delete contact "${contact.firstName} ${contact.lastName}"?`)) {
+                                  deleteContactMutation.mutate(contact.id);
+                                }
+                              }}
+                            >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete Contact
                             </DropdownMenuItem>

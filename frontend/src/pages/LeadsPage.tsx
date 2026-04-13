@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from 'xlsx';
+import { Link } from "react-router-dom";
 import {
   Plus,
   Filter,
@@ -25,6 +26,8 @@ import {
   FileSpreadsheet,
   Table as TableIcon,
   Grid3X3,
+  Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -80,6 +83,7 @@ const LeadsPage = () => {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
   const [assignedFilter, setAssignedFilter] = useState<string>("all");
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -90,6 +94,18 @@ const LeadsPage = () => {
   const [visibleCount, setVisibleCount] = useState(LEADS_PAGE_SIZE);
 
   const canEdit = role === "admin" || role === "manager";
+
+  // Copy email to clipboard
+  const copyEmail = async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopiedEmail(email);
+      toast.success("Email copied to clipboard!");
+      setTimeout(() => setCopiedEmail(null), 2000);
+    } catch (err) {
+      toast.error("Failed to copy email");
+    }
+  };
 
   // Fetch leads
   const { data: leadsData, isLoading, error } = useQuery({
@@ -186,6 +202,16 @@ const LeadsPage = () => {
     return { total, new: newLeads, qualified, converted, avgScore };
   }, [leadsData]);
 
+  // Delete lead mutation
+  const deleteLeadMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeLead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Lead deleted successfully");
+    },
+    onError: () => toast.error("Failed to delete lead"),
+  });
+
   // Export leads
   const exportMutation = useMutation({
     mutationFn: async () => {
@@ -236,181 +262,286 @@ const LeadsPage = () => {
     mutationFn: async (file: File) => {
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
       let rawRows: Record<string, unknown>[] = [];
+      let headers: string[] = [];
 
       try {
         if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        // Excel file - read ALL data first
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          throw new Error('Excel file contains no worksheets');
-        }
-        
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        if (!worksheet) {
-          throw new Error('Could not read worksheet from Excel file');
-        }
-        
-        rawRows = XLSX.utils.sheet_to_json(worksheet);
-
-      } else if (fileExtension === 'csv' || fileExtension === 'txt') {
-        // CSV file - read ALL lines
-        const text = await file.text();
-        const lines = text.split('\n').filter(line => line.trim());
-        
-        if (lines.length < 2) {
-          throw new Error('CSV file must contain at least a header row and one data row');
-        }
-
-        // Use first line as headers
-        const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-        
-        rawRows = lines.slice(1).map(row => {
-          const values = row.split(',').map(cell => cell.replace(/^"|"$/g, '').trim());
-          const rowData: Record<string, unknown> = {};
-          headers.forEach((header, index) => {
-            rowData[header] = values[index] || '';
-          });
-          return rowData;
-        });
-
-      } else {
-        throw new Error(`Unsupported file format: ${fileExtension}`);
-      }
-
-      // Show ALL data first, then validate
-      if (rawRows.length === 0) {
-        throw new Error('No data rows found in the file');
-      }
-
-      // Convert raw rows to lead objects
-      const leads: (Record<string, unknown> & { _isValid?: boolean; _validationErrors?: string[] })[] = rawRows.map((row) => {
-        // If row is an array, convert to object
-        if (Array.isArray(row)) {
-          const headers = ['first name', 'last name', 'email', 'phone', 'company', 'job title', 'source', 'status', 'score'];
-          const rowObj: Record<string, unknown> = {};
-          headers.forEach((header, i) => {
-            rowObj[header] = row[i] || '';
-          });
-          row = rowObj;
-        }
-
-        const rowKeys = Object.keys(row);
-        
-        // Flexible column mapping
-        const getValue = (keys: string[]): string => {
-          for (const key of keys) {
-            if (row[key] !== undefined && row[key] !== '' && row[key] !== null) {
-              return String(row[key]).trim();
+          // Excel file
+          const arrayBuffer = await file.arrayBuffer();
+          const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+          
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error('Excel file contains no worksheets');
+          }
+          
+          // Find the best sheet to read (skip "Summary" or similar metadata sheets)
+          let sheetName = workbook.SheetNames[0];
+          let maxRows = 0;
+          let bestSheetIndex = 0;
+          
+          // Find sheet with most data
+          for (let i = 0; i < workbook.SheetNames.length; i++) {
+            const name = workbook.SheetNames[i];
+            const worksheet = workbook.Sheets[name];
+            if (worksheet) {
+              const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+              if (data.length > maxRows) {
+                maxRows = data.length;
+                bestSheetIndex = i;
+                sheetName = name;
+              }
             }
           }
-          // Try normalized matches
-          for (const key of keys) {
-            const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const directKey = rowKeys.find(k =>
-              k.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedKey
-            );
-            if (directKey && row[directKey] !== undefined && row[directKey] !== '') {
-              return String(row[directKey]).trim();
+          
+          // Skip "Summary" sheet if there's a better option
+          if (sheetName.toLowerCase().includes('summary') && workbook.SheetNames.length > 1) {
+            for (let i = 0; i < workbook.SheetNames.length; i++) {
+              if (!workbook.SheetNames[i].toLowerCase().includes('summary')) {
+                sheetName = workbook.SheetNames[i];
+                bestSheetIndex = i;
+                break;
+              }
             }
           }
-          // Try partial matches
-          for (const key of keys) {
-            const keyParts = key.toLowerCase().split(/\s+/);
-            const matchingKey = rowKeys.find(k => {
-              const kLower = k.toLowerCase();
-              return keyParts.every(part => kLower.includes(part));
+          
+          const worksheet = workbook.Sheets[sheetName];
+          
+          if (!worksheet) {
+            throw new Error('Could not read worksheet from Excel file');
+          }
+          
+          rawRows = XLSX.utils.sheet_to_json(worksheet);
+
+        } else if (fileExtension === 'csv' || fileExtension === 'txt') {
+          // CSV file
+          const text = await file.text();
+          const lines = text.split('\n').filter(line => line.trim());
+          
+          if (lines.length < 2) {
+            throw new Error('CSV file must contain at least a header row and one data row');
+          }
+
+          // Use first line as headers
+          headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+          
+          rawRows = lines.slice(1).map(row => {
+            // Handle CSV with quotes
+            const values = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+            const cleanedValues = values.map(cell => cell.replace(/^"|"$/g, '').trim());
+            const rowData: Record<string, unknown> = {};
+            headers.forEach((header, index) => {
+              rowData[header] = cleanedValues[index] || '';
             });
-            if (matchingKey && row[matchingKey] !== undefined && row[matchingKey] !== '') {
-              return String(row[matchingKey]).trim();
+            return rowData;
+          });
+
+        } else {
+          throw new Error(`Unsupported file format: ${fileExtension}. Please upload a CSV or Excel (.xlsx, .xls) file.`);
+        }
+
+        // Check if we have any data
+        if (rawRows.length === 0) {
+          throw new Error('No data rows found in the file. Make sure your file has data beyond the header row.');
+        }
+
+        // Get all unique column names from the file
+        const allColumns = new Set<string>();
+        rawRows.forEach(row => {
+          Object.keys(row).forEach(key => allColumns.add(key));
+        });
+        const fileColumns = Array.from(allColumns);
+        
+        // Check if file looks like a lead file (has at least some useful columns)
+        const leadColumnPatterns = ['firstname', 'first_name', 'first name', 'lastname', 'last_name', 'last name', 'email', 'name', 'company', 'phone', 'mobile', 'contact'];
+        const hasUsefulColumns = fileColumns.some(col => 
+          leadColumnPatterns.some(pattern => col.toLowerCase().includes(pattern))
+        );
+
+        if (!hasUsefulColumns) {
+          const errorMsg = `This file doesn't appear to be a lead list.\n\n` +
+            `File columns found: ${fileColumns.slice(0, 10).join(', ')}${fileColumns.length > 10 ? '...' : ''}\n\n` +
+            `Your file should contain columns like: Name, Email, Phone, Company, etc.\n` +
+            `If this is a summary/statistics file, it cannot be imported as leads.`;
+          throw new Error(errorMsg);
+        }
+
+        // Convert raw rows to lead objects
+        const leads: (Record<string, unknown> & { _isValid?: boolean; _validationErrors?: string[] })[] = rawRows.map((row, rowIndex) => {
+          const rowKeys = Object.keys(row);
+          
+          // Flexible column mapping
+          const getValue = (keys: string[]): string => {
+            for (const key of keys) {
+              if (row[key] !== undefined && row[key] !== '' && row[key] !== null) {
+                return String(row[key]).trim();
+              }
+            }
+            // Try normalized matches
+            for (const key of keys) {
+              const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const directKey = rowKeys.find(k =>
+                k.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedKey
+              );
+              if (directKey && row[directKey] !== undefined && row[directKey] !== '') {
+                return String(row[directKey]).trim();
+              }
+            }
+            // Try partial matches
+            for (const key of keys) {
+              const keyParts = key.toLowerCase().split(/\s+/);
+              const matchingKey = rowKeys.find(k => {
+                const kLower = k.toLowerCase();
+                return keyParts.every(part => kLower.includes(part));
+              });
+              if (matchingKey && row[matchingKey] !== undefined && row[matchingKey] !== '') {
+                return String(row[matchingKey]).trim();
+              }
+            }
+            return '';
+          };
+
+          // Try to extract name parts
+          const fullName = getValue(['name', 'full name', 'fullname', 'contact', 'contact name', 'person']);
+          let firstName = getValue(['first name', 'firstname', 'first_name', 'fname', 'first']);
+          let lastName = getValue(['last name', 'lastname', 'last_name', 'lname', 'last']);
+          
+          // If we have full name but no first/last, split it
+          if (fullName && !firstName && !lastName) {
+            const nameParts = fullName.split(/\s+/);
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+          }
+
+          const lead = {
+            firstName,
+            lastName,
+            email: getValue(['email', 'email address', 'e-mail', 'emailaddress', 'mail', 'electronic mail']),
+            phone: getValue(['phone', 'phone number', 'phone number', 'mobile', 'telephone', 'cell', 'contact number', 'phone no']),
+            company: getValue(['company', 'organization', 'org', 'employer', 'company name', 'company name']),
+            jobTitle: getValue(['job title', 'jobtitle', 'title', 'position', 'role', 'occupation', 'designation']),
+            source: getValue(['source', 'lead source', 'origin', 'campaign', 'how did you hear']) || 'website',
+            status: getValue(['status', 'lead status', 'stage', 'lead stage']) || 'new',
+            score: parseInt(getValue(['score', 'lead score', 'rating', 'points'])) || 50,
+            assignedTo: getValue(['assigned to', 'assignedto', 'assignee', 'owner', 'sales rep', 'rep']),
+            notes: getValue(['notes', 'comments', 'description', 'remarks', 'comments']),
+          };
+
+          // Validate this lead
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const validationErrors: string[] = [];
+
+          // Check if row has any meaningful data (not completely empty)
+          const hasAnyData = Object.values(lead).some(v => v && v !== '' && v !== '50');
+          if (!hasAnyData) {
+            validationErrors.push('Row is empty or has no relevant data');
+          }
+
+          if (!lead.firstName?.trim() && !lead.lastName?.trim() && !lead.email?.trim()) {
+            validationErrors.push('Missing name and email');
+          } else {
+            if (!lead.firstName?.trim() && !lead.lastName?.trim()) {
+              validationErrors.push('Missing name');
+            }
+            if (!lead.email?.trim()) {
+              validationErrors.push('Missing email');
+            } else if (!emailRegex.test(lead.email)) {
+              validationErrors.push(`Invalid email: "${lead.email}"`);
             }
           }
-          return '';
-        };
 
-        const lead = {
-          firstName: getValue(['first name', 'firstname', 'first_name', 'fname', 'first']),
-          lastName: getValue(['last name', 'lastname', 'last_name', 'lname', 'last']),
-          email: getValue(['email', 'email address', 'e-mail', 'emailaddress']),
-          phone: getValue(['phone', 'phone number', 'mobile', 'telephone', 'cell']),
-          company: getValue(['company', 'organization', 'org', 'employer']),
-          jobTitle: getValue(['job title', 'jobtitle', 'title', 'position', 'role', 'occupation']),
-          source: getValue(['source', 'lead source', 'origin', 'campaign']) || 'website',
-          status: getValue(['status', 'lead status', 'stage']) || 'new',
-          score: parseInt(getValue(['score', 'lead score', 'rating'])) || 50,
-          assignedTo: getValue(['assigned to', 'assignedto', 'assignee', 'owner', 'sales rep']),
-          notes: getValue(['notes', 'comments', 'description', 'remarks']),
-        };
+          // Normalize source
+          const validSources = ['website', 'referral', 'social', 'email', 'cold_call', 'event', 'partner', 'linkedin', 'inbound'];
+          if (!validSources.includes(lead.source.toLowerCase())) {
+            lead.source = 'website';
+          }
 
-        // Validate this lead
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const validationErrors: string[] = [];
+          // Normalize status
+          const validStatuses = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'];
+          if (!validStatuses.includes(lead.status.toLowerCase())) {
+            lead.status = 'new';
+          }
 
-        if (!lead.firstName?.trim()) validationErrors.push('Missing first name');
-        if (!lead.lastName?.trim()) validationErrors.push('Missing last name');
-        if (!lead.email?.trim()) validationErrors.push('Missing email');
-        else if (!emailRegex.test(lead.email)) validationErrors.push('Invalid email');
+          // Normalize score
+          lead.score = Math.max(0, Math.min(100, lead.score));
 
-        // Normalize source
-        const validSources = ['website', 'referral', 'social', 'email', 'cold_call', 'event', 'partner'];
-        if (!validSources.includes(lead.source.toLowerCase())) {
-          lead.source = 'website';
-        }
-
-        // Normalize status
-        const validStatuses = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'];
-        if (!validStatuses.includes(lead.status.toLowerCase())) {
-          lead.status = 'new';
-        }
-
-        // Normalize score
-        lead.score = Math.max(0, Math.min(100, lead.score));
-
-        return {
-          ...lead,
-          _isValid: validationErrors.length === 0,
-          _validationErrors: validationErrors
-        };
-      });
-
-      const validLeads = leads.filter(l => l._isValid);
-      const invalidLeads = leads.filter(l => !l._isValid);
-
-      // Return all leads with validation info
-      if (validLeads.length === 0) {
-        let errorMessage = 'No valid leads found in the file.\n\n';
-        errorMessage += '• Please check that your file has the required columns: First Name, Last Name, Email\n';
-        errorMessage += '• Make sure email addresses are properly formatted\n';
-
-        if (invalidLeads.length <= 5) {
-          errorMessage += '\nValidation errors:\n';
-          invalidLeads.slice(0, 5).forEach((lead, index) => {
-            errorMessage += `• Row ${index + 2}: ${lead._validationErrors?.join(', ')}\n`;
-          });
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      // Import valid leads via API
-      for (const lead of validLeads) {
-        const { _isValid, _validationErrors, ...leadData } = lead as Record<string, unknown> & { _isValid?: boolean; _validationErrors?: string[] };
-        await crmService.createLead({
-          ...leadData,
-          source: String(leadData.source).toLowerCase() as Lead['source'],
-          status: String(leadData.status).toLowerCase() as Lead['status'],
-          phone: leadData.phone as string || undefined,
-          company: leadData.company as string || undefined,
-          jobTitle: leadData.jobTitle as string || undefined,
-          assignedTo: leadData.assignedTo as string || undefined,
-          notes: leadData.notes as string || undefined,
+          return {
+            ...lead,
+            _isValid: validationErrors.length === 0,
+            _validationErrors: validationErrors,
+            _rowNumber: rowIndex + 2 // +2 because row 1 is headers
+          };
         });
-      }
 
-      return { imported: validLeads.length, total: leads.length, invalid: invalidLeads.length };
+        const validLeads = leads.filter(l => l._isValid);
+        const invalidLeads = leads.filter(l => !l._isValid);
+
+        // If no valid leads at all, show detailed error
+        if (validLeads.length === 0) {
+          let errorMessage = `No valid leads found in the file.\n\n`;
+          errorMessage += `Your file has ${leads.length} rows, but none have the required information.\n\n`;
+          
+          // Show what columns we found
+          errorMessage += `Columns found in your file:\n`;
+          fileColumns.slice(0, 15).forEach(col => {
+            errorMessage += `  • ${col}\n`;
+          });
+          if (fileColumns.length > 15) {
+            errorMessage += `  ... and ${fileColumns.length - 15} more columns\n`;
+          }
+          
+          errorMessage += `\nTo import leads, your file needs:\n`;
+          errorMessage += `  • Name (First Name & Last Name OR Full Name)\n`;
+          errorMessage += `  • Email address\n`;
+          
+          // Show first few invalid rows as examples
+          if (invalidLeads.length > 0) {
+            errorMessage += `\nFirst few rows in your file:\n`;
+            invalidLeads.slice(0, 3).forEach((lead) => {
+              const preview = [
+                lead.firstName || '-',
+                lead.lastName || '-', 
+                lead.email || '-',
+                lead.company || '-'
+              ].join(' | ');
+              errorMessage += `  Row ${lead._rowNumber}: ${preview}\n`;
+              if (lead._validationErrors?.length) {
+                errorMessage += `    Issues: ${lead._validationErrors.join(', ')}\n`;
+              }
+            });
+          }
+          
+          errorMessage += `\nTip: Make sure your file has actual contact data with names and email addresses.`;
+          
+          throw new Error(errorMessage);
+        }
+
+        // Import valid leads via API
+        let importedCount = 0;
+        for (const lead of validLeads) {
+          const { _isValid, _validationErrors, _rowNumber, ...leadData } = lead as Record<string, unknown>;
+          try {
+            await crmService.createLead({
+              ...leadData,
+              source: String(leadData.source).toLowerCase() as Lead['source'],
+              status: String(leadData.status).toLowerCase() as Lead['status'],
+              phone: leadData.phone || undefined,
+              company: leadData.company || undefined,
+              jobTitle: leadData.jobTitle || undefined,
+              assignedTo: leadData.assignedTo || undefined,
+              notes: leadData.notes || undefined,
+            });
+            importedCount++;
+          } catch (err) {
+            console.warn(`Failed to import lead row ${lead._rowNumber}:`, err);
+          }
+        }
+
+        return { 
+          imported: importedCount, 
+          total: leads.length, 
+          invalid: invalidLeads.length,
+          skipped: leads.length - validLeads.length
+        };
 
     } catch (error) {
         throw new Error(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -419,14 +550,17 @@ const LeadsPage = () => {
     onSuccess: (result) => {
       let message = `Successfully imported ${result.imported} leads!`;
       if (result.invalid > 0) {
-        message += ` ${result.invalid} leads skipped due to validation errors.`;
+        message += ` ${result.invalid} rows skipped (no valid email/name).`;
       }
       toast.success(message);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : "Failed to import leads";
-      toast.error(errorMessage);
+      toast.error(errorMessage, {
+        description: errorMessage.length > 200 ? "Check the console or your file format" : undefined,
+        duration: 10000,
+      });
     },
   });
 
@@ -597,6 +731,12 @@ const LeadsPage = () => {
 
         {/* Actions */}
         <div className="mt-4 flex items-center gap-3">
+          <Link to="/automation/gtm">
+            <Button variant="outline">
+              <Target className="h-4 w-4 mr-2" />
+              GTM Center
+            </Button>
+          </Link>
           {canEdit && canUseQuickCreate && (
             <Button onClick={() => openQuickCreate?.("lead")}>
               <Plus className="h-4 w-4 mr-2" />
@@ -789,6 +929,17 @@ const LeadsPage = () => {
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm">{lead.email}</span>
+                        <button
+                          onClick={() => copyEmail(lead.email)}
+                          className="ml-1 p-1 rounded hover:bg-accent transition-colors"
+                          title="Copy email"
+                        >
+                          {copiedEmail === lead.email ? (
+                            <Check className="h-3.5 w-3.5 text-green-500" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                          )}
+                        </button>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -834,11 +985,18 @@ const LeadsPage = () => {
                           </DropdownMenuItem>
                           {canEdit && (
                             <>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openQuickCreate?.("lead", lead)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit Lead
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => {
+                                  if (window.confirm(`Delete lead "${lead.firstName} ${lead.lastName}"?`)) {
+                                    deleteLeadMutation.mutate(lead.id);
+                                  }
+                                }}
+                              >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete Lead
                               </DropdownMenuItem>
@@ -886,6 +1044,17 @@ const LeadsPage = () => {
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Mail className="h-4 w-4" />
                           <span className="truncate">{lead.email}</span>
+                          <button
+                            onClick={() => copyEmail(lead.email)}
+                            className="p-1 rounded hover:bg-accent transition-colors"
+                            title="Copy email"
+                          >
+                            {copiedEmail === lead.email ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5 hover:text-foreground" />
+                            )}
+                          </button>
                         </div>
                         {lead.company && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -936,13 +1105,93 @@ const LeadsPage = () => {
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
+                        
+                        {/* GTM Actions */}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            toast.promise(
+                              crmService.recalculateLeadScore(lead.id).then((result) => {
+                                queryClient.invalidateQueries({ queryKey: ["leads"] });
+                                queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                                return `Score recalculated: ${result.score}`;
+                              }),
+                              { loading: "Recalculating score...", success: "Score updated!", error: "Failed" }
+                            );
+                          }}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2 text-blue-500" />
+                          Recalculate Score
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            toast.promise(
+                              crmService.createLeadFollowUp(lead.id).then(() => {
+                                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                                queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                                return "Follow-up sequence created!";
+                              }),
+                              { loading: "Creating follow-ups...", success: "Tasks created!", error: "Failed" }
+                            );
+                          }}
+                        >
+                          <Calendar className="h-4 w-4 mr-2 text-green-500" />
+                          Create Follow-up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            toast.promise(
+                              crmService.assignLeadToRep(lead.id).then((result) => {
+                                queryClient.invalidateQueries({ queryKey: ["leads"] });
+                                queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                                return result.assigned ? `Assigned to ${result.repEmail}` : "No reps available";
+                              }),
+                              { loading: "Finding best rep...", success: "Assigned!", error: "Failed" }
+                            );
+                          }}
+                        >
+                          <User className="h-4 w-4 mr-2 text-purple-500" />
+                          Assign to Best Rep
+                        </DropdownMenuItem>
+                        {(lead.status === "qualified" || lead.status === "proposal" || lead.status === "negotiation" || lead.status === "won") && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              toast.promise(
+                                crmService.convertLeadToClient(lead.id, {
+                                  clientName: lead.company || `${lead.firstName} ${lead.lastName}`,
+                                  tier: lead.score >= 80 ? "Strategic" : "Growth",
+                                }).then((result) => {
+                                  queryClient.invalidateQueries({ queryKey: ["leads"] });
+                                  queryClient.invalidateQueries({ queryKey: ["clients"] });
+                                  queryClient.invalidateQueries({ queryKey: ["contacts"] });
+                                  queryClient.invalidateQueries({ queryKey: ["deals"] });
+                                  queryClient.invalidateQueries({ queryKey: ["gtm-overview"] });
+                                  return `Converted to client ${result.client.name}`;
+                                }),
+                                { loading: "Converting lead...", success: "Lead converted!", error: "Failed" }
+                              );
+                            }}
+                          >
+                            <Building className="h-4 w-4 mr-2 text-emerald-500" />
+                            Convert to Client
+                          </DropdownMenuItem>
+                        )}
+                        
                         {canEdit && (
                           <>
-                            <DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openQuickCreate?.("lead", lead)}>
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Lead
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => {
+                                if (window.confirm(`Delete lead "${lead.firstName} ${lead.lastName}"?`)) {
+                                  deleteLeadMutation.mutate(lead.id);
+                                }
+                              }}
+                            >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete Lead
                             </DropdownMenuItem>

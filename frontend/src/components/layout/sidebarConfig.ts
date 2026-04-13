@@ -25,12 +25,16 @@ import {
   ReceiptText,
   UsersRound,
   Shield,
+  Zap,
+  Bell,
+  Clock,
+  Target,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { UserRole } from "@/contexts/ThemeContext";
 
-export type SidebarSectionKey = "overview" | "people" | "workspace" | "sales" | "finance" | "hr" | "insights" | "system";
+export type SidebarSectionKey = "overview" | "people" | "workspace" | "sales" | "finance" | "hr" | "insights" | "automation" | "system";
 
 export interface SidebarItem {
   to: string;
@@ -124,6 +128,19 @@ export const sidebarSections: SidebarSection[] = [
     icon: Activity,
     items: [
       { to: "/insights/analytics", icon: BarChart3, label: "Analytics", roles: ["admin", "manager"], badge: "New" },
+    ],
+  },
+  {
+    key: "automation",
+    label: "Automation",
+    description: "Workflows, alerts, and triggers",
+    icon: Zap,
+    items: [
+      { to: "/automation/rules", icon: Zap, label: "Rules", roles: ["admin", "manager"], badge: "New" },
+      { to: "/automation/gtm", icon: Target, label: "GTM Center", roles: ["admin", "manager", "employee"] },
+      { to: "/automation/alerts", icon: Bell, label: "Alerts", roles: ["admin", "manager"] },
+      { to: "/automation/scheduled", icon: Clock, label: "Scheduled", roles: ["admin", "manager"] },
+      { to: "/automation/logs", icon: Activity, label: "Activity Logs", roles: ["admin", "manager"] },
     ],
   },
   {

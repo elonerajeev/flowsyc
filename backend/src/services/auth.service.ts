@@ -116,10 +116,8 @@ export const authService = {
           email: input.email,
           passwordHash: await hashPassword(input.password),
           role: input.role,
-          emailVerified: false,
-          ...profile,
-          paymentMode: toDbPaymentMode(profile.paymentMode),
           updatedAt: new Date(),
+          ...profile,
         },
       });
 

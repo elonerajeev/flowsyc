@@ -5,7 +5,8 @@ import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
 import { getEmployeeAssigneeScope } from "../utils/access-control";
 import { sendTaskAssignmentEmail } from "../utils/email-templates";
-import { io } from "../server";
+import { getIO } from "../socket";
+import { triggerAutomation } from "./automation-engine";
 
 type TaskRecord = {
   id: number;
@@ -207,10 +208,43 @@ export const tasksService = {
       }).catch(() => {});
     }
 
+    // Trigger automation: Task Completed (when new task is in done column)
+    if (task.column === "done") {
+      triggerAutomation("task_completed", {
+        trigger: "task_completed",
+        entityType: "Task",
+        entityId: task.id,
+        data: {
+          title: task.title,
+          assignee: task.assignee,
+          priority: task.priority,
+          completedAt: new Date().toISOString(),
+        },
+      }).catch((err) => console.error("Automation trigger failed:", err));
+    }
+
+    // Trigger automation: Task Created
+    triggerAutomation("task_created", {
+      trigger: "task_created",
+      entityType: "Task",
+      entityId: task.id,
+      data: {
+        title: task.title,
+        assignee: task.assignee,
+        priority: task.priority,
+        dueDate: task.dueDate,
+        column: task.column,
+        projectId: task.projectId,
+      },
+    }).catch((err) => console.error("Automation trigger failed:", err));
+
     // Emit real-time update
-    io.to(`project_${task.projectId}`).emit('task:created', mapTask(task));
-    if (assignee) {
-      io.to(`user_${assignee.email}`).emit('task:assigned', mapTask(task));
+    const socketIO = getIO();
+    if (socketIO) {
+      socketIO.to(`project_${task.projectId}`).emit('task:created', mapTask(task));
+      if (assignee) {
+        socketIO.to(`user_${assignee.email}`).emit('task:assigned', mapTask(task));
+      }
     }
 
     await syncProjectTaskStats(task.projectId);
@@ -250,6 +284,21 @@ export const tasksService = {
         ...(patch.projectId !== undefined ? { projectId: patch.projectId ?? null } : {}),
       },
     });
+
+    // Trigger automation: Task Completed (when task moves to done column)
+    if (patch.column === "done" && existing.column !== "done") {
+      triggerAutomation("task_completed", {
+        trigger: "task_completed",
+        entityType: "Task",
+        entityId: task.id,
+        data: {
+          title: task.title,
+          assignee: task.assignee,
+          priority: task.priority,
+          completedAt: new Date().toISOString(),
+        },
+      }).catch((err) => console.error("Automation trigger failed:", err));
+    }
 
     // Send email if assignee changed
     if (patch.assignee && patch.assignee !== existing.assignee) {

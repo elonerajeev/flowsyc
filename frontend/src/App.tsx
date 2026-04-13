@@ -49,6 +49,11 @@ const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 const RestrictedPage = lazy(() => import("@/pages/RestrictedPage"));
+const AutomationRulesPage = lazy(() => import("@/pages/AutomationRulesPage"));
+const AutomationAlertsPage = lazy(() => import("@/pages/AutomationAlertsPage"));
+const AutomationScheduledPage = lazy(() => import("@/pages/AutomationScheduledPage"));
+const AutomationLogsPage = lazy(() => import("@/pages/AutomationLogsPage"));
+const GTMOpsPage = lazy(() => import("@/pages/GTMOpsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -141,6 +146,12 @@ const App = () => {
                               <Route path="/hr/payroll" element={<RouteAccessGuard><PayrollPage /></RouteAccessGuard>} />
 
                               <Route path="/insights/analytics" element={<RouteAccessGuard><AnalyticsPage /></RouteAccessGuard>} />
+
+                              <Route path="/automation/rules" element={<RouteAccessGuard><AutomationRulesPage /></RouteAccessGuard>} />
+                              <Route path="/automation/gtm" element={<RouteAccessGuard><GTMOpsPage /></RouteAccessGuard>} />
+                              <Route path="/automation/alerts" element={<RouteAccessGuard><AutomationAlertsPage /></RouteAccessGuard>} />
+                              <Route path="/automation/scheduled" element={<RouteAccessGuard><AutomationScheduledPage /></RouteAccessGuard>} />
+                              <Route path="/automation/logs" element={<RouteAccessGuard><AutomationLogsPage /></RouteAccessGuard>} />
 
                               <Route path="/system/access" element={<RouteAccessGuard><AccessPermissionsPage /></RouteAccessGuard>} />
                               <Route path="/system/settings" element={<RouteAccessGuard><SettingsPage /></RouteAccessGuard>} />

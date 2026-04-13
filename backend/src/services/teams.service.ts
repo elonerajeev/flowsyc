@@ -57,7 +57,14 @@ function mapTeam(team: StoredTeam & { members: { id: number; name: string; email
     name: team.name,
     description: team.description,
     permissions: (team.permissions as Record<string, boolean>) || {},
-    members: team.members,
+    members: team.members.map(m => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      role: "Employee" as const,
+      attendance: "present" as const,
+      workload: 0
+    })),
     createdAt: new Date(team.createdAt).toISOString(),
     updatedAt: new Date(team.updatedAt).toISOString(),
   };
