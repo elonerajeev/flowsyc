@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, CheckCircle2, ChevronRight, Clock3, FolderKanban, MessageSquare, Sparkles, TrendingUp, Users, Zap, RefreshCw, ArrowRight } from "lucide-react";
+import { Activity, CheckCircle2, ChevronRight, Clock3, FolderKanban, MessageSquare, Sparkles, TrendingUp, Users, Zap, RefreshCw, ArrowRight, Video, ExternalLink } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 
 import { ActivitySkeleton } from "@/components/skeletons";
@@ -10,6 +11,8 @@ import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuditLogs, useDashboardData } from "@/hooks/use-crm-data";
+import { crmService } from "@/services/crm";
+import type { MeetingRecord } from "@/types/crm";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useRefresh } from "@/hooks/use-refresh";
@@ -74,6 +77,11 @@ export default function ActivityPage() {
   const canSeeAuditTrail = role === "admin" || role === "manager";
   const { data: dashboard, isLoading, error: dashboardError, refetch } = useDashboardData();
   const { data: auditLogs = [] } = useAuditLogs(4, { enabled: canSeeAuditTrail });
+  const { data: upcomingMeetings = [] } = useQuery({
+    queryKey: ["upcoming-meetings"],
+    queryFn: () => crmService.getUpcomingMeetings(5),
+    refetchInterval: 60000,
+  });
 
   const { refresh, isRefreshing } = useRefresh();
 
@@ -506,6 +514,48 @@ export default function ActivityPage() {
           )}
         </div>
       </div>
+
+      {/* Upcoming Meetings */}
+      {upcomingMeetings.length > 0 && (
+        <motion.section variants={item} className="rounded-2xl border border-border/60 bg-card shadow-card overflow-hidden">
+          <div className="absolute left-0 top-0 h-0.5 w-full bg-gradient-to-r from-primary to-info" />
+          <div className={cn("p-5", SPACING.section)}>
+            <div className="flex items-center gap-2 mb-4">
+              <Video className="h-4 w-4 text-primary" />
+              <h3 className={cn("font-semibold text-foreground", TEXT.heading)}>Upcoming Meetings</h3>
+              <span className="ml-auto text-xs text-muted-foreground">{upcomingMeetings.length} scheduled</span>
+            </div>
+            <div className="space-y-2">
+              {upcomingMeetings.map((meeting: MeetingRecord) => (
+                <div key={meeting.id} className="flex items-center justify-between rounded-xl border border-border/40 bg-secondary/20 px-4 py-3 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <Video className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(meeting.scheduledAt).toLocaleString()} · {meeting.duration}min · {meeting.inviteeName}
+                      </p>
+                    </div>
+                  </div>
+                  {meeting.meetingUrl && (
+                    <a
+                      href={meeting.meetingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Join
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.section>
+      )}
     </motion.div>
   );
 }

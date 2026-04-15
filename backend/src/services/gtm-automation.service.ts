@@ -359,7 +359,12 @@ export class GTMAutomationService {
     });
 
     for (const deal of staleDeals) {
-      // Create alert for stale deal
+      // Deduplicate: skip if unresolved alert already exists
+      const existingAlert = await prisma.alert.findFirst({
+        where: { entityType: "Deal", entityId: deal.id, type: "stale_deal", isResolved: false }
+      });
+      if (existingAlert) continue;
+
       await prisma.alert.create({
         data: {
           type: "stale_deal",

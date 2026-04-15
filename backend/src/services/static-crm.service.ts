@@ -1,6 +1,7 @@
 import type { CompanyRecord, CompanySize, ContactRecord, SalesMetrics } from "../data/crm-static";
 import { commandActions, themePreviews } from "../data/crm-static";
 import { prisma } from "../config/prisma";
+import { cache, TTL } from "../utils/cache";
 
 // Sales portfolio views are derived from live CRM records already present in the database.
 
@@ -134,6 +135,10 @@ export const staticCrmService = {
   },
 
   async getSalesMetrics() {
+    const CACHE_KEY = "sales:metrics";
+    const cached = cache.get<SalesMetrics>(CACHE_KEY);
+    if (cached) return cached;
+
     const [invoices, clients] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: null },
@@ -228,6 +233,7 @@ export const staticCrmService = {
       forecastedRevenue: pendingInvoiceRevenue,
     };
 
+    cache.set(CACHE_KEY, metrics, TTL.SALES_METRICS);
     return metrics;
   },
 

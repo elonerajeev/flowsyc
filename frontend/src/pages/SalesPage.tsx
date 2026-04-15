@@ -54,7 +54,7 @@ const SalesPage = () => {
   });
 
   const { data: leads = [], isLoading: leadsLoading, error: leadsError, refetch: refetchLeads } = useQuery({
-    queryKey: ["leads"],
+    queryKey: ["sales-leads"],
     queryFn: crmService.getLeads,
   });
 
@@ -76,7 +76,7 @@ const SalesPage = () => {
   const deleteLeadMutation = useMutation({
     mutationFn: (id: number) => crmService.removeLead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-leads"] });
       toast.success("Lead removed successfully");
     },
     onError: () => toast.error("Failed to remove lead"),

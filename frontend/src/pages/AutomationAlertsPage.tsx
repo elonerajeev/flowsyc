@@ -46,7 +46,7 @@ export default function AutomationAlertsPage() {
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [expandedAlerts, setExpandedAlerts] = useState<Set<number>>(new Set());
 
-  const { data: alerts = [], isLoading, refetch } = useQuery({
+  const { data: alerts = [], isLoading, error, refetch } = useQuery({
     queryKey: ["automation-alerts"],
     queryFn: async () => {
       const res = await fetch("/api/automation/alerts", { credentials: "include" });
@@ -87,6 +87,8 @@ export default function AutomationAlertsPage() {
       return next;
     });
   };
+
+  if (error) return <ErrorFallback error={error as Error} onRetry={refetch} retryLabel="Retry alerts" />;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">

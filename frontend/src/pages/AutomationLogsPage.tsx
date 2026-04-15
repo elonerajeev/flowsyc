@@ -40,7 +40,7 @@ export default function AutomationLogsPage() {
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["automation-logs"],
     queryFn: async () => {
       const res = await fetch("/api/automation/logs?limit=100", { credentials: "include" });
@@ -69,6 +69,8 @@ export default function AutomationLogsPage() {
       return new Date(l.startedAt).toDateString() === today;
     }).length,
   };
+
+  if (error) return <ErrorFallback error={error as Error} onRetry={refetch} retryLabel="Retry logs" />;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">

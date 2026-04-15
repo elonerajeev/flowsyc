@@ -1,5 +1,7 @@
 import { prisma } from "../config/prisma";
 import { GTMAutomationService } from "./gtm-automation.service";
+import { cache, TTL } from "../utils/cache";
+import { logger } from "../utils/logger";
 
 type LifecycleSummary = {
   leadId: number;
@@ -445,15 +447,15 @@ async function closePendingLeadReminders(leadId: number) {
 
 export const gtmLifecycleService = {
   async syncLeadLifecycle(leadId: number, performedBy?: string): Promise<LifecycleSummary> {
-    console.log(`[Lifecycle Sync] Starting sync for lead ${leadId}`);
+    logger.debug(`[Lifecycle Sync] Starting sync for lead ${leadId}`);
     
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead || lead.deletedAt) {
-      console.log(`[Lifecycle Sync] Lead ${leadId} not found or deleted`);
+      logger.debug(`[Lifecycle Sync] Lead ${leadId} not found or deleted`);
       throw new Error("Lead not found");
     }
 
-    console.log(`[Lifecycle Sync] Lead ${leadId} status: ${lead.status}, name: ${lead.firstName} ${lead.lastName}`);
+    logger.debug(`[Lifecycle Sync] Lead ${leadId} status: ${lead.status}, name: ${lead.firstName} ${lead.lastName}`);
 
     const summary: LifecycleSummary = {
       leadId,
@@ -463,36 +465,36 @@ export const gtmLifecycleService = {
     };
 
     const shouldBridgeToContact = ["contacted", "qualified", "proposal", "negotiation", "closed_won"].includes(lead.status);
-    console.log(`[Lifecycle Sync] shouldBridgeToContact: ${shouldBridgeToContact}`);
+    logger.debug(`[Lifecycle Sync] shouldBridgeToContact: ${shouldBridgeToContact}`);
     
     let contactId: number | undefined;
     if (shouldBridgeToContact) {
-      console.log(`[Lifecycle Sync] Creating/linking contact for lead ${leadId}`);
+      logger.debug(`[Lifecycle Sync] Creating/linking contact for lead ${leadId}`);
       try {
         const contact = await ensureContactFromLead(lead);
         summary.contactId = contact.id;
         contactId = contact.id;
         summary.notes.push("contact_synced");
-        console.log(`[Lifecycle Sync] Contact ${contact.id} created/linked for lead ${leadId}`);
+        logger.debug(`[Lifecycle Sync] Contact ${contact.id} created/linked for lead ${leadId}`);
       } catch (err) {
-        console.error(`[Lifecycle Sync] Failed to create contact for lead ${leadId}:`, err);
+        logger.error(`[Lifecycle Sync] Failed to create contact for lead ${leadId}:`, err);
       }
     }
 
     const shouldCreateDeal = ["qualified", "proposal", "negotiation", "closed_won", "closed_lost"].includes(lead.status);
-    console.log(`[Lifecycle Sync] shouldCreateDeal: ${shouldCreateDeal}`);
+    logger.debug(`[Lifecycle Sync] shouldCreateDeal: ${shouldCreateDeal}`);
     
     let dealId: number | undefined;
     if (shouldCreateDeal) {
-      console.log(`[Lifecycle Sync] Creating/linking deal for lead ${leadId}`);
+      logger.debug(`[Lifecycle Sync] Creating/linking deal for lead ${leadId}`);
       try {
         const deal = await ensureDealFromLead(lead, contactId, lead.convertedToClientId ?? undefined);
         summary.dealId = deal.id;
         dealId = deal.id;
         summary.notes.push("deal_synced");
-        console.log(`[Lifecycle Sync] Deal ${deal.id} created/linked for lead ${leadId}`);
+        logger.debug(`[Lifecycle Sync] Deal ${deal.id} created/linked for lead ${leadId}`);
       } catch (err) {
-        console.error(`[Lifecycle Sync] Failed to create deal for lead ${leadId}:`, err);
+        logger.error(`[Lifecycle Sync] Failed to create deal for lead ${leadId}:`, err);
       }
     }
 
@@ -506,11 +508,11 @@ export const gtmLifecycleService = {
     }
 
     if (lead.status === "closed_won") {
-      console.log(`[Lifecycle Sync] Lead ${leadId} won - creating client`);
+      logger.debug(`[Lifecycle Sync] Lead ${leadId} won - creating client`);
       try {
         const client = await ensureClientFromLead(lead);
         summary.clientId = client.id;
-        console.log(`[Lifecycle Sync] Client ${client.id} created for lead ${leadId}`);
+        logger.debug(`[Lifecycle Sync] Client ${client.id} created for lead ${leadId}`);
 
         await prisma.lead.update({
           where: { id: lead.id },
@@ -545,7 +547,7 @@ export const gtmLifecycleService = {
         await closePendingLeadReminders(lead.id);
         summary.notes.push("client_converted");
       } catch (err) {
-        console.error(`[Lifecycle Sync] Failed to create client for lead ${leadId}:`, err);
+        logger.error(`[Lifecycle Sync] Failed to create client for lead ${leadId}:`, err);
       }
     }
 
@@ -572,7 +574,8 @@ export const gtmLifecycleService = {
 
     await logLifecycleToAutomationLog(leadId, summary, performedBy);
 
-    console.log(`[Lifecycle Sync] Completed for lead ${leadId}:`, summary);
+    // Invalidate GTM overview cache so next request reflects changes
+    cache.invalidate("gtm:overview");
     return summary;
   },
 
@@ -639,11 +642,16 @@ export const gtmLifecycleService = {
   },
 
   async getOverview() {
+    const CACHE_KEY = "gtm:overview";
+    // Use object to avoid circular ReturnType<typeof this.getOverview> reference
+    const cached = cache.get<object>(CACHE_KEY);
+    if (cached) return cached;
+
     const [leads, deals, clients, contacts, pendingTasks, pendingJobs, recentLogs, recentActivities, alerts] = await Promise.all([
-      prisma.lead.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" } }),
-      prisma.deal.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" } }),
-      prisma.client.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" } }),
-      prisma.contact.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" } }),
+      prisma.lead.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 500 }),
+      prisma.deal.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
+      prisma.client.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
+      prisma.contact.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
       prisma.task.findMany({
         where: {
           column: { not: "done" },
@@ -691,6 +699,7 @@ export const gtmLifecycleService = {
       .filter((deal) => Date.now() - deal.updatedAt.getTime() > 7 * 24 * 60 * 60 * 1000);
     const churnRiskClients = clients.filter((client) => client.healthScore < 60);
     const hotLeads = [...leads]
+      .filter((l) => !["closed_lost", "closed_won"].includes(l.status))
       .sort((a, b) => b.score - a.score)
       .slice(0, 8)
       .map((lead) => ({
@@ -729,7 +738,11 @@ export const gtmLifecycleService = {
       })),
     ].slice(0, 10);
 
-    return {
+    const pipelineValue = deals
+      .filter((d) => !["closed_won", "closed_lost"].includes(d.stage))
+      .reduce((sum, d) => sum + (d.value ?? 0), 0);
+
+    const result = {
       summary: {
         totalLeads: leads.length,
         totalContacts: contacts.length,
@@ -739,6 +752,7 @@ export const gtmLifecycleService = {
         pendingAutomations: pendingJobs.length,
         churnRiskClients: churnRiskClients.length,
         staleDeals: staleDeals.length,
+        pipelineValue,
       },
       funnels: {
         leads: leadStatusCounts,
@@ -755,14 +769,15 @@ export const gtmLifecycleService = {
           id: task.id,
           title: task.title,
           assignee: task.assignee,
-          dueDate: task.dueDate,
+          dueDate: task.dueDate ? new Date(task.dueDate).toISOString() : new Date().toISOString(),
           tags: task.tags,
         })),
         scheduled: pendingJobs.map((job) => ({
           id: job.id,
           name: job.name,
           jobType: job.jobType,
-          scheduledFor: job.scheduledFor,
+          status: job.status,
+          scheduledFor: job.scheduledFor.toISOString(),
           entityType: job.entityType,
           entityId: job.entityId,
         })),
@@ -778,7 +793,7 @@ export const gtmLifecycleService = {
           title: deal.title,
           stage: deal.stage,
           assignedTo: deal.assignedTo,
-          updatedAt: deal.updatedAt,
+          updatedAt: deal.updatedAt.toISOString(),
         })),
         orphanContacts: orphanContacts.slice(0, 8).map((contact) => ({
           id: contact.id,
@@ -800,5 +815,9 @@ export const gtmLifecycleService = {
       })),
       nextActions,
     };
+
+    cache.set(CACHE_KEY, result, TTL.GTM_OVERVIEW);
+    return result;
+
   },
 };

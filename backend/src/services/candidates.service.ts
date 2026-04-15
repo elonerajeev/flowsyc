@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger";
 import { Prisma, type CandidateStage } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
@@ -447,7 +448,7 @@ export const candidatesService = {
         },
       });
     } catch (err) {
-      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+      logger.warn("Activity log failed (permissions/schema):", (err as any).message);
     }
 
     return offerLetter;
@@ -481,7 +482,7 @@ export const candidatesService = {
         data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },
       });
     } catch (err) {
-      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+      logger.warn("Activity log failed (permissions/schema):", (err as any).message);
     }
     return mapCandidate(candidate);
   },
@@ -506,7 +507,7 @@ export const candidatesService = {
         data: { candidateId, action: "note", detail: note, performedBy },
       });
     } catch (err) {
-      console.warn("Activity log failed (permissions/schema):", (err as any).message);
+      logger.warn("Activity log failed (permissions/schema):", (err as any).message);
     }
     const candidate = await prisma.candidate.update({
       where: { id: candidateId },

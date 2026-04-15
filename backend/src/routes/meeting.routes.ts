@@ -7,10 +7,11 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", async (req, res) => {
-  const { leadId, clientId, status } = req.query;
+  const { leadId, clientId, contactId, status } = req.query;
   const meetings = await meetingService.list(req.auth, {
     leadId: leadId ? Number(leadId) : undefined,
     clientId: clientId ? Number(clientId) : undefined,
+    contactId: contactId ? Number(contactId) : undefined,
     status: status as string | undefined,
   });
   res.json({ data: meetings });
@@ -46,6 +47,16 @@ router.delete("/:id", async (req, res) => {
 
 router.get("/lead/:leadId", async (req, res) => {
   const meetings = await meetingService.getByLead(Number(req.params.leadId));
+  res.json({ data: meetings });
+});
+
+router.get("/client/:clientId", async (req, res) => {
+  const meetings = await meetingService.list(req.auth, { clientId: Number(req.params.clientId) });
+  res.json({ data: meetings });
+});
+
+router.get("/contact/:contactId", async (req, res) => {
+  const meetings = await meetingService.list(req.auth, { contactId: Number(req.params.contactId) });
   res.json({ data: meetings });
 });
 

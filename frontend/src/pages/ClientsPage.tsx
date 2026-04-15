@@ -13,6 +13,7 @@ import {
   Trash2,
   RefreshCw,
   Download,
+  Video,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ import { getRefreshMessage, getRefreshSuccessMessage } from "@/lib/refresh-messa
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 import { crmService } from "@/services/crm";
+import ScheduleMeetingDialog from "@/components/crm/ScheduleMeetingDialog";
 
 const segmentOptions = ["all", "Expansion", "Renewal", "New Business"] as const;
 
@@ -54,6 +56,7 @@ export default function ClientsPage() {
   const [visibleCount, setVisibleCount] = useState(4);
   const PAGE_SIZE = 4;
   const { refresh, isRefreshing } = useRefresh();
+  const [meetingClient, setMeetingClient] = useState<{ id: number; name: string; email: string } | null>(null);
 
   const handleRefresh = async () => {
     await refresh(
@@ -384,6 +387,15 @@ export default function ClientsPage() {
                       )}
                       {canEdit && (
                         <button
+                          onClick={() => setMeetingClient({ id: client.id, name: client.name, email: client.email })}
+                          className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
+                          title="Schedule meeting"
+                        >
+                          <Video className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
                           onClick={() => openQuickCreate("client", client)}
                           className="p-1.5 rounded-full hover:bg-secondary text-muted-foreground hover:text-primary transition"
                           title="Edit client"
@@ -533,6 +545,16 @@ export default function ClientsPage() {
       </section>
 
       {LoadingProgressComponent}
+
+      {meetingClient && (
+        <ScheduleMeetingDialog
+          open={!!meetingClient}
+          onOpenChange={open => !open && setMeetingClient(null)}
+          clientId={meetingClient.id}
+          inviteeName={meetingClient.name}
+          inviteeEmail={meetingClient.email}
+        />
+      )}
     </motion.div>
   );
 }

@@ -25,6 +25,7 @@ import {
   Grid3X3,
   FileText,
   FileSpreadsheet,
+  Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import AdminOnly from "@/components/shared/AdminOnly";
+import ScheduleMeetingDialog from "@/components/crm/ScheduleMeetingDialog";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -75,6 +77,7 @@ const ContactsPage = () => {
   const [seniorityFilter, setSeniorityFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [meetingContact, setMeetingContact] = useState<{ id: number; name: string; email: string } | null>(null);
 
   // View mode
   const [viewMode, setViewMode] = useState<"cards" | "table">("table");
@@ -590,6 +593,10 @@ const ContactsPage = () => {
                           </DropdownMenuItem>
                           {canEdit && (
                             <>
+                              <DropdownMenuItem onClick={() => setMeetingContact({ id: contact.id, name: `${contact.firstName} ${contact.lastName}`, email: contact.email })}>
+                                <Video className="h-4 w-4 mr-2" />
+                                Schedule Meeting
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openQuickCreate?.("contact", contact)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit Contact
@@ -730,6 +737,16 @@ const ContactsPage = () => {
           </motion.div>
         )}
       </section>
+
+      {meetingContact && (
+        <ScheduleMeetingDialog
+          open={!!meetingContact}
+          onOpenChange={open => !open && setMeetingContact(null)}
+          contactId={meetingContact.id}
+          inviteeName={meetingContact.name}
+          inviteeEmail={meetingContact.email}
+        />
+      )}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger";
 import type { ThemePreview } from "../config/types";
 
 export const systemService = {
@@ -43,10 +44,10 @@ export const systemService = {
       });
 
       if (!response.ok) {
-        console.warn(`Zapier webhook failed for event ${event}:`, response.status, await response.text());
+        logger.warn(`Zapier webhook failed for event ${event}:`, response.status, await response.text());
       }
     } catch (error) {
-      console.warn(`Failed to send Zapier event ${event}:`, error);
+      logger.warn(`Failed to send Zapier event ${event}:`, error);
     }
   },
 

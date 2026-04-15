@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import { type LeadSource } from "@prisma/client";
 import { GTMAutomationService } from "./gtm-automation.service";
 
 export type CSVImportRecord = {
@@ -96,21 +97,31 @@ export const csvImportService = {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
-        const VALID_SOURCES = ["website","referral","social","email","phone","event","advertisement","other"];
-        const rawSource = row.source || row.Source || row.lead_source || "";
-        const mappedSource = VALID_SOURCES.includes(rawSource) ? rawSource : "other";
+        // Normalize all keys to lowercase for case-insensitive lookup
+        const r: Record<string, string> = {};
+        for (const key of Object.keys(row)) {
+          r[key.toLowerCase().replace(/[\s_\-\.]+/g, "_")] = String(row[key] ?? "").trim();
+        }
+        const get = (...keys: string[]) => keys.map(k => r[k] || "").find(Boolean) || "";
 
-        // Map CSV columns to lead fields
+        const VALID_SOURCES = ["website","referral","social","email","phone","event","advertisement","other"];
+        const rawSource = get("source","lead_source","channel","utm_source");
+        const mappedSource = (VALID_SOURCES.includes(rawSource.toLowerCase()) ? rawSource.toLowerCase() : "other") as LeadSource;
+
+        // Full name fallback — split "Full Name" or "Name" column
+        const fullName = get("full_name","name","contact_name","lead_name");
+        const [namePart0 = "", namePart1 = ""] = fullName.split(" ");
+
         const leadData = {
-          firstName: row.firstName || row.first_name || row.FirstName || row.Name?.split(" ")[0] || "",
-          lastName: row.lastName || row.last_name || row.LastName || row.Name?.split(" ")[1] || "",
-          email: row.email || row.Email || row.email_address || "",
-          phone: row.phone || row.Phone || row.phone_number || row.mobile || "",
-          company: row.company || row.Company || row.company_name || row.organization || "",
-          jobTitle: row.jobTitle || row.job_title || row.JobTitle || row.title || row.designation || "",
-          source: mappedSource,
-          assignedTo: row.assignedTo || row.assigned_to || row.owner || importedBy,
-          notes: row.notes || row.Notes || row.description || row.message || "",
+          firstName: get("firstname","first_name") || namePart0,
+          lastName:  get("lastname","last_name","surname") || namePart1,
+          email:     get("email","work_email","business_email","email_address","contact_email","e_mail","email_id"),
+          phone:     get("phone","mobile","phone_number","contact_number","work_phone","cell","telephone"),
+          company:   get("company","company_name","organization","organisation","employer","account_name","firm"),
+          jobTitle:  get("jobtitle","job_title","title","designation","position","role","function"),
+          source:    mappedSource,
+          assignedTo: get("assignedto","assigned_to","owner","rep","sales_rep") || importedBy,
+          notes:     get("notes","note","description","comments","message","remarks","about_company","about","summary"),
         };
 
         // Validate required fields
@@ -133,7 +144,7 @@ export const csvImportService = {
           const importTag = `import:${importId}`;
           const updatedTags = existingTags.includes(importTag)
             ? existingTags
-            : [...existingTags.filter(t => !t.startsWith("import:")), "csv_import", importTag];
+            : [...existingTags, "csv_import", importTag];
           await prisma.lead.update({
             where: { id: existingLead.id },
             data: {

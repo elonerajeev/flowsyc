@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger";
 import { Prisma, type TaskColumn, type TaskPriority } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
@@ -158,6 +159,7 @@ export const tasksService = {
     const tasks = await prisma.task.findMany({
       where,
       orderBy: [{ column: "asc" }, { createdAt: "asc" }],
+      take: 500, // safety cap — UI paginates via ShowMore
     });
 
     const grouped: Record<TaskRecord["column"], TaskRecord[]> = {
@@ -220,7 +222,7 @@ export const tasksService = {
           priority: task.priority,
           completedAt: new Date().toISOString(),
         },
-      }).catch((err) => console.error("Automation trigger failed:", err));
+      }).catch((err) => logger.error("Automation trigger failed:", err));
     }
 
     // Trigger automation: Task Created
@@ -236,7 +238,7 @@ export const tasksService = {
         column: task.column,
         projectId: task.projectId,
       },
-    }).catch((err) => console.error("Automation trigger failed:", err));
+    }).catch((err) => logger.error("Automation trigger failed:", err));
 
     // Emit real-time update
     const socketIO = getIO();
@@ -297,7 +299,7 @@ export const tasksService = {
           priority: task.priority,
           completedAt: new Date().toISOString(),
         },
-      }).catch((err) => console.error("Automation trigger failed:", err));
+      }).catch((err) => logger.error("Automation trigger failed:", err));
     }
 
     // Send email if assignee changed

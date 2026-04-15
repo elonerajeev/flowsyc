@@ -111,7 +111,7 @@ export default function AutomationRulesPage() {
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { data: rules = [], isLoading } = useQuery({
+  const { data: rules = [], isLoading, error } = useQuery({
     queryKey: ["automation-rules"],
     queryFn: async () => {
       const res = await fetch("/api/automation/rules", {
@@ -181,6 +181,8 @@ export default function AutomationRulesPage() {
 
   const activeRules = rules.filter((r: AutomationRule) => r.isActive).length;
   const pausedRules = rules.filter((r: AutomationRule) => !r.isActive).length;
+
+  if (error) return <ErrorFallback error={error as Error} onRetry={() => window.location.reload()} retryLabel="Retry" />;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">

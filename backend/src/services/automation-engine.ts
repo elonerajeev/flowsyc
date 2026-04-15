@@ -130,6 +130,12 @@ function checkConditions(conditions: any[], event: TriggerEvent): boolean {
         return Number(fieldValue) > Number(value);
       case "less_than":
         return Number(fieldValue) < Number(value);
+      case ">=":
+      case "gte":
+        return Number(fieldValue) >= Number(value);
+      case "<=":
+      case "lte":
+        return Number(fieldValue) <= Number(value);
       case "is_empty":
         return !fieldValue || fieldValue === "";
       case "is_not_empty":
@@ -252,11 +258,11 @@ async function executeAction(action: any, event: TriggerEvent): Promise<{ succes
         return { success: true };
       
       default:
-        console.log(`Unknown action type: ${type}`);
+        logger.warn(`Unknown action type: ${type}`);
         return { success: true };
     }
   } catch (error: any) {
-    console.error(`Error executing action ${type}:`, error);
+    logger.error(`Error executing action ${type}:`, error);
     return { success: false, error: error.message };
   }
 }
@@ -1165,7 +1171,50 @@ export function startAutomationCron() {
     await executeScheduledJobs();
   });
   
-  // 2. Daily Maintenance Sweep (at midnight)
+  // 2. Hourly GTM alert checks (stale deals, churn risk)
+  cron.schedule("0 * * * *", async () => {
+    logger.info("Running hourly GTM alert checks...");
+    try {
+      await GTMAutomationService.checkStaleDeals();
+      await GTMAutomationService.checkChurnRisk();
+      logger.info("Hourly GTM checks completed");
+    } catch (err) {
+      logger.error("Hourly GTM checks failed:", err);
+    }
+  });
+
+  // 3. Daily cleanup — remove stale DB rows to keep tables lean
+  cron.schedule("30 0 * * *", async () => {
+    logger.info("Running daily DB cleanup...");
+    try {
+      const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const cutoff90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+      const [tokens, jobs, logs, actLogs] = await Promise.all([
+        // Expired refresh tokens
+        prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+        // Completed/failed/cancelled scheduled jobs older than 30 days
+        prisma.scheduledJob.deleteMany({
+          where: { status: { in: ["completed", "failed", "cancelled"] }, scheduledFor: { lt: cutoff30d } },
+        }),
+        // Automation logs older than 90 days
+        prisma.automationLog.deleteMany({ where: { startedAt: { lt: cutoff90d } } }),
+        // Activity logs older than 90 days
+        prisma.activityLog.deleteMany({ where: { createdAt: { lt: cutoff90d } } }),
+      ]);
+
+      logger.info("Daily cleanup done", {
+        expiredTokens: tokens.count,
+        oldJobs: jobs.count,
+        oldLogs: logs.count,
+        oldActivityLogs: actLogs.count,
+      });
+    } catch (err) {
+      logger.error("Daily cleanup failed:", err);
+    }
+  });
+
+  // 4. Daily Maintenance Sweep (at midnight)
   cron.schedule("0 0 * * *", async () => {
     logger.info("Running daily automation maintenance sweep...");
     try {
@@ -1176,9 +1225,7 @@ export function startAutomationCron() {
       }
       
       // Run GTM logic
-      await GTMAutomationService.checkStaleDeals();
       await GTMAutomationService.identifyColdLeads();
-      await GTMAutomationService.checkChurnRisk();
       await GTMAutomationService.createRenewalReminders();
       
       logger.info("Daily automation sweep completed successfully");
@@ -1187,7 +1234,7 @@ export function startAutomationCron() {
     }
   });
   
-  logger.info("Automation cron job started (Interval: 5m, Sweep: Daily)");
+  logger.info("Automation cron job started (Scheduled: 5m, GTM alerts: 1h, Sweep: Daily)");
 }
 
 export function stopAutomationCron() {

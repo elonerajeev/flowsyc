@@ -80,7 +80,7 @@ export default function AutomationScheduledPage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [cronExpression, setCronExpression] = useState("");
 
-  const { data: jobs = [], isLoading, refetch } = useQuery({
+  const { data: jobs = [], isLoading, error, refetch } = useQuery({
     queryKey: ["automation-scheduled"],
     queryFn: async () => {
       const url = statusFilter === "all" ? "/api/automation/scheduled" : `/api/automation/scheduled?status=${statusFilter}`;
@@ -188,6 +188,8 @@ export default function AutomationScheduledPage() {
     { id: "completed", label: "Completed" },
     { id: "failed", label: "Failed" },
   ];
+
+  if (error) return <ErrorFallback error={error as Error} onRetry={refetch} retryLabel="Retry scheduled" />;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">

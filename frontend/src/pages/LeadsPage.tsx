@@ -150,9 +150,6 @@ const LeadsPage = () => {
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [selectedImportIds, setSelectedImportIds] = useState<number[]>([]);
   
-  // Bulk selection for imported leads
-  const [selectedImportLeadIds, setSelectedImportLeadIds] = useState<number[]>([]);
-  
   // Bulk selection for regular leads
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
 
@@ -279,17 +276,113 @@ const LeadsPage = () => {
   };
 
   // Fetch leads
-  const { data: leadsData, isLoading, error } = useQuery({
+  const { data: leadsResponse, isLoading, error } = useQuery({
     queryKey: ["leads"],
-    queryFn: crmService.getLeads,
-    staleTime: 30000, // 30 seconds
+    queryFn: () => crmService.getLeadsPage({ limit: 1000 }),
+    staleTime: 30000,
+  });
+  const leadsData = leadsResponse?.data ?? [];
+  const totalLeadsInDB = leadsResponse?.total ?? 0;
+
+  // Fetch import history
+  const { data: importHistory = [] } = useQuery({
+    queryKey: ["lead-imports"],
+    queryFn: async () => {
+      const token = localStorage.getItem("crm-auth-token");
+      const res = await fetch("/api/csv-import", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.data || [];
+    },
+    refetchInterval: 10000,
+  });
+
+  // Fetch leads for selected imports
+  const { data: importLeads = [], isLoading: isLoadingImportLeads } = useQuery({
+    queryKey: ["lead-import-leads", selectedImportIds.join(","), importHistory.length],
+    queryFn: async () => {
+      if (selectedImportIds.length === 0) return [];
+      const allLeads: ImportedLead[] = [];
+      const token = localStorage.getItem("crm-auth-token");
+      for (const importId of selectedImportIds) {
+        try {
+          const res = await fetch(`/api/csv-import/${importId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const leads = data.data?.leads || [];
+            const importItem = importHistory.find((i: ImportedFile) => i.id === importId);
+            leads.forEach((lead: ImportedLead) => {
+              lead.importId = importId;
+              lead.importFileName = importItem?.filename || "";
+            });
+            allLeads.push(...leads);
+          } else {
+            console.error(`Failed to fetch import ${importId}: ${res.status}`);
+          }
+        } catch (err) {
+          console.error(`Error fetching import ${importId}:`, err);
+        }
+      }
+      return allLeads;
+    },
+    enabled: selectedImportIds.length > 0,
   });
 
   // Filter and search leads
   const filteredLeads = useMemo(() => {
-    if (!leadsData) return [];
+    if (!leadsData.length) return [];
 
-    const filtered = leadsData.filter((lead: Lead) => {
+    // Convert import leads to Lead format for unified filtering
+    const importLeadsConverted: Lead[] = importLeads.map((imp: ImportedLead) => ({
+      id: imp.id,
+      firstName: imp.firstName || "",
+      lastName: imp.lastName || "",
+      email: imp.email || "",
+      company: imp.company || "",
+      jobTitle: imp.jobTitle || "",
+      phone: imp.phone || "",
+      status: (imp.status as Lead["status"]) || "new",
+      source: (imp.source as Lead["source"]) || "other",
+      score: imp.score || 0,
+      assignedTo: imp.assignedTo || "",
+      assignedAt: null,
+      notes: "",
+      tags: [`import:${imp.importId}`, "csv_import"],
+      convertedAt: null,
+      convertedToClientId: null,
+      deletedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+
+    // When import filter is active, show ONLY the fetched import leads (already correct set)
+    if (selectedImportIds.length > 0) {
+      const filtered = importLeadsConverted.filter((lead: Lead) => {
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          if (
+            !lead.firstName.toLowerCase().includes(term) &&
+            !lead.lastName.toLowerCase().includes(term) &&
+            !lead.email.toLowerCase().includes(term) &&
+            !(lead.company?.toLowerCase().includes(term))
+          ) return false;
+        }
+        if (statusFilter !== "all" && lead.status !== statusFilter) return false;
+        if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
+        if (lead.score < scoreRange[0] || lead.score > scoreRange[1]) return false;
+        return true;
+      });
+      filtered.sort((a: Lead, b: Lead) => b.score - a.score);
+      return filtered;
+    }
+
+    const allLeads = leadsData;
+
+    const filtered = allLeads.filter((lead: Lead) => {
       // Search term filter
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -354,24 +447,24 @@ const LeadsPage = () => {
     });
 
     return filtered;
-  }, [leadsData, searchTerm, statusFilter, sourceFilter, scoreRange, assignedFilter, sortBy, sortOrder]);
+  }, [leadsData, importLeads, selectedImportIds, searchTerm, statusFilter, sourceFilter, scoreRange, assignedFilter, sortBy, sortOrder]);
 
   const visibleLeads = filteredLeads.slice(0, visibleCount);
   const hasMore = filteredLeads.length > visibleCount;
 
   // Statistics
   const stats = useMemo(() => {
-    if (!leadsData) return { total: 0, new: 0, qualified: 0, converted: 0, avgScore: 0 };
+    if (!leadsData.length) return { total: 0, new: 0, qualified: 0, converted: 0, avgScore: 0, filtered: 0 };
 
     const leads = leadsData;
-    const total = leads.length;
+    const total = totalLeadsInDB || leads.length;
     const newLeads = leads.filter((l: Lead) => l.status === "new").length;
     const qualified = leads.filter((l: Lead) => l.status === "qualified").length;
     const converted = leads.filter((l: Lead) => l.convertedToClientId).length;
-    const avgScore = total > 0 ? Math.round(leads.reduce((sum: number, l: Lead) => sum + l.score, 0) / total) : 0;
+    const avgScore = leads.length > 0 ? Math.round(leads.reduce((sum: number, l: Lead) => sum + l.score, 0) / leads.length) : 0;
 
-    return { total, new: newLeads, qualified, converted, avgScore };
-  }, [leadsData]);
+    return { total, new: newLeads, qualified, converted, avgScore, filtered: filteredLeads.length };
+  }, [leadsData, totalLeadsInDB, filteredLeads]);
 
   // Delete lead mutation
   const deleteLeadMutation = useMutation({
@@ -457,21 +550,6 @@ const LeadsPage = () => {
     },
   });
 
-  // Fetch import history
-  const { data: importHistory = [] } = useQuery({
-    queryKey: ["lead-imports"],
-    queryFn: async () => {
-      const token = localStorage.getItem("crm-auth-token");
-      const res = await fetch("/api/csv-import", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.data || [];
-    },
-    refetchInterval: 10000,
-  });
-
   const deleteImportMutation = useMutation({
     mutationFn: async (id: number) => {
       const token = localStorage.getItem("crm-auth-token");
@@ -488,63 +566,6 @@ const LeadsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: () => toast.error("Failed to delete import"),
-  });
-
-  // Bulk delete imported leads
-  const bulkDeleteImportLeadsMutation = useMutation({
-    mutationFn: async (leadIds: number[]) => {
-      const token = localStorage.getItem("crm-auth-token");
-      const results = await Promise.all(
-        leadIds.map(async (id) => {
-          const res = await fetch(`/api/leads/${id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          return { id, success: res.ok };
-        })
-      );
-      return results;
-    },
-    onSuccess: () => {
-      toast.success(`${selectedImportLeadIds.length} leads deleted`);
-      setSelectedImportLeadIds([]);
-      queryClient.invalidateQueries({ queryKey: ["lead-import-leads"] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-    },
-    onError: () => toast.error("Failed to delete leads"),
-  });
-
-  // Fetch leads for selected imports
-  const { data: importLeads = [], isLoading: isLoadingImportLeads } = useQuery({
-    queryKey: ["lead-import-leads", selectedImportIds.join(","), importHistory.length],
-    queryFn: async () => {
-      if (selectedImportIds.length === 0) return [];
-      const allLeads: ImportedLead[] = [];
-      const token = localStorage.getItem("crm-auth-token");
-      for (const importId of selectedImportIds) {
-        try {
-          const res = await fetch(`/api/csv-import/${importId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const leads = data.data?.leads || [];
-            const importItem = importHistory.find((i: ImportedFile) => i.id === importId);
-            leads.forEach((lead: ImportedLead) => {
-              lead.importId = importId;
-              lead.importFileName = importItem?.filename || "";
-            });
-            allLeads.push(...leads);
-          } else {
-            console.error(`Failed to fetch import ${importId}: ${res.status}`);
-          }
-        } catch (err) {
-          console.error(`Error fetching import ${importId}:`, err);
-        }
-      }
-      return allLeads;
-    },
-    enabled: selectedImportIds.length > 0,
   });
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -581,15 +602,30 @@ const LeadsPage = () => {
           </div>
 
           {/* Stats Cards */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
               <TrendingUp className="h-4 w-4 text-success flex-shrink-0" />
-              <span className="text-sm font-medium text-success">{stats.total} total leads</span>
+              <span className="text-sm font-medium text-success">{stats.total.toLocaleString()} total</span>
             </div>
+            {stats.filtered !== stats.total && (
+              <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+                <Target className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium text-primary">{stats.filtered.toLocaleString()} filtered</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2">
               <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
-              <span className="text-sm font-medium text-warning">{stats.new} new</span>
+              <span className="text-sm font-medium text-warning">{stats.new.toLocaleString()} new</span>
             </div>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm font-medium text-muted-foreground">{stats.qualified} qualified</span>
+            </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
+                <RefreshCw className="h-3 w-3 animate-spin" /> Loading...
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -648,6 +684,35 @@ const LeadsPage = () => {
                 <SelectItem value="unassigned">Unassigned</SelectItem>
               </SelectContent>
             </Select>
+
+            {importHistory.length > 0 && (
+              <Select 
+                value={selectedImportIds.length > 0 ? `import-${selectedImportIds.join(",")}` : "all"} 
+                onValueChange={(value) => {
+                  if (value === "all") {
+                    setSelectedImportIds([]);
+                  } else {
+                    const ids = value.replace("import-", "").split(",").map(Number);
+                    setSelectedImportIds(ids);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Import File" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Imports</SelectItem>
+                  {importHistory.map((imp: ImportedFile) => (
+                    <SelectItem key={imp.id} value={`import-${imp.id}`}>
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-3 w-3 text-green-600" />
+                        <span className="truncate max-w-[150px]">{imp.filename}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
               const [field, order] = value.split("-");
@@ -877,182 +942,34 @@ const LeadsPage = () => {
         </div>
       </section>
 
-      <AdminOnly>
-        {selectedImportIds.length > 0 && (
-          <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <FileSpreadsheet className="h-5 w-5 text-primary" />
-                <h2 className="font-semibold text-lg text-foreground">
-                  Imported Leads
-                </h2>
-                <Badge variant="secondary">{importLeads.length} total</Badge>
-                {isLoadingImportLeads && <Badge variant="outline">Loading...</Badge>}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedImportIds.length} file{selectedImportIds.length > 1 ? "s" : ""} selected
-                </span>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => { setSelectedImportIds([]); setShowImportHistory(false); }}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-
-            <div className="mb-4 flex flex-wrap gap-2">
-              {selectedImportIds.map((id) => {
-                const importFile = importHistory.find((i: ImportedFile) => i.id === id);
-                return (
-                  <Badge key={id} variant="outline" className="gap-1">
-                    <FileSpreadsheet className="h-3 w-3" />
-                    {importFile?.filename || `Import #${id}`}
-                    <span className="text-muted-foreground">({importFile?.totalRows || 0} rows)</span>
-                  </Badge>
-                );
-              })}
-            </div>
-
-            {isLoadingImportLeads ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-8 w-8 mx-auto mb-3 animate-spin text-muted-foreground" />
-                <p className="text-muted-foreground">Loading imported leads...</p>
-              </div>
-            ) : importLeads.length > 0 ? (
-              <>
-                {selectedImportLeadIds.length > 0 && (
-                  <div className="flex items-center justify-between bg-primary/5 px-4 py-2 rounded-lg mb-4">
-                    <span className="text-sm font-medium">{selectedImportLeadIds.length} selected</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => bulkDeleteImportLeadsMutation.mutate(selectedImportLeadIds)}
-                        disabled={bulkDeleteImportLeadsMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete Selected
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setSelectedImportLeadIds([])}>
-                        Clear
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-lg border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-10">
-                          <Checkbox 
-                            checked={selectedImportLeadIds.length === importLeads.length && importLeads.length > 0}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedImportLeadIds(importLeads.map((l: ImportedLead) => l.id));
-                              } else {
-                                setSelectedImportLeadIds([]);
-                              }
-                            }}
-                          />
-                        </TableHead>
-                        <TableHead className="font-semibold">Name</TableHead>
-                        <TableHead className="font-semibold">Email</TableHead>
-                        <TableHead className="font-semibold">Company</TableHead>
-                        <TableHead className="font-semibold">Phone</TableHead>
-                        <TableHead className="font-semibold">Source</TableHead>
-                        <TableHead className="font-semibold">Score</TableHead>
-                        <TableHead className="font-semibold">File</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importLeads.map((lead: ImportedLead) => (
-                        <TableRow key={lead.id} className={cn("hover:bg-muted/50 transition-colors", selectedImportLeadIds.includes(lead.id) && "bg-primary/5")}>
-                          <TableCell>
-                            <Checkbox 
-                              checked={selectedImportLeadIds.includes(lead.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedImportLeadIds([...selectedImportLeadIds, lead.id]);
-                                } else {
-                                  setSelectedImportLeadIds(selectedImportLeadIds.filter(id => id !== lead.id));
-                                }
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {lead.firstName} {lead.lastName}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">{lead.email}</span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0 ml-1"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(lead.email);
-                                  toast.success("Email copied!");
-                                }}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {lead.company ? (
-                              <span className="text-sm">{lead.company}</span>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {lead.phone ? (
-                              <span className="text-sm">{lead.phone}</span>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {lead.source || "csv_import"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Target className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{lead.score || 0}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <FileSpreadsheet className="h-3 w-3 text-green-600" />
-                              <span className="text-xs text-muted-foreground truncate max-w-[100px]" title={lead.importFileName}>
-                                {lead.importFileName}
-                              </span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground border rounded-lg">
-                <FileSpreadsheet className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p>No leads found in selected imports</p>
-                <p className="text-sm mt-1">This import was processed before lead tracking was enabled. Re-import the file to view leads here.</p>
-              </div>
-            )}
-          </section>
-        )}
-      </AdminOnly>
-
       {/* Leads Display */}
+      {/* Import filter info - shown when imports are selected */}
+      {selectedImportIds.length > 0 && importHistory.length > 0 && (
+        <div className="flex items-center gap-3 px-2">
+          <span className="text-sm text-muted-foreground">Filtered by imports:</span>
+          <div className="flex flex-wrap gap-2">
+            {selectedImportIds.map((id) => {
+              const importFile = importHistory.find((i: ImportedFile) => i.id === id);
+              return (
+                <Badge key={id} variant="secondary" className="gap-1">
+                  <FileSpreadsheet className="h-3 w-3" />
+                  {importFile?.filename || `Import #${id}`}
+                  <button
+                    onClick={() => setSelectedImportIds(prev => prev.filter(i => i !== id))}
+                    className="ml-1 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              );
+            })}
+            <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setSelectedImportIds([])}>
+              Clear all
+            </Button>
+          </div>
+        </div>
+      )}
+
       <section className="space-y-4">
         {isLoading ? (
           viewMode === "table" ? (
@@ -1109,7 +1026,7 @@ const LeadsPage = () => {
             <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No leads found</h3>
             <p className="text-muted-foreground mb-4">
-              {filteredLeads.length === 0 && leadsData?.length === 0
+              {filteredLeads.length === 0 && leadsData.length === 0
                 ? "Get started by adding your first lead."
                 : "Try adjusting your filters or search terms."}
             </p>

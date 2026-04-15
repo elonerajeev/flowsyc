@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import { logger } from "../utils/logger";
 
 export type ContactInput = {
   firstName: string;
@@ -72,15 +73,14 @@ export const contactsService = {
     try {
       const contacts = await prisma.contact.findMany({
         where,
-        include: {
-          client: true,
-        },
+        include: { client: { select: { id: true, name: true, company: true } } },
         orderBy: { createdAt: "desc" },
+        take: 500,
       });
 
       return contacts.map(mapContact);
     } catch (error) {
-      console.error("Error fetching contacts:", error);
+      logger.error("Error fetching contacts:", error);
       throw new AppError("Failed to fetch contacts", 500, "INTERNAL_ERROR");
     }
   },
@@ -131,7 +131,7 @@ export const contactsService = {
 
       return mapContact(contact);
     } catch (error) {
-      console.error("Error creating contact:", error);
+      logger.error("Error creating contact:", error);
       if (error instanceof AppError) {
         throw error;
       }
@@ -155,7 +155,7 @@ export const contactsService = {
 
       return mapContact(contact);
     } catch (error) {
-      console.error("Error updating contact:", error);
+      logger.error("Error updating contact:", error);
       throw new AppError("Failed to update contact", 500, "INTERNAL_ERROR");
     }
   },
@@ -172,7 +172,7 @@ export const contactsService = {
 
       return { success: true };
     } catch (error) {
-      console.error("Error deleting contact:", error);
+      logger.error("Error deleting contact:", error);
       throw new AppError("Failed to delete contact", 500, "INTERNAL_ERROR");
     }
   },

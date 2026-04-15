@@ -156,14 +156,22 @@ export const crmService = {
       offer: { joiningDate: string; offeredSalary: string; jobTitle: string; department: string; location: string; type: string; generatedAt: string };
     }>(`/candidates/${candidateId}/offer-letter`, { method: "POST", body: JSON.stringify(data) }),
 
-  getContacts: () => fetchCollectionApi<Record<string, unknown>>("/contacts"),
+  getContacts: () => fetchCollectionApi<import("@/types/crm").Contact>("/contacts"),
   createContact: (contact: Record<string, unknown>) =>
     requestJson<Record<string, unknown>>("/contacts", { method: "POST", body: JSON.stringify(contact) }),
   updateContact: (contactId: number, patch: Record<string, unknown>) =>
     requestJson<Record<string, unknown>>(`/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteContact: (contactId: number) => requestJson<void>(`/contacts/${contactId}`, { method: "DELETE" }),
 
-  getLeads: () => fetchCollectionApi<Lead>("/leads"),
+  getLeads: () => fetchCollectionApi<Lead>(`/leads?limit=1000`),
+  getLeadsPage: (params: { limit?: number; page?: number; status?: string; search?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.page) q.set("page", String(params.page));
+    if (params.status) q.set("status", params.status);
+    if (params.search) q.set("search", params.search);
+    return requestJson<{ data: Lead[]; total: number; page: number; limit: number }>(`/leads?${q}`);
+  },
   createLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) =>
     requestJson<Lead>("/leads", { method: "POST", body: JSON.stringify(lead) }),
   updateLead: (leadId: number, patch: Partial<Lead>) =>
@@ -304,10 +312,11 @@ export const crmService = {
   autoUpdateProjectProgress: () => requestJson("/system/alerts/auto-update-progress", { method: "POST" }),
 
   // Meetings
-  getMeetings: (filters?: { leadId?: number; clientId?: number; status?: string }) => {
+  getMeetings: (filters?: { leadId?: number; clientId?: number; contactId?: number; status?: string }) => {
     const params = new URLSearchParams();
     if (filters?.leadId) params.set("leadId", String(filters.leadId));
     if (filters?.clientId) params.set("clientId", String(filters.clientId));
+    if (filters?.contactId) params.set("contactId", String(filters.contactId));
     if (filters?.status) params.set("status", filters.status);
     return fetchCollectionApi<MeetingRecord>(`/meetings?${params}`);
   },
@@ -316,6 +325,7 @@ export const crmService = {
   createMeeting: (meeting: {
     leadId?: number;
     clientId?: number;
+    contactId?: number;
     title: string;
     type?: string;
     scheduledAt: string;

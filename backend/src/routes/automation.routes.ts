@@ -239,7 +239,8 @@ router.get(
     
     const jobs = await prisma.scheduledJob.findMany({
       where,
-      orderBy: { scheduledFor: "desc" }
+      orderBy: { scheduledFor: "desc" },
+      take: 200,
     });
     res.json(jobs);
   })

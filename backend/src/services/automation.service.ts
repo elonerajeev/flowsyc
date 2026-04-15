@@ -71,6 +71,7 @@ export const automationService = {
         due: { lt: today.toISOString().slice(0, 10) },
       },
       select: { id: true, client: true, amount: true, due: true, status: true },
+      take: 100,
     });
     
     for (const invoice of overdueInvoices) {
@@ -100,6 +101,8 @@ export const automationService = {
         dueDate: { lt: today },
       },
       select: { id: true, title: true, assignee: true, priority: true, dueDate: true },
+      orderBy: { dueDate: "asc" },
+      take: 100,
     });
     
     for (const task of overdueTasks) {
@@ -174,12 +177,19 @@ export const automationService = {
   },
 
   async getAlertsSummary() {
-    const alerts = await this.checkAllAlerts();
-    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [alerts, resolvedToday] = await Promise.all([
+      this.checkAllAlerts(),
+      prisma.alert.count({ where: { isResolved: true, resolvedAt: { gte: today } } }),
+    ]);
+
     return {
       total: alerts.length,
       critical: alerts.filter(a => a.severity === "critical").length,
       warning: alerts.filter(a => a.severity === "warning").length,
+      resolvedToday,
       byType: {
         payroll_due: alerts.filter(a => a.type === "payroll_due").length,
         invoice_overdue: alerts.filter(a => a.type === "invoice_overdue").length,

@@ -106,7 +106,9 @@ export default function GTMOpsPage() {
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["gtm-overview"],
     queryFn: crmService.getGTMOverview,
-    refetchInterval: 60000,
+    refetchInterval: 30000,
+    staleTime: 20000,
+    refetchOnWindowFocus: true,
   });
 
   const [showAllHotLeads, setShowAllHotLeads] = useState(false);
@@ -407,7 +409,9 @@ export default function GTMOpsPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">Pipeline Value</span>
-                        <span className="text-xs font-medium text-warning">${(data.summary.totalDeals * 5000).toLocaleString()}</span>
+                        <span className="text-xs font-medium text-warning">
+                          ${(data.summary.pipelineValue ?? 0).toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   </div>

@@ -5,6 +5,8 @@ import type { UserRole } from "../config/types";
 import { triggerAutomation, onLeadCreated, onLeadUpdated } from "./automation-engine";
 import { GTMAutomationService } from "./gtm-automation.service";
 import { gtmLifecycleService } from "./gtm-lifecycle.service";
+import { logger } from "../utils/logger";
+import { cache, TTL } from "../utils/cache";
 
 type LeadRecord = {
   id: number;
@@ -127,6 +129,17 @@ export const leadsService = {
     const sortBy = params.sortBy || "createdAt";
     const sortOrder = params.sortOrder === "asc" ? "asc" : "desc";
 
+    // Cache full unfiltered admin/manager list (most common case)
+    const isUnfiltered = !params.status && !params.source && !params.search &&
+      !params.assignedTo && !params.minScore && !params.maxScore &&
+      access?.role !== "employee" && (params.limit || 50) >= 500;
+
+    const cacheKey = `leads:list:${params.limit || 50}`;
+    if (isUnfiltered) {
+      const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
+      if (cached) return cached;
+    }
+
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
@@ -155,7 +168,9 @@ export const leadsService = {
 
     const total = await prisma.lead.count({ where });
 
-    return { leads: leads.map(mapLead), total, page: params.page || 1, limit: params.limit || 50 };
+    const result = { leads: leads.map(mapLead), total, page: params.page || 1, limit: params.limit || 50 };
+    if (isUnfiltered) cache.set(cacheKey, result, TTL.LEADS_LIST);
+    return result;
   },
 
   async getById(id: number, access?: AccessScope) {
@@ -214,8 +229,9 @@ export const leadsService = {
       source: lead.source,
       score: lead.score,
       createdBy: access?.email,
-    }).catch((err) => console.error("Automation trigger failed:", err));
+    }).catch((err) => logger.error("Automation trigger failed:", err));
 
+    cache.invalidatePrefix("leads:list");
     return mapLead(lead);
   },
 
@@ -246,12 +262,14 @@ export const leadsService = {
       data: updateData,
     });
 
-    onLeadUpdated(lead.id, patch, access?.email).catch((err) => console.error("Automation trigger failed:", err));
+    onLeadUpdated(lead.id, patch, access?.email).catch((err) => logger.error("Automation trigger failed:", err));
 
     if (patch.status || patch.assignedTo || patch.company || patch.jobTitle || patch.phone || patch.score) {
-      gtmLifecycleService.syncLeadLifecycle(lead.id, access?.email).catch((err) => console.error("Lifecycle sync failed:", err));
+      gtmLifecycleService.syncLeadLifecycle(lead.id, access?.email).catch((err) => logger.error("Lifecycle sync failed:", err));
     }
 
+    cache.invalidatePrefix("leads:list");
+    cache.invalidate("gtm:overview");
     return mapLead(lead);
   },
 
@@ -261,6 +279,8 @@ export const leadsService = {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    cache.invalidatePrefix("leads:list");
+    cache.invalidate("gtm:overview");
   },
 
   // ============================================
@@ -321,7 +341,7 @@ export const leadsService = {
       },
     });
 
-    gtmLifecycleService.syncLeadLifecycle(id, access?.email).catch((err) => console.error("Lifecycle sync failed:", err));
+    gtmLifecycleService.syncLeadLifecycle(id, access?.email).catch((err) => logger.error("Lifecycle sync failed:", err));
 
     return {
       lead: mapLead(updatedLead),
@@ -341,21 +361,27 @@ export const leadsService = {
   async recalculateScore(id: number) {
     const result = await GTMAutomationService.calculateLeadScore(id);
     
-    // Update the lead score
     await prisma.lead.update({
       where: { id },
       data: { score: result.score, updatedAt: new Date() },
     });
 
-    // Auto-tag based on score
     const tags = await GTMAutomationService.autoTagLead(id);
+
+    // Fire lead_score_above trigger so auto-assignment rule can run
+    triggerAutomation("lead_scored" as any, {
+      trigger: "lead_scored" as any,
+      entityType: "Lead",
+      entityId: id,
+      data: { score: result.score, ...result.breakdown },
+    }).catch(() => {});
 
     return { score: result.score, breakdown: result.breakdown, tags };
   },
 
   async createFollowUpSequence(id: number, userEmail: string) {
     await GTMAutomationService.createFollowUpReminders(id, userEmail);
-    gtmLifecycleService.syncLeadLifecycle(id, userEmail).catch((err) => console.error("Lifecycle sync failed:", err));
+    gtmLifecycleService.syncLeadLifecycle(id, userEmail).catch((err) => logger.error("Lifecycle sync failed:", err));
     return { success: true, message: "Follow-up sequence created" };
   },
 
@@ -370,32 +396,36 @@ export const leadsService = {
   },
 
   async bulkRecalculateScores() {
-    const leads = await prisma.lead.findMany({ where: { deletedAt: null } });
+    const leads = await prisma.lead.findMany({ where: { deletedAt: null }, select: { id: true } });
 
-    let hotLeads = 0;
-    let warmLeads = 0;
-    let mediumLeads = 0;
-    let coldLeads = 0;
+    const BATCH = 10;
+    let hotLeads = 0, warmLeads = 0, mediumLeads = 0, coldLeads = 0;
 
-    for (const lead of leads) {
-      const result = await GTMAutomationService.calculateLeadScore(lead.id);
-      await GTMAutomationService.autoTagLead(lead.id);
-      await gtmLifecycleService.syncLeadLifecycle(lead.id, "system");
-
-      if (result.score >= 80) hotLeads++;
-      else if (result.score >= 60) warmLeads++;
-      else if (result.score >= 40) mediumLeads++;
-      else coldLeads++;
+    for (let i = 0; i < leads.length; i += BATCH) {
+      const batch = leads.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(async ({ id }) => {
+          const result = await GTMAutomationService.calculateLeadScore(id);
+          await GTMAutomationService.autoTagLead(id);
+          gtmLifecycleService.syncLeadLifecycle(id, "system").catch(() => {});
+          triggerAutomation("lead_scored" as any, {
+            trigger: "lead_scored" as any,
+            entityType: "Lead",
+            entityId: id,
+            data: { score: result.score },
+          }).catch(() => {});
+          return result.score;
+        })
+      );
+      for (const score of results) {
+        if (score >= 80) hotLeads++;
+        else if (score >= 60) warmLeads++;
+        else if (score >= 40) mediumLeads++;
+        else coldLeads++;
+      }
     }
 
-    return {
-      total: leads.length,
-      hotLeads,
-      warmLeads,
-      mediumLeads,
-      coldLeads,
-      message: "All lead scores recalculated",
-    };
+    return { total: leads.length, hotLeads, warmLeads, mediumLeads, coldLeads, message: "All lead scores recalculated" };
   },
 
   async getHotLeads(minScore: number = 80) {
@@ -447,13 +477,13 @@ export const leadsService = {
       },
     });
 
-    console.log(`[Lead Stage Update] Triggering automation for lead ${leadId}: ${oldStatus} → ${status}`);
+    logger.debug(`[Lead Stage Update] Triggering automation for lead ${leadId}: ${oldStatus} → ${status}`);
     
     try {
       await onLeadUpdated(leadId, { status: status as any }, actor?.email);
-      console.log(`[Lead Stage Update] Automation completed for lead ${leadId}`);
+      logger.debug(`[Lead Stage Update] Automation completed for lead ${leadId}`);
     } catch (err) {
-      console.error(`[Lead Stage Update] Automation failed for lead ${leadId}:`, err);
+      logger.error(`[Lead Stage Update] Automation failed for lead ${leadId}:`, err);
     }
 
     return {

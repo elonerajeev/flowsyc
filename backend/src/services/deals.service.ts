@@ -4,6 +4,8 @@ import { AppError } from "../middleware/error.middleware";
 import type { UserRole } from "../config/types";
 import { onDealStageChanged, triggerAutomation } from "./automation-engine";
 import { gtmLifecycleService } from "./gtm-lifecycle.service";
+import { logger } from "../utils/logger";
+import { cache } from "../utils/cache";
 
 type DealRecord = {
   id: number;
@@ -131,9 +133,10 @@ export const dealsService = {
         probability: deal.probability,
         assignedTo: deal.assignedTo,
       },
-    }).catch((err) => console.error("Automation trigger failed:", err));
+    }).catch((err) => logger.error("Automation trigger failed:", err));
 
-    gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => console.error("Deal lifecycle sync failed:", err));
+    gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => logger.error("Deal lifecycle sync failed:", err));
+    cache.invalidate("gtm:overview");
     return mapDeal(deal);
   },
 
@@ -176,10 +179,11 @@ export const dealsService = {
 
     // Trigger automation: Deal Stage Changed
     if (patch.stage && patch.stage !== existing.stage) {
-      onDealStageChanged(deal.id, deal.stage, existing.stage).catch((err) => console.error("Automation trigger failed:", err));
+      onDealStageChanged(deal.id, deal.stage, existing.stage).catch((err) => logger.error("Automation trigger failed:", err));
     }
 
-    gtmLifecycleService.syncDealLifecycle(deal.id, access?.email).catch((err) => console.error("Deal lifecycle sync failed:", err));
+    gtmLifecycleService.syncDealLifecycle(deal.id, access?.email).catch((err) => logger.error("Deal lifecycle sync failed:", err));
+    cache.invalidate("gtm:overview");
     return mapDeal(deal);
   },
 
@@ -194,5 +198,6 @@ export const dealsService = {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    cache.invalidate("gtm:overview");
   },
 };

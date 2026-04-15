@@ -579,6 +579,7 @@ export interface MeetingRecord {
   id: number;
   leadId: number | null;
   clientId: number | null;
+  contactId: number | null;
   title: string;
   type: MeetingType;
   scheduledAt: string;
@@ -593,8 +594,9 @@ export interface MeetingRecord {
   status: MeetingStatus;
   createdAt: string;
   updatedAt: string;
-  lead?: { id: number; name: string; email: string } | null;
+  lead?: { id: number; firstName: string; lastName: string; email: string } | null;
   client?: { id: number; name: string; email: string } | null;
+  contact?: { id: number; firstName: string; lastName: string; email: string } | null;
 }
 
 export interface ActivityRecord {

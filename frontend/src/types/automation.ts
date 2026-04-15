@@ -108,6 +108,7 @@ export interface GTMOverview {
     pendingAutomations: number;
     churnRiskClients: number;
     staleDeals: number;
+    pipelineValue: number;
   };
   funnels: {
     leads: Record<string, number>;
@@ -138,6 +139,7 @@ export interface GTMOverview {
       id: number;
       name: string;
       jobType: string;
+      status: string;
       scheduledFor: string;
       entityType?: string;
       entityId?: number;

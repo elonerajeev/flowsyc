@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger";
 import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
@@ -343,7 +344,7 @@ export const clientsService = {
             previousScore: existing.healthScore,
             name: updated.name
           }
-        }).catch(err => console.error("Health automation failed:", err));
+        }).catch(err => logger.error("Health automation failed:", err));
       }
 
       return mapClient(updated);

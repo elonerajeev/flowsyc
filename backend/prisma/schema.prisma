@@ -228,6 +228,8 @@ model Task {
   @@index([deletedAt])
   @@index([priority])
   @@index([projectId])
+  @@index([dueDate])
+  @@index([assignee])
 }
 
 model Comment {
@@ -399,18 +401,19 @@ model Lead {
 }
 
 model Contact {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   firstName    String
   lastName     String
-  email        String   @unique
+  email        String    @unique
   phone        String?
   jobTitle     String?
   department   String?
   clientId     Int?
-  client       Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client       Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  meetings     Meeting[]
   deletedAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([deletedAt])
   @@index([clientId])
@@ -643,6 +646,7 @@ model Meeting {
   id            Int           @id @default(autoincrement())
   leadId        Int?
   clientId      Int?
+  contactId     Int?
   title         String
   type          MeetingType   @default(other)
   scheduledAt   DateTime
@@ -660,9 +664,11 @@ model Meeting {
 
   lead          Lead?         @relation(fields: [leadId], references: [id])
   client        Client?       @relation(fields: [clientId], references: [id])
+  contact       Contact?      @relation(fields: [contactId], references: [id])
 
   @@index([leadId])
   @@index([clientId])
+  @@index([contactId])
   @@index([scheduledAt])
   @@index([status])
 }
@@ -1016,6 +1022,7 @@ model ActivityLog {
   @@index([performedBy])
   @@index([createdAt])
   @@index([action])
+  @@index([isVisible, createdAt])
 }
 
 // Alert model for automation alerts

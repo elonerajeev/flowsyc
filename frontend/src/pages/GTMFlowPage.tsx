@@ -1,405 +1,400 @@
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import PageLoader from "@/components/shared/PageLoader";
+import ErrorFallback from "@/components/shared/ErrorFallback";
 import {
   Target,
   Users,
   Handshake,
   Building2,
   ArrowRight,
+  ArrowDown,
   CheckCircle2,
-  Clock,
   Zap,
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
-  Activity,
+  Upload,
+  UserPlus,
+  MousePointerClick,
+  BarChart3,
   Bell,
-  RefreshCw,
+  BookOpen,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
-import { RADIUS, TEXT } from "@/lib/design-tokens";
+import { TEXT } from "@/lib/design-tokens";
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
+const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } };
+const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
+
+const steps = [
+  {
+    number: "01",
+    icon: Upload,
+    title: "Add Your Leads",
+    description: "Import leads from a CSV/Excel file or add them one by one manually.",
+    how: "Go to Leads → click Import CSV or + Add Lead",
+    color: "from-blue-500 to-blue-600",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    text: "text-blue-500",
+    link: "/leads",
+    linkLabel: "Go to Leads",
+  },
+  {
+    number: "02",
+    icon: MousePointerClick,
+    title: "Update Lead Status",
+    description: "As you reach out to leads, change their status. This is the only action you need to take — the system handles the rest.",
+    how: "Open any lead → change status dropdown → save",
+    color: "from-yellow-500 to-yellow-600",
+    bg: "bg-yellow-500/10",
+    border: "border-yellow-500/30",
+    text: "text-yellow-500",
+    link: "/leads",
+    linkLabel: "View Leads",
+  },
+  {
+    number: "03",
+    icon: Zap,
+    title: "Automation Kicks In",
+    description: "The moment a status changes, the system auto-creates contacts, deals, and clients for you — zero manual work.",
+    how: "Nothing to do — it happens automatically in the background",
+    color: "from-purple-500 to-purple-600",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    text: "text-purple-500",
+    link: "/automation/logs",
+    linkLabel: "View Activity Logs",
+  },
+  {
+    number: "04",
+    icon: BarChart3,
+    title: "Monitor & Act",
+    description: "Track your pipeline, check alerts, review automation logs, and see what's working.",
+    how: "Check GTM Dashboard, Pipeline, and Alerts regularly",
+    color: "from-green-500 to-green-600",
+    bg: "bg-green-500/10",
+    border: "border-green-500/30",
+    text: "text-green-500",
+    link: "/gtm",
+    linkLabel: "GTM Dashboard",
+  },
+];
+
+const triggerTable = [
+  {
+    action: "You add a lead",
+    result: "Lead appears in your list with score 0",
+    creates: null,
+    icon: UserPlus,
+    iconColor: "text-blue-500",
+    bg: "bg-blue-500/10",
+  },
+  {
+    action: "You set status → Contacted",
+    result: "Contact is automatically created from lead info",
+    creates: "Contact",
+    icon: Users,
+    iconColor: "text-yellow-500",
+    bg: "bg-yellow-500/10",
+  },
+  {
+    action: "You set status → Qualified",
+    result: "Deal opportunity is created in the pipeline",
+    creates: "Deal",
+    icon: Handshake,
+    iconColor: "text-purple-500",
+    bg: "bg-purple-500/10",
+  },
+  {
+    action: "You set status → Closed Won",
+    result: "Lead is converted to a paying client",
+    creates: "Client",
+    icon: Building2,
+    iconColor: "text-green-500",
+    bg: "bg-green-500/10",
+  },
+  {
+    action: "Lead inactive for 7+ days",
+    result: "Alert sent — system flags the deal for follow-up",
+    creates: "Alert",
+    icon: Bell,
+    iconColor: "text-warning",
+    bg: "bg-warning/10",
+  },
+];
+
+const quickLinks = [
+  { label: "Import Leads (CSV/Excel)", icon: Upload, link: "/leads", desc: "Start here — add your leads" },
+  { label: "View Pipeline", icon: Handshake, link: "/pipeline", desc: "Track deals in progress" },
+  { label: "GTM Dashboard", icon: BarChart3, link: "/gtm", desc: "Overview of your funnel" },
+  { label: "Automation Logs", icon: Zap, link: "/automation/logs", desc: "See what was automated" },
+  { label: "Alerts", icon: Bell, link: "/automation/alerts", desc: "Issues needing attention" },
+  { label: "Automation Rules", icon: Sparkles, link: "/automation/rules", desc: "Customize what triggers what" },
+];
 
 export default function GTMFlowPage() {
-  const { data: gtmData, isLoading } = useQuery({
+  const navigate = useNavigate();
+
+  const { data: gtmData, isLoading, error, refetch } = useQuery({
     queryKey: ["gtm-overview"],
     queryFn: crmService.getGTMOverview,
     refetchInterval: 60000,
   });
 
-  const stages = [
-    {
-      id: "lead",
-      icon: Target,
-      title: "Lead",
-      description: "New potential customer enters the system",
-      color: "from-blue-500 to-blue-600",
-      bgColor: "bg-blue-500/10",
-      borderColor: "border-blue-500/30",
-      textColor: "text-blue-500",
-      count: gtmData?.summary?.totalLeads || 0,
-      status: "start",
-    },
-    {
-      id: "contact",
-      icon: Users,
-      title: "Contact",
-      description: "Contact created when lead is reached out",
-      color: "from-yellow-500 to-yellow-600",
-      bgColor: "bg-yellow-500/10",
-      borderColor: "border-yellow-500/30",
-      textColor: "text-yellow-500",
-      count: gtmData?.summary?.totalContacts || 0,
-      status: "middle",
-    },
-    {
-      id: "deal",
-      icon: Handshake,
-      title: "Deal",
-      description: "Opportunity created when lead is qualified",
-      color: "from-purple-500 to-purple-600",
-      bgColor: "bg-purple-500/10",
-      borderColor: "border-purple-500/30",
-      textColor: "text-purple-500",
-      count: gtmData?.summary?.totalDeals || 0,
-      status: "middle",
-    },
-    {
-      id: "client",
-      icon: Building2,
-      title: "Client",
-      description: "Won deal converts lead to client",
-      color: "from-green-500 to-green-600",
-      bgColor: "bg-green-500/10",
-      borderColor: "border-green-500/30",
-      textColor: "text-green-500",
-      count: gtmData?.summary?.totalClients || 0,
-      status: "end",
-    },
-  ];
+  if (isLoading) return <PageLoader />;
+  if (error) return <ErrorFallback error={error as Error} onRetry={refetch} retryLabel="Retry" />;
 
-  const conditions = [
-    {
-      from: "Lead",
-      to: "Contact",
-      trigger: "Status = contacted",
-      icon: CheckCircle2,
-      color: "text-blue-500",
-      description: "When you mark a lead as 'Contacted'",
-      badge: "Auto",
-      badgeColor: "bg-green-500/10 text-green-500 border-green-500/30",
-    },
-    {
-      from: "Lead",
-      to: "Deal",
-      trigger: "Status = qualified",
-      icon: CheckCircle2,
-      color: "text-blue-500",
-      description: "When a lead becomes 'Qualified'",
-      badge: "Auto",
-      badgeColor: "bg-green-500/10 text-green-500 border-green-500/30",
-    },
-    {
-      from: "Lead",
-      to: "Client",
-      trigger: "Status = closed_won",
-      icon: Building2,
-      color: "text-green-500",
-      description: "When a deal is successfully closed",
-      badge: "Auto",
-      badgeColor: "bg-green-500/10 text-green-500 border-green-500/30",
-    },
-  ];
-
-  const automationActions = [
-    {
-      title: "Creates Contact",
-      description: "A new contact is created from the lead's information",
-      icon: Users,
-      color: "text-yellow-500",
-      when: "Lead status → contacted",
-    },
-    {
-      title: "Creates Deal",
-      description: "A new deal opportunity is created in the pipeline",
-      icon: Handshake,
-      color: "text-purple-500",
-      when: "Lead status → qualified",
-    },
-    {
-      title: "Creates Task",
-      description: "A follow-up task is automatically assigned",
-      icon: CheckCircle2,
-      color: "text-info",
-      when: "Any stage change",
-    },
-    {
-      title: "Creates Client",
-      description: "Lead is converted to a client when deal is won",
-      icon: Building2,
-      color: "text-green-500",
-      when: "Deal → closed_won",
-    },
-    {
-      title: "Sends Alert",
-      description: "Alerts are sent for stale deals or churn risk",
-      icon: Bell,
-      color: "text-warning",
-      when: "7+ days inactive",
-    },
-    {
-      title: "Updates Score",
-      description: "Lead score is recalculated based on activity",
-      icon: TrendingUp,
-      color: "text-primary",
-      when: "On change",
-    },
-  ];
-
-  const stats = [
-    { label: "Total Leads", value: gtmData?.summary?.totalLeads || 0, color: "text-blue-500" },
-    { label: "Contacts Created", value: gtmData?.summary?.totalContacts || 0, color: "text-yellow-500" },
-    { label: "Deals in Pipeline", value: gtmData?.summary?.totalDeals || 0, color: "text-purple-500" },
-    { label: "Clients Won", value: gtmData?.summary?.totalClients || 0, color: "text-green-500" },
-  ];
+  const summary = gtmData?.summary;
 
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-8">
-      <div className="mx-auto max-w-6xl space-y-8">
-        {/* Header */}
-        <motion.div variants={container} initial="hidden" animate="show" className="text-center space-y-4">
-          <motion.div variants={item}>
-            <Badge variant="outline" className="mb-4 px-4 py-1.5 text-sm">
-              <Zap className="mr-2 h-4 w-4 text-primary" />
-              Automated Lifecycle
-            </Badge>
-          </motion.div>
-          <motion.h1 variants={item} className="text-4xl font-display font-bold text-foreground">
-            How Lead-to-Client Works
-          </motion.h1>
-          <motion.p variants={item} className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            See how leads automatically flow through the system and become clients. 
-            Every step is tracked and automated.
-          </motion.p>
-        </motion.div>
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8 pb-8">
 
-        {/* Live Stats */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {stats.map((stat, idx) => (
-              <motion.div key={stat.label} variants={item}>
-                <Card className={cn("border-border/40", RADIUS.lg)}>
-                  <CardContent className="p-4 text-center">
-                    <p className={cn("text-3xl font-bold", stat.color)}>{stat.value}</p>
-                    <p className={cn("text-sm text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Flow Diagram */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Card className={cn("border-border/60 shadow-card", RADIUS.xl)}>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" />
-                The Lifecycle Flow
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Watch how a lead automatically becomes a client
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Visual Flow */}
-              <div className="flex items-center justify-between gap-2 overflow-x-auto pb-4">
-                {stages.map((stage, idx) => (
-                  <motion.div
-                    key={stage.id}
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: idx * 0.2 }}
-                    className="flex items-center gap-2"
-                  >
-                    <div className={cn(
-                      "flex-1 min-w-[140px] rounded-xl border-2 p-4 text-center transition-all hover:scale-105",
-                      stage.bgColor,
-                      stage.borderColor
-                    )}>
-                      <div className={cn("mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br border", stage.color, "text-white")}>
-                        <stage.icon className="h-6 w-6" />
-                      </div>
-                      <p className="font-semibold text-foreground">{stage.title}</p>
-                      <p className={cn("text-2xl font-bold", stage.textColor)}>{stage.count}</p>
-                      <p className={cn("text-xs text-muted-foreground mt-1", TEXT.meta)}>{stage.description}</p>
-                    </div>
-                    {idx < stages.length - 1 && (
-                      <ArrowRight className="h-6 w-6 text-muted-foreground flex-shrink-0" />
-                    )}
-                  </motion.div>
-                ))}
+      {/* Header */}
+      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
+        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500" />
+        <div className="relative px-6 py-8 lg:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                How It Works
               </div>
-
-              {/* Arrow Labels */}
-              <div className="flex justify-between px-8 text-sm text-muted-foreground">
-                <span>Lead enters</span>
-                <span className="flex items-center gap-1 text-green-500">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Conditions met
+              <h1 className="font-display text-3xl font-semibold text-foreground">
+                Sales & Marketing{" "}
+                <span className="bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
+                  Automation Guide
                 </span>
-                <span>Client created</span>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Conditions That Trigger */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Card className={cn("border-border/60 shadow-card", RADIUS.xl)}>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-primary" />
-                What Triggers Each Step
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                When these conditions are met, automation takes over
+              </h1>
+              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
+                A simple guide to turning leads into clients using automation. You update lead status — the system does everything else.
               </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                {conditions.map((condition, idx) => (
-                  <motion.div
-                    key={idx}
-                    variants={item}
-                    className="rounded-xl border border-border/40 bg-secondary/20 p-4"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {condition.from}
-                        <ArrowRight className="mx-2 h-4 w-4 inline" />
-                        {condition.to}
-                      </span>
-                      <Badge className={cn("text-xs border", condition.badgeColor)}>
-                        {condition.badge}
-                      </Badge>
-                    </div>
-                    <p className="font-semibold text-foreground">{condition.trigger}</p>
-                    <p className={cn("text-sm text-muted-foreground mt-1", TEXT.meta)}>
-                      {condition.description}
-                    </p>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+            </div>
+            {/* Live counts */}
+            <div className="flex gap-3 flex-wrap">
+              {[
+                { label: "Leads", value: summary?.totalLeads ?? 0, color: "text-blue-500" },
+                { label: "Contacts", value: summary?.totalContacts ?? 0, color: "text-yellow-500" },
+                { label: "Deals", value: summary?.totalDeals ?? 0, color: "text-purple-500" },
+                { label: "Clients", value: summary?.totalClients ?? 0, color: "text-green-500" },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl border border-border/40 bg-secondary/20 px-4 py-3 text-center min-w-[72px]">
+                  <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.section>
 
-        {/* What Happens Automatically */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Card className={cn("border-border/60 shadow-card", RADIUS.xl)}>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Zap className="h-5 w-5 text-primary" />
-                What Happens Automatically
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                The system does all of this for you - no manual work needed
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {automationActions.map((action, idx) => (
-                  <motion.div
-                    key={idx}
-                    variants={item}
-                    className="rounded-xl border border-border/40 bg-secondary/20 p-4 hover:bg-secondary/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg", action.color, "bg-current/10")}>
-                        <action.icon className="h-4 w-4" style={{ color: 'currentColor' }} />
-                      </div>
-                      <span className="font-semibold text-foreground">{action.title}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{action.description}</p>
-                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {action.when}
-                    </p>
-                  </motion.div>
-                ))}
+      {/* Step-by-step guide */}
+      <motion.section variants={item}>
+        <div className="mb-4 flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold text-foreground">What You Need To Do — Step by Step</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step, idx) => (
+            <motion.div
+              key={step.number}
+              variants={item}
+              className={cn(
+                "relative rounded-2xl border p-5 hover:shadow-md transition-shadow cursor-default",
+                step.bg,
+                step.border
+              )}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white", step.color)}>
+                  <step.icon className="h-5 w-5" />
+                </div>
+                <span className={cn("text-3xl font-bold opacity-20", step.text)}>{step.number}</span>
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              <h3 className="font-semibold text-foreground mb-1">{step.title}</h3>
+              <p className="text-sm text-muted-foreground mb-3">{step.description}</p>
+              <div className="rounded-lg bg-background/60 p-2 text-xs text-muted-foreground mb-3">
+                <span className="font-medium text-foreground">How: </span>{step.how}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("w-full gap-1 text-xs h-8", step.text)}
+                onClick={() => navigate(step.link)}
+              >
+                {step.linkLabel}
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              {idx < steps.length - 1 && (
+                <div className="absolute -right-2 top-1/2 -translate-y-1/2 z-10 hidden lg:block">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background">
+                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      </motion.section>
 
-        {/* Lead Stage Journey */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Card className={cn("border-border/60 shadow-card", RADIUS.xl)}>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                Lead Stage Journey
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center justify-center gap-3">
+      {/* Trigger Table */}
+      <motion.section variants={item}>
+        <Card className="border-border/60 shadow-card">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" />
+              Your Action → What Happens Automatically
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Every time you update a lead status, the system reacts instantly
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {triggerTable.map((row, idx) => (
+                <motion.div
+                  key={idx}
+                  variants={item}
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/40 bg-secondary/10 p-4 hover:bg-secondary/20 transition-colors"
+                >
+                  {/* Action (user does) */}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", row.bg)}>
+                      <row.icon className={cn("h-4 w-4", row.iconColor)} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">You do</p>
+                      <p className="text-sm font-semibold text-foreground">{row.action}</p>
+                    </div>
+                  </div>
+
+                  {/* Arrow */}
+                  <div className="hidden sm:flex items-center justify-center px-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10">
+                      <ArrowRight className="h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+                  <div className="flex sm:hidden justify-center">
+                    <ArrowDown className="h-4 w-4 text-primary" />
+                  </div>
+
+                  {/* Result (system does) */}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">System does</p>
+                      <p className="text-sm text-muted-foreground">{row.result}</p>
+                    </div>
+                  </div>
+
+                  {/* Badge */}
+                  {row.creates && (
+                    <Badge variant="outline" className={cn("shrink-0 text-xs", row.bg, row.iconColor, "border-current/30")}>
+                      + {row.creates}
+                    </Badge>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.section>
+
+      {/* Lead Status Journey — visual only */}
+      <motion.section variants={item}>
+        <Card className="border-border/60 shadow-card">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Target className="h-5 w-5 text-primary" />
+              The Full Lead Journey
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Move a lead through these stages to complete the journey</p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto pb-2">
+              <div className="flex items-center gap-2 min-w-max">
                 {[
-                  { stage: "New", color: "bg-blue-500", created: "Lead added" },
-                  { stage: "Contacted", color: "bg-yellow-500", created: "Contact created" },
-                  { stage: "Qualified", color: "bg-green-500", created: "Deal created" },
-                  { stage: "Proposal", color: "bg-orange-500", created: "" },
-                  { stage: "Negotiation", color: "bg-purple-500", created: "" },
-                  { stage: "Won", color: "bg-emerald-500", created: "Client created" },
-                ].map((s, idx) => (
-                  <motion.div
-                    key={s.stage}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    className="flex items-center gap-3"
-                  >
-                    <div className="flex items-center gap-2 rounded-full border border-border/40 bg-secondary/20 px-4 py-2">
-                      <div className={cn("h-3 w-3 rounded-full", s.color)} />
-                      <span className="text-sm font-medium text-foreground">{s.stage}</span>
+                  { stage: "New", dot: "bg-blue-500", note: null },
+                  { stage: "Contacted", dot: "bg-yellow-500", note: "Contact created" },
+                  { stage: "Qualified", dot: "bg-green-500", note: "Deal created" },
+                  { stage: "Proposal Sent", dot: "bg-orange-500", note: null },
+                  { stage: "Negotiation", dot: "bg-purple-500", note: null },
+                  { stage: "Closed Won", dot: "bg-emerald-500", note: "Client created" },
+                  { stage: "Closed Lost", dot: "bg-destructive/70", note: null },
+                ].map((s, idx, arr) => (
+                  <div key={s.stage} className="flex items-center gap-2">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="flex items-center gap-2 rounded-full border border-border/40 bg-secondary/20 px-3 py-1.5">
+                        <div className={cn("h-2.5 w-2.5 rounded-full", s.dot)} />
+                        <span className="text-xs font-medium text-foreground whitespace-nowrap">{s.stage}</span>
+                      </div>
+                      {s.note && (
+                        <span className="text-[10px] text-green-500 flex items-center gap-0.5 whitespace-nowrap">
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                          {s.note}
+                        </span>
+                      )}
                     </div>
-                    {s.created && (
-                      <span className="text-xs text-green-500 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" />
-                        {s.created}
-                      </span>
+                    {idx < arr.length - 1 && (
+                      <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                     )}
-                    {idx < 5 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
-                  </motion.div>
+                  </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.section>
 
-        {/* Summary */}
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Card className={cn("border-border/60 shadow-card bg-gradient-to-br from-primary/5 to-transparent", RADIUS.xl)}>
-            <CardContent className="p-8 text-center">
-              <motion.div variants={item}>
-                <RefreshCw className="mx-auto h-12 w-12 text-primary mb-4" />
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  Everything is Automated
-                </h2>
-                <p className="text-muted-foreground max-w-xl mx-auto">
-                  From the moment a lead enters, the system automatically creates contacts, 
-                  deals, and eventually clients. You just focus on selling!
-                </p>
-              </motion.div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-    </div>
+      {/* Quick Navigation */}
+      <motion.section variants={item}>
+        <div className="mb-4 flex items-center gap-2">
+          <ChevronRight className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold text-foreground">Quick Navigation</h2>
+        </div>
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          {quickLinks.map((link, idx) => (
+            <motion.button
+              key={idx}
+              variants={item}
+              onClick={() => navigate(link.link)}
+              className="group rounded-xl border border-border/40 bg-card p-4 text-left hover:border-primary/40 hover:bg-secondary/30 transition-all hover:shadow-sm"
+            >
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <link.icon className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-xs font-semibold text-foreground leading-tight">{link.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{link.desc}</p>
+            </motion.button>
+          ))}
+        </div>
+      </motion.section>
+
+      {/* Summary tip */}
+      <motion.section variants={item}>
+        <Card className="border-border/60 bg-gradient-to-br from-primary/5 via-purple-500/5 to-transparent shadow-card">
+          <CardContent className="flex flex-col sm:flex-row items-center gap-4 p-6">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-purple-500 text-white">
+              <Sparkles className="h-7 w-7" />
+            </div>
+            <div className="text-center sm:text-left">
+              <h3 className="font-semibold text-foreground text-lg">The short version</h3>
+              <p className="text-muted-foreground text-sm mt-1">
+                Import leads → change their status as you work them → system creates contacts, deals & clients for you → monitor in GTM Dashboard & Alerts.
+                That's it.
+              </p>
+            </div>
+            <Button className="shrink-0 gap-2" onClick={() => navigate("/leads")}>
+              <Upload className="h-4 w-4" />
+              Import Leads Now
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.section>
+    </motion.div>
   );
 }

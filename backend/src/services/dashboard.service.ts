@@ -123,6 +123,7 @@ async function buildStaffDashboard() {
       where: { deletedAt: null },
       orderBy: { createdAt: "asc" },
       select: { amount: true, createdAt: true, date: true },
+      take: 500,
     }),
     prisma.teamMember.findMany({
       where: {
@@ -232,10 +233,10 @@ async function buildStaffDashboard() {
   twentyEightDaysAgo.setHours(0, 0, 0, 0);
 
   const [recentTasks, recentClients, recentProjects, recentInvoices] = await Promise.all([
-    prisma.task.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true } }),
-    prisma.client.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true } }),
-    prisma.project.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true } }),
-    prisma.invoice.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true } }),
+    prisma.task.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 1000 }),
+    prisma.client.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
+    prisma.project.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
+    prisma.invoice.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
   ]);
 
   const atRiskClients = await prisma.client.count({
