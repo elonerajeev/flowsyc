@@ -281,8 +281,8 @@ const LeadsPage = () => {
     queryFn: () => crmService.getLeadsPage({ limit: 1000 }),
     staleTime: 30000,
   });
-  const leadsData = leadsResponse?.data ?? [];
-  const totalLeadsInDB = leadsResponse?.total ?? 0;
+  const leadsData = useMemo(() => leadsResponse?.data ?? [], [leadsResponse]);
+  const totalLeadsInDB = useMemo(() => leadsResponse?.total ?? 0, [leadsResponse]);
 
   // Fetch import history
   const { data: importHistory = [] } = useQuery({

@@ -17,6 +17,14 @@ export const authRateLimiter = rateLimit({
   message: { error: "Too many authentication attempts, please try again later." },
 });
 
+export const sensitiveRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 5, // 5 attempts per hour for sensitive operations
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many attempts, please try again later." },
+});
+
 export const uploadRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   limit: 20,

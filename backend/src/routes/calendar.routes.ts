@@ -3,6 +3,8 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
 import { calendarService } from "../services/calendar.service";
 import { asyncHandler } from "../utils/async-handler";
+import { validateBody } from "../middleware/validate.middleware";
+import { createCalendarEventSchema, updateCalendarEventSchema } from "../validators/calendar.schema";
 
 const router = Router();
 
@@ -18,6 +20,7 @@ router.get(
 
 router.post(
   "/",
+  validateBody(createCalendarEventSchema),
   asyncHandler(async (req, res) => {
     const event = await calendarService.create(req.auth, req.body);
     res.status(201).json(event);
@@ -34,6 +37,7 @@ router.get(
 
 router.patch(
   "/:id",
+  validateBody(updateCalendarEventSchema),
   asyncHandler(async (req, res) => {
     const event = await calendarService.update(Number(req.params.id), req.auth, req.body);
     res.json(event);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Flag, Pin, Plus, Search, Edit2, Trash2, RefreshCw, MessageSquare, Download, CheckCircle2, Clock, ListTodo } from "lucide-react";
 import { motion } from "framer-motion";
@@ -38,20 +38,7 @@ function readPinned(key: string) {
   return readStoredJSON<string[]>(key, []);
 }
 
-function TaskCard({
-  task,
-  column,
-  projectName,
-  pinned,
-  canEdit,
-  canDelete,
-  onMove,
-  onPin,
-  onDelete,
-  onDragStart,
-  onDropCard,
-  onClick,
-}: {
+interface TaskCardProps {
   task: TaskRecord;
   column: TaskColumn;
   projectName?: string;
@@ -64,7 +51,22 @@ function TaskCard({
   onDragStart: (taskId: number) => void;
   onDropCard: (taskId: number, targetColumn: TaskColumn) => void;
   onClick: (task: TaskRecord) => void;
-}) {
+}
+
+const TaskCard = memo(function TaskCard({
+  task,
+  column,
+  projectName,
+  pinned,
+  canEdit,
+  canDelete,
+  onMove,
+  onPin,
+  onDelete,
+  onDragStart,
+  onDropCard,
+  onClick,
+}: TaskCardProps) {
   const { openQuickCreate } = useWorkspace();
   const [isDragging, setIsDragging] = useState(false);
 
@@ -181,7 +183,7 @@ function TaskCard({
       </div>
     </article>
   );
-}
+});
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
@@ -204,7 +206,7 @@ export default function TasksPage() {
   const [doneVisible, setDoneVisible] = useState(4);
   const { refresh, isRefreshing } = useRefresh();
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     await refresh(
       () => refetch(),
       {
@@ -212,7 +214,7 @@ export default function TasksPage() {
         successMessage: getRefreshSuccessMessage("tasks"),
       }
     );
-  };
+  }, [refetch, refresh]);
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin" || role === "manager";
@@ -250,6 +252,61 @@ export default function TasksPage() {
     },
   });
 
+  const togglePin = useCallback((taskId: number) => {
+    const key = String(taskId);
+    const next = pinnedTaskIds.includes(key)
+      ? pinnedTaskIds.filter((id) => id !== key)
+      : [key, ...pinnedTaskIds];
+    setPinnedTaskIds(next);
+    writeStoredJSON(pinnedKey, next);
+  }, [pinnedTaskIds, pinnedKey]);
+
+  const handleDelete = useCallback((taskId: number) => {
+    if (window.confirm("Are you sure you want to delete this task?")) {
+      deleteMutation.mutate(taskId);
+    }
+  }, [deleteMutation]);
+
+  const handleDragStart = useCallback((taskId: number) => {
+    setDraggedTaskId(taskId);
+  }, []);
+
+  const handleDropToColumn = useCallback((taskId: number, targetColumn: TaskColumn) => {
+    const currentBoard = effectiveBoard;
+    if (!currentBoard) return;
+
+    const sourceColumn = orderedColumns.find((col) => currentBoard[col].some((task) => task.id === taskId));
+    if (!sourceColumn || sourceColumn === targetColumn) return;
+
+    setBoard((current) => {
+      const resolvedBoard = current ?? currentBoard;
+      const task = resolvedBoard[sourceColumn].find((entry) => entry.id === taskId);
+      if (!task) return current;
+
+      return {
+        ...resolvedBoard,
+        [sourceColumn]: resolvedBoard[sourceColumn].filter((entry) => entry.id !== taskId),
+        [targetColumn]: [...resolvedBoard[targetColumn], { ...task, column: targetColumn }],
+      };
+    });
+
+    moveTaskMutation.mutate({ taskId, column: targetColumn });
+  }, [effectiveBoard, moveTaskMutation]);
+
+  const handleMove = useCallback((taskId: number, direction: "left" | "right") => {
+    const sourceColumn = orderedColumns.find((col) => (effectiveBoard?.[col] ?? []).some((task) => task.id === taskId));
+    if (!sourceColumn) return;
+    const currentIndex = orderedColumns.indexOf(sourceColumn);
+    const nextColumn = direction === "left" ? orderedColumns[currentIndex - 1] : orderedColumns[currentIndex + 1];
+    if (!nextColumn) return;
+    handleDropToColumn(taskId, nextColumn);
+  }, [effectiveBoard, handleDropToColumn]);
+
+  const handleCardClick = useCallback((task: TaskRecord) => {
+    setSelectedTask(task);
+    setTaskDetailOpen(true);
+  }, []);
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => crmService.removeTask(id),
     onSuccess: () => {
@@ -285,42 +342,25 @@ export default function TasksPage() {
     ? orderedColumns.some((column) => filteredBoard[column].length > 0)
     : false;
 
-  const persistPinned = (nextPinned: string[]) => {
-    setPinnedTaskIds(nextPinned);
-    writeStoredJSON(pinnedKey, nextPinned);
-  };
+  const visibleCountMap = useMemo(() => ({
+    todo: todoVisible,
+    "in-progress": inProgressVisible,
+    done: doneVisible,
+  }), [todoVisible, inProgressVisible, doneVisible]);
 
-  const togglePin = (taskId: number) => {
-    const key = String(taskId);
-    const next = pinnedTaskIds.includes(key) ? pinnedTaskIds.filter((id) => id !== key) : [key, ...pinnedTaskIds];
-    persistPinned(next);
-  };
-
-  const updateTaskColumn = (taskId: number, targetColumn: TaskColumn) => {
-    const currentBoard = effectiveBoard;
-    if (!currentBoard) return;
-
-    const sourceColumn = orderedColumns.find((column) => currentBoard[column].some((task) => task.id === taskId));
-    if (!sourceColumn || sourceColumn === targetColumn) return;
-
-    setBoard((current) => {
-      const resolvedBoard = current ?? currentBoard;
-      const task = resolvedBoard[sourceColumn].find((entry) => entry.id === taskId);
-      if (!task) return current;
-
-      return {
-        ...resolvedBoard,
-        [sourceColumn]: resolvedBoard[sourceColumn].filter((entry) => entry.id !== taskId),
-        [targetColumn]: [...resolvedBoard[targetColumn], { ...task, column: targetColumn }],
-      };
-    });
-
-    moveTaskMutation.mutate({ taskId, column: targetColumn });
-  };
-
-  const handleDropToColumn = (taskId: number, targetColumn: TaskColumn) => {
-    updateTaskColumn(taskId, targetColumn);
-  };
+  const setVisibleCount = useCallback((column: TaskColumn, value: number) => {
+    switch (column) {
+      case "todo":
+        setTodoVisible(value);
+        break;
+      case "in-progress":
+        setInProgressVisible(value);
+        break;
+      case "done":
+        setDoneVisible(value);
+        break;
+    }
+  }, []);
 
   const stats = useMemo(() => {
     if (!data) return { todo: 0, inProgress: 0, done: 0, total: 0 };
@@ -473,40 +513,23 @@ export default function TasksPage() {
             </div>
             <div className="space-y-2.5 p-3">
               {filteredBoard[column].length > 0 ? (
-                (() => {
-                  const visibleLimit = column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible;
-                  return filteredBoard[column].slice(0, visibleLimit).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      column={column}
-                      projectName={task.projectId ? projectNameById.get(task.projectId) : undefined}
-                      pinned={pinnedTaskIds.includes(String(task.id))}
-                      canEdit={canEdit}
-                      canDelete={canDelete}
-                      onMove={(taskId, direction) => {
-                        const sourceColumn = orderedColumns.find((entry) => (effectiveBoard?.[entry] ?? []).some((task) => task.id === taskId));
-                        if (!sourceColumn) return;
-                        const currentIndex = orderedColumns.indexOf(sourceColumn);
-                        const nextColumn = direction === "left" ? orderedColumns[currentIndex - 1] : orderedColumns[currentIndex + 1];
-                        if (!nextColumn) return;
-                        updateTaskColumn(taskId, nextColumn);
-                      }}
-                      onPin={togglePin}
-                      onDelete={(id) => {
-                        if (window.confirm("Are you sure you want to delete this task?")) {
-                          deleteMutation.mutate(id);
-                        }
-                      }}
-                      onDragStart={(taskId) => setDraggedTaskId(taskId)}
-                      onDropCard={handleDropToColumn}
-                      onClick={(task) => {
-                        setSelectedTask(task);
-                        setTaskDetailOpen(true);
-                      }}
-                    />
-                  ));
-                })()
+                filteredBoard[column].slice(0, visibleCountMap[column]).map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    column={column}
+                    projectName={task.projectId ? projectNameById.get(task.projectId) : undefined}
+                    pinned={pinnedTaskIds.includes(String(task.id))}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    onMove={handleMove}
+                    onPin={togglePin}
+                    onDelete={handleDelete}
+                    onDragStart={handleDragStart}
+                    onDropCard={handleDropToColumn}
+                    onClick={handleCardClick}
+                  />
+                ))
               ) : (
                 <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
                   <p className="text-sm font-semibold text-foreground">
@@ -524,18 +547,10 @@ export default function TasksPage() {
               {/* Show More */}
               <ShowMoreButton
                 total={filteredBoard[column].length}
-                visible={column === "todo" ? todoVisible : column === "in-progress" ? inProgressVisible : doneVisible}
+                visible={visibleCountMap[column]}
                 pageSize={TASK_PAGE_SIZE}
-                onShowMore={() => {
-                  if (column === "todo") setTodoVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
-                  else if (column === "in-progress") setInProgressVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
-                  else setDoneVisible(v => Math.min(v + TASK_PAGE_SIZE, filteredBoard[column].length));
-                }}
-                onShowLess={() => {
-                  if (column === "todo") setTodoVisible(TASK_PAGE_SIZE);
-                  else if (column === "in-progress") setInProgressVisible(TASK_PAGE_SIZE);
-                  else setDoneVisible(TASK_PAGE_SIZE);
-                }}
+                onShowMore={() => setVisibleCount(column, Math.min(visibleCountMap[column] + TASK_PAGE_SIZE, filteredBoard[column].length))}
+                onShowLess={() => setVisibleCount(column, TASK_PAGE_SIZE)}
               />
             </div>
           </div>

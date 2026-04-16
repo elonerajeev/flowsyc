@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Calendar, CheckCircle2, ClipboardList, FolderKanban, FolderOpen, Gauge, Pin, Wallet, Edit2, Trash2, Plus, RefreshCw, MessageSquare, Download } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -56,7 +56,7 @@ export default function ProjectsPage() {
   const [projectDetailOpen, setProjectDetailOpen] = useState(false);
   const { refresh, isRefreshing } = useRefresh();
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     await refresh(
       () => refetch(),
       {
@@ -64,7 +64,7 @@ export default function ProjectsPage() {
         successMessage: getRefreshSuccessMessage("projects"),
       }
     );
-  };
+  }, [refetch, refresh]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const PAGE_SIZE = 4;
   const RELATED_TASK_PAGE_SIZE = 4;
@@ -101,7 +101,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     setSelectedProjectId((current) => current ?? preferredProjects[0]?.id ?? null);
     setVisibleTaskCount(RELATED_TASK_PAGE_SIZE);
-  }, [preferredProjects]);
+  }, [preferredProjects, RELATED_TASK_PAGE_SIZE]);
 
   const selectedProject = useMemo(
     () => preferredProjects.find((project) => project.id === selectedProjectId) ?? preferredProjects[0] ?? null,

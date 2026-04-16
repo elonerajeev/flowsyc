@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
+import { logger } from "./utils/logger";
 
 let _io: SocketIOServer | null = null;
 
@@ -13,10 +14,10 @@ export function initializeIO(server: http.Server): SocketIOServer {
     });
 
     _io.on('connection', (socket) => {
-      console.log('User connected', { socketId: socket.id });
+      logger.debug('User connected', { socketId: socket.id });
 
       socket.on('disconnect', () => {
-        console.log('User disconnected', { socketId: socket.id });
+        logger.debug('User disconnected', { socketId: socket.id });
       });
 
       socket.on('join', (userId: string) => {

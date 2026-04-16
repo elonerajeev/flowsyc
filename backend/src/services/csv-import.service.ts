@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma";
 import { type LeadSource } from "@prisma/client";
 import { GTMAutomationService } from "./gtm-automation.service";
+import { logger } from "../utils/logger";
 
 export type CSVImportRecord = {
   id: number;
@@ -86,7 +87,7 @@ export const csvImportService = {
     let success = 0;
     let failed = 0;
 
-    console.log(`[CSV Import ${importId}] Starting to process ${rows.length} rows`);
+    logger.info(`[CSV Import ${importId}] Starting to process ${rows.length} rows`);
 
     // Update status to processing
     await prisma.csvImport.update({
@@ -139,7 +140,7 @@ export const csvImportService = {
         });
 
         if (existingLead) {
-          console.log(`[CSV Import ${importId}] Row ${i}: Lead exists, updating ${leadData.email}`);
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Lead exists, updating ${leadData.email}`);
           const existingTags: string[] = existingLead.tags || [];
           const importTag = `import:${importId}`;
           const updatedTags = existingTags.includes(importTag)
@@ -159,7 +160,7 @@ export const csvImportService = {
             },
           });
         } else {
-          console.log(`[CSV Import ${importId}] Row ${i}: Creating new lead ${leadData.email}`);
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Creating new lead ${leadData.email}`);
           // Create new lead
           const score = await GTMAutomationService.calculateLeadScoreFromCriteria({
             companySize: row.companySize || row.company_size || undefined,
@@ -184,7 +185,7 @@ export const csvImportService = {
               tags: ["csv_import", `import:${importId}`],
             },
           });
-          console.log(`[CSV Import ${importId}] Row ${i}: Created lead with tags ["csv_import", "import:${importId}"]`);
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Created lead with tags ["csv_import", "import:${importId}"]`);
         }
 
         success++;

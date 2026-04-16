@@ -5,6 +5,7 @@ jest.mock("../config/prisma", () => ({
     lead: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
+      groupBy: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
       create: jest.fn(),
@@ -23,6 +24,7 @@ jest.mock("../config/prisma", () => ({
     deal: {
       findMany: jest.fn(),
       aggregate: jest.fn(),
+      groupBy: jest.fn(),
     },
     alert: {
       findFirst: jest.fn(),
@@ -334,6 +336,14 @@ describe("GTM Automation Service", () => {
       mockPrisma.lead.findUnique.mockResolvedValue(mockLead as any);
       mockPrisma.teamMember.findMany.mockResolvedValue(mockReps as any);
       mockPrisma.lead.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
+      mockPrisma.lead.groupBy.mockResolvedValue([
+        { assignedTo: "rep1@company.com", _count: 3 },
+        { assignedTo: "rep2@company.com", _count: 1 },
+      ] as any);
+      mockPrisma.deal.groupBy.mockResolvedValue([
+        { assignedTo: "rep1@company.com", _sum: { value: 50000 } },
+        { assignedTo: "rep2@company.com", _sum: { value: 10000 } },
+      ] as any);
       mockPrisma.deal.aggregate.mockResolvedValue({ _sum: { value: 10000 } } as any);
       mockPrisma.lead.update.mockResolvedValue({ ...mockLead, assignedTo: "rep2@company.com" } as any);
 

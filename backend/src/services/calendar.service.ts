@@ -1,9 +1,13 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { AccessActor } from "../utils/access-control";
+import type { CreateCalendarEventInput, UpdateCalendarEventInput } from "../validators/calendar.schema";
 
-async function buildCalendarWhere(actor: AccessActor) {
-  const where: any = { deletedAt: null };
+type CalendarEventWhere = Prisma.CalendarEventWhereInput;
+
+async function buildCalendarWhere(actor: AccessActor): Promise<CalendarEventWhere> {
+  const baseWhere: CalendarEventWhere = { deletedAt: null };
 
   if (actor?.role === "employee") {
     const member = await prisma.teamMember.findFirst({
@@ -11,27 +15,39 @@ async function buildCalendarWhere(actor: AccessActor) {
       select: { name: true, team: true },
     });
 
-    where.OR = [
+    const orConditions: CalendarEventWhere[] = [
       { authorId: actor.userId },
-      { AND: [{ assignmentKind: "member" }, { assigneeId: actor.email }] },
-      ...(member?.name ? [{ AND: [{ assignmentKind: "member" }, { assigneeId: member.name }] }] : []),
-      ...(member?.team ? [{ AND: [{ assignmentKind: "team" }, { assigneeId: member.team }] }] : []),
+      { AND: [{ assignmentKind: "member" as const }, { assigneeId: actor.email }] },
     ];
-  } else if (actor?.role === "client") {
-    where.OR = [
-      { authorId: actor.userId },
-      { assigneeId: actor.email },
-    ];
+
+    if (member?.name) {
+      orConditions.push({ AND: [{ assignmentKind: "member" as const }, { assigneeId: member.name }] });
+    }
+    if (member?.team) {
+      orConditions.push({ AND: [{ assignmentKind: "team" as const }, { assigneeId: member.team }] });
+    }
+
+    return { ...baseWhere, OR: orConditions };
   }
 
-  return where;
+  if (actor?.role === "client") {
+    return {
+      ...baseWhere,
+      OR: [
+        { authorId: actor.userId },
+        { assigneeId: actor.email },
+      ],
+    };
+  }
+
+  return baseWhere;
 }
 
 export const calendarService = {
   async list(actor: AccessActor) {
     const where = await buildCalendarWhere(actor);
 
-    const events = await (prisma as any).calendarEvent.findMany({
+    const events = await prisma.calendarEvent.findMany({
       where,
       orderBy: { date: "asc" },
     });
@@ -41,7 +57,8 @@ export const calendarService = {
 
   async getById(id: number, actor: AccessActor) {
     const where = await buildCalendarWhere(actor);
-    const event = await (prisma as any).calendarEvent.findFirst({
+    
+    const event = await prisma.calendarEvent.findFirst({
       where: {
         ...where,
         id,
@@ -55,48 +72,44 @@ export const calendarService = {
     return event;
   },
 
-  async create(actor: AccessActor, data: any) {
+  async create(actor: AccessActor, data: CreateCalendarEventInput) {
     if (actor?.role !== "admin" && actor?.role !== "manager") {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    const event = await (prisma as any).calendarEvent.create({
+    const event = await prisma.calendarEvent.create({
       data: {
         ...data,
-        authorId: actor?.userId,
+        authorId: actor?.userId ?? "",
       },
     });
+
     return event;
   },
 
-  async update(id: number, actor: AccessActor, data: any) {
+  async update(id: number, actor: AccessActor, data: UpdateCalendarEventInput) {
     const existing = await this.getById(id, actor);
-    if (!existing) {
-      throw new AppError("Event not found", 404, "NOT_FOUND");
-    }
 
     if (actor?.role !== "admin" && actor?.role !== "manager" && existing.authorId !== actor?.userId) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    const event = await (prisma as any).calendarEvent.update({
+    const event = await prisma.calendarEvent.update({
       where: { id },
       data,
     });
+
     return event;
   },
 
   async remove(id: number, actor: AccessActor) {
     const existing = await this.getById(id, actor);
-    if (!existing) {
-      throw new AppError("Event not found", 404, "NOT_FOUND");
-    }
 
     if (actor?.role !== "admin" && actor?.role !== "manager" && existing.authorId !== actor?.userId) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    await (prisma as any).calendarEvent.update({
+    await prisma.calendarEvent.update({
       where: { id },
       data: { deletedAt: new Date() },
     });

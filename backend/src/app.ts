@@ -7,6 +7,28 @@ import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
 import { apiRateLimiter } from "./middleware/rate-limit.middleware";
+
+interface MetricsModule {
+  metricsMiddleware?: express.RequestHandler;
+  prometheusRegistry?: {
+    contentType: string;
+    metrics: () => Promise<string>;
+  };
+}
+
+let metricsMiddleware: express.RequestHandler | null = null;
+let prometheusRegistry: { contentType: string; metrics: () => Promise<string> } | null = null;
+
+if (process.env.NODE_ENV !== "test") {
+  try {
+    const metricsModule = require("./middleware/metrics.middleware") as MetricsModule;
+    const metricsUtils = require("./utils/metrics") as MetricsModule;
+    metricsMiddleware = metricsModule.metricsMiddleware || null;
+    prometheusRegistry = metricsUtils.prometheusRegistry || null;
+  } catch {
+    // Metrics not available
+  }
+}
 import { attachmentsRouter } from "./routes/attachments.routes";
 import { authRouter } from "./routes/auth.routes";
 import { commentsRouter } from "./routes/comments.routes";
@@ -61,19 +83,14 @@ export function createApp() {
     }),
   );
 
-  // Only use metrics middleware in non-test environments
-  if (process.env.NODE_ENV !== "test") {
-    try {
-      const { metricsMiddleware } = require("./middleware/metrics.middleware");
-      const { prometheusRegistry } = require("./utils/metrics");
-      app.use(metricsMiddleware);
-      
+  if (metricsMiddleware) {
+    app.use(metricsMiddleware);
+    
+    if (prometheusRegistry) {
       app.get(["/metrics", "/api/metrics"], async (_req: express.Request, res: express.Response) => {
         res.set("Content-Type", prometheusRegistry.contentType);
         res.status(200).send(await prometheusRegistry.metrics());
       });
-    } catch (e) {
-      // Metrics not available
     }
   }
 

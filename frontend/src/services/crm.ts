@@ -1,4 +1,4 @@
-import { isRemoteApiEnabled, requestJson, uploadFile } from "@/lib/api-client";
+import { isRemoteApiEnabled, requestJson, requestVoid, uploadFile } from "@/lib/api-client";
 import type {
   ActivityRecord,
   AlertRecord,
@@ -119,19 +119,19 @@ export const crmService = {
     requestJson<CalendarEventRecord>("/calendar", { method: "POST", body: JSON.stringify(event) }),
   updateCalendarEvent: (eventId: number, patch: Partial<CalendarEventRecord>) =>
     requestJson<CalendarEventRecord>(`/calendar/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteCalendarEvent: (eventId: number) => requestJson<void>(`/calendar/${eventId}`, { method: "DELETE" }),
+  deleteCalendarEvent: (eventId: number) => requestVoid(`/calendar/${eventId}`, { method: "DELETE" }),
 
   getNotes: () => fetchCollectionApi<NoteRecord>("/notes"),
   createNote: (note: { title: string; content: string; color?: string }) =>
     requestJson<NoteRecord>("/notes", { method: "POST", body: JSON.stringify(note) }),
-  deleteNote: (noteId: number) => requestJson<void>(`/notes/${noteId}`, { method: "DELETE" }),
+  deleteNote: (noteId: number) => requestVoid(`/notes/${noteId}`, { method: "DELETE" }),
 
   getJobPostings: () => fetchCollectionApi<JobRecord>("/hiring"),
   createJob: (job: Omit<JobRecord, "id" | "candidateCount" | "createdAt" | "updatedAt">) =>
     requestJson<JobRecord>("/hiring", { method: "POST", body: JSON.stringify(job) }),
   updateJob: (jobId: number, patch: Partial<JobRecord>) =>
     requestJson<JobRecord>(`/hiring/${jobId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteJob: (jobId: number) => requestJson<void>(`/hiring/${jobId}`, { method: "DELETE" }),
+  deleteJob: (jobId: number) => requestVoid(`/hiring/${jobId}`, { method: "DELETE" }),
   toggleJobStatus: (jobId: number) => requestJson<JobRecord>(`/hiring/${jobId}/toggle-status`, { method: "POST" }),
   cloneJob: (jobId: number) => requestJson<JobRecord>(`/hiring/${jobId}/clone`, { method: "POST" }),
 
@@ -140,7 +140,7 @@ export const crmService = {
     requestJson<CandidateRecord>("/candidates", { method: "POST", body: JSON.stringify(candidate) }),
   updateCandidate: (candidateId: number, patch: Partial<CandidateRecord>) =>
     requestJson<CandidateRecord>(`/candidates/${candidateId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteCandidate: (candidateId: number) => requestJson<void>(`/candidates/${candidateId}`, { method: "DELETE" }),
+  deleteCandidate: (candidateId: number) => requestVoid(`/candidates/${candidateId}`, { method: "DELETE" }),
   removeCandidate: (candidateId: number) => crmService.deleteCandidate(candidateId),
   moveCandidateToNextStage: (candidateId: number) => requestJson(`/candidates/${candidateId}/next-stage`, { method: "POST" }),
   rejectCandidate: (candidateId: number, reason?: string) =>
@@ -176,7 +176,7 @@ export const crmService = {
     requestJson<Lead>("/leads", { method: "POST", body: JSON.stringify(lead) }),
   updateLead: (leadId: number, patch: Partial<Lead>) =>
     requestJson<Lead>(`/leads/${leadId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteLead: (leadId: number) => requestJson<void>(`/leads/${leadId}`, { method: "DELETE" }),
+  deleteLead: (leadId: number) => requestVoid(`/leads/${leadId}`, { method: "DELETE" }),
   removeLead: (leadId: number) => crmService.deleteLead(leadId),
 
   // GTM Lead Actions
@@ -215,14 +215,14 @@ export const crmService = {
     requestJson<ClientRecord>("/clients", { method: "POST", body: JSON.stringify(client) }),
   updateClient: (clientId: number, patch: Partial<ClientRecord>) =>
     requestJson<ClientRecord>(`/clients/${clientId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteClient: (clientId: number) => requestJson<void>(`/clients/${clientId}`, { method: "DELETE" }),
+  deleteClient: (clientId: number) => requestVoid(`/clients/${clientId}`, { method: "DELETE" }),
   removeClient: (clientId: number) => crmService.deleteClient(clientId),
 
   createProject: (project: Omit<ProjectRecord, "id">) =>
     requestJson<ProjectRecord>("/projects", { method: "POST", body: JSON.stringify(project) }),
   updateProject: (projectId: number, patch: Partial<ProjectRecord>) =>
     requestJson<ProjectRecord>(`/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteProject: (projectId: number) => persistApi<void>(`/projects/${projectId}`, { method: "DELETE" }),
+  deleteProject: (projectId: number) => requestVoid(`/projects/${projectId}`, { method: "DELETE" }),
   removeProject: (projectId: number) => crmService.deleteProject(projectId),
 
   createTask: (task: Omit<TaskRecord, "id"> & { column?: TaskColumn }) => {
@@ -231,14 +231,14 @@ export const crmService = {
   },
   updateTask: (taskId: number, patch: Partial<TaskRecord> & { column?: TaskColumn }) =>
     persistApi<TaskRecord>(`/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteTask: (taskId: number) => persistApi<void>(`/tasks/${taskId}`, { method: "DELETE" }),
+  deleteTask: (taskId: number) => requestVoid(`/tasks/${taskId}`, { method: "DELETE" }),
   removeTask: (taskId: number) => crmService.deleteTask(taskId),
 
   createTeam: (team: CreateTeamInput) =>
     persistApi<TeamRecord>("/teams", { method: "POST", body: JSON.stringify(team) }),
   updateTeam: (teamId: number, patch: Partial<CreateTeamInput>) =>
     persistApi<TeamRecord>(`/teams/${teamId}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteTeam: (teamId: number) => persistApi<void>(`/teams/${teamId}`, { method: "DELETE" }),
+  deleteTeam: (teamId: number) => requestVoid(`/teams/${teamId}`, { method: "DELETE" }),
   assignTeamMember: (teamId: number, memberId: number) =>
     persistApi<{ message: string }>(`/teams/${teamId}/members/${memberId}`, { method: "POST" }),
   removeTeamMember: (teamId: number, memberId: number) =>

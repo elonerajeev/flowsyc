@@ -208,14 +208,18 @@ export const authService = {
     timeZone?: string;
     location?: string;
   }): Promise<AuthUser> {
+    const commonFields = {
+      name: input.name,
+      timeZone: input.timeZone,
+      location: input.location,
+    };
+    
     const allowedInput =
-      role === "admin" || role === "manager"
-        ? input
-        : {
-            ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.timeZone !== undefined ? { timeZone: input.timeZone } : {}),
-            ...(input.location !== undefined ? { location: input.location } : {}),
-          };
+      role === "admin"
+        ? { ...commonFields, department: input.department, team: input.team, designation: input.designation, manager: input.manager, workingHours: input.workingHours, officeLocation: input.officeLocation }
+        : role === "manager"
+        ? { ...commonFields }
+        : commonFields;
 
     const user = await prisma.user.update({
       where: { id: userId },

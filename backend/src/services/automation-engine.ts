@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import { Prisma } from "@prisma/client";
 import { sendMail } from "../utils/mailer";
 import { logger } from "../utils/logger";
 import cron, { ScheduledTask } from "node-cron";
@@ -56,7 +57,9 @@ type ActionType =
   | "check_health_score"
   | "escalate_to_manager"
   | "add_to_pipeline"
-  | "send_sms";
+  | "send_sms"
+  | "create_alert"
+  | "log_lifecycle_sync";
 
 // Trigger event data
 interface TriggerEvent {
@@ -65,7 +68,7 @@ interface TriggerEvent {
   entityId?: number;
   userId?: string;
   userEmail?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   timestamp?: Date;
 }
 
@@ -88,11 +91,33 @@ interface ScheduledJobInput {
   description?: string;
   scheduledFor: Date;
   cronExpression?: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   isRecurring?: boolean;
   entityType?: string;
   entityId?: number;
   createdBy?: string;
+}
+
+interface Condition {
+  field: string;
+  operator: string;
+  value: unknown;
+}
+
+interface ActionConfig {
+  type: ActionType;
+  config: Record<string, unknown>;
+}
+
+interface AutomationRule {
+  id: number;
+  name: string;
+  trigger: string;
+  conditions: unknown;
+  actions: unknown;
+  isActive: boolean;
+  status: string;
+  priority: number;
 }
 
 // ============================================
@@ -100,7 +125,7 @@ interface ScheduledJobInput {
 // ============================================
 
 // Get all active rules for a trigger
-async function getRulesForTrigger(trigger: TriggerType): Promise<any[]> {
+async function getRulesForTrigger(trigger: TriggerType): Promise<AutomationRule[]> {
   return prisma.automationRule.findMany({
     where: {
       trigger,
@@ -108,11 +133,11 @@ async function getRulesForTrigger(trigger: TriggerType): Promise<any[]> {
       status: "active"
     },
     orderBy: { priority: "desc" }
-  });
+  }) as Promise<AutomationRule[]>;
 }
 
 // Check if conditions are met
-function checkConditions(conditions: any[], event: TriggerEvent): boolean {
+function checkConditions(conditions: Condition[], event: TriggerEvent): boolean {
   if (!conditions || conditions.length === 0) return true;
   
   return conditions.every(condition => {
@@ -125,7 +150,7 @@ function checkConditions(conditions: any[], event: TriggerEvent): boolean {
       case "not_equals":
         return fieldValue !== value;
       case "contains":
-        return String(fieldValue).includes(value);
+        return String(fieldValue).includes(String(value));
       case "greater_than":
         return Number(fieldValue) > Number(value);
       case "less_than":
@@ -150,7 +175,7 @@ function checkConditions(conditions: any[], event: TriggerEvent): boolean {
 async function logAutomation(
   ruleId: number,
   event: TriggerEvent,
-  actions: any[],
+  actions: ActionConfig[],
   status: "completed" | "failed",
   error?: string
 ) {
@@ -158,8 +183,8 @@ async function logAutomation(
     data: {
       ruleId,
       trigger: event.trigger,
-      triggerData: event as any,
-      actionData: actions,
+      triggerData: event as unknown as Prisma.InputJsonValue,
+      actionData: actions as unknown as Prisma.InputJsonValue,
       status,
       error,
       entityType: event.entityType,
@@ -183,7 +208,7 @@ async function logAutomation(
 // ACTION HANDLERS
 // ============================================
 
-async function executeAction(action: any, event: TriggerEvent): Promise<{ success: boolean; error?: string }> {
+async function executeAction(action: ActionConfig, event: TriggerEvent): Promise<{ success: boolean; error?: string }> {
   const { type, config } = action;
   
   try {
@@ -261,14 +286,15 @@ async function executeAction(action: any, event: TriggerEvent): Promise<{ succes
         logger.warn(`Unknown action type: ${type}`);
         return { success: true };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     logger.error(`Error executing action ${type}:`, error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage };
   }
 }
 
-async function executeSendEmail(config: any, event: TriggerEvent) {
-  const { to, cc, subject, template, templateData } = config;
+async function executeSendEmail(config: Record<string, unknown>, event: TriggerEvent) {
+  const { to, cc, subject, template, templateData } = config as { to?: string; cc?: string; subject?: string; template?: string; templateData?: Record<string, unknown> };
   
   // Resolve actual email addresses
   let toEmail = to;
@@ -285,36 +311,35 @@ async function executeSendEmail(config: any, event: TriggerEvent) {
   }
   
   // Build email content
-  const htmlBody = buildEmailFromTemplate(template, templateData || {}, event);
+  const htmlBody = buildEmailFromTemplate(template || "", templateData || {}, event);
   
   await sendMail({
     to: toEmail,
-    subject: resolveTemplateString(subject, event),
-    text: htmlBody.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+    subject: resolveTemplateString(subject || "", event),
+    text: htmlBody.replace(/<[^>]*>/g, ""),
     html: htmlBody
   });
   
-  // Queue email for tracking
   await prisma.emailQueue.create({
     data: {
       to: toEmail,
-      subject: resolveTemplateString(subject, event),
+      subject: resolveTemplateString(subject || "", event),
       body: htmlBody,
-      template,
-      templateData,
+      template: template || null,
+      templateData: templateData as Prisma.InputJsonValue | undefined,
       status: "sent",
       sentAt: new Date(),
-      entityType: event.entityType,
-      entityId: event.entityId,
-      recipientName: templateData?.name
+      entityType: event.entityType || "",
+      entityId: event.entityId || 0,
+      recipientName: String(templateData?.name || "")
     }
   });
   
   return { success: true };
 }
 
-async function executeCreateTask(config: any, event: TriggerEvent) {
-  const { title, description, assignee, dueIn, priority, projectId } = config;
+async function executeCreateTask(config: Record<string, unknown>, event: TriggerEvent) {
+  const { title, description, assignee, dueIn, priority, projectId } = config as { title?: string; description?: string; assignee?: string; dueIn?: string; priority?: string; projectId?: number };
   
   // Calculate due date
   let dueDate: Date | undefined;
@@ -327,14 +352,14 @@ async function executeCreateTask(config: any, event: TriggerEvent) {
   }
   
   // Resolve assignee
-  let assigneeEmail = assignee;
+  let assigneeEmail: string | undefined = assignee;
   if (assignee === "{{assignedTo}}" && event.entityType === "Lead" && event.entityId) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
-    assigneeEmail = lead?.assignedTo;
+    assigneeEmail = lead?.assignedTo || undefined;
   }
   
   const validPriority = (priority === "high" || priority === "medium" || priority === "low" ? priority : "medium") as "high" | "medium" | "low";
-  const resolvedTitle = resolveTemplateString(title, event);
+  const resolvedTitle = resolveTemplateString(title || "", event);
   await prisma.task.create({
     data: {
       title: resolvedTitle,
@@ -352,12 +377,12 @@ async function executeCreateTask(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeAssignLead(config: any, event: TriggerEvent) {
+async function executeAssignLead(config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType !== "Lead" || !event.entityId) {
     return { success: false, error: "Action only works with leads" };
   }
   
-  const { assignTo, roundRobin } = config;
+  const { assignTo, roundRobin } = config as { assignTo?: string; roundRobin?: boolean };
   
   if (roundRobin) {
     // Get active team members
@@ -397,12 +422,12 @@ async function executeAssignLead(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeUpdateScore(config: any, event: TriggerEvent) {
+async function executeUpdateScore(config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType !== "Lead" || !event.entityId) {
     return { success: false, error: "Action only works with leads" };
   }
   
-  const { adjustment, setTo } = config;
+  const { adjustment, setTo } = config as { adjustment?: number; setTo?: number };
   const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
   
   if (!lead) {
@@ -424,36 +449,39 @@ async function executeUpdateScore(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeMoveDeal(config: any, event: TriggerEvent) {
+async function executeMoveDeal(config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType !== "Deal" || !event.entityId) {
     return { success: false, error: "Action only works with deals" };
   }
   
-  const { stage } = config;
+  const { stage } = config as { stage?: string };
+  
+  if (!stage) {
+    return { success: false, error: "Stage is required" };
+  }
   
   await prisma.deal.update({
     where: { id: event.entityId },
-    data: { stage }
+    data: { stage: stage as "prospecting" | "qualification" | "proposal" | "negotiation" | "closed_won" | "closed_lost" }
   });
   
   return { success: true };
 }
 
-async function executeCreateClient(config: any, event: TriggerEvent) {
-  // Can create from Lead or Deal
-  let clientData: any = {};
+async function executeCreateClient(config: Record<string, unknown>, event: TriggerEvent) {
+  let clientData: Record<string, string> = {};
   
   if (event.entityType === "Lead" && event.entityId) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
     if (lead) {
       clientData = {
-        name: `${lead.firstName} ${lead.lastName}`,
-        email: lead.email,
-        company: lead.company,
-        phone: lead.phone,
-        jobTitle: lead.jobTitle,
-        source: lead.source,
-        assignedTo: lead.assignedTo
+        name: `${lead.firstName || ""} ${lead.lastName || ""}`,
+        email: lead.email || "",
+        company: lead.company || "",
+        phone: lead.phone || "",
+        jobTitle: lead.jobTitle || "",
+        source: lead.source || "",
+        assignedTo: lead.assignedTo || ""
       };
     }
   } else if (event.entityType === "Deal" && event.entityId) {
@@ -463,7 +491,10 @@ async function executeCreateClient(config: any, event: TriggerEvent) {
         name: deal.title,
         email: "",
         company: deal.title,
-        source: "deal"
+        source: "deal",
+        phone: "",
+        jobTitle: "",
+        assignedTo: ""
       };
     }
   }
@@ -474,19 +505,25 @@ async function executeCreateClient(config: any, event: TriggerEvent) {
   
   const client = await prisma.client.create({
     data: {
-      ...clientData,
-      avatar: clientData.name?.charAt(0).toUpperCase() || "C"
+      name: clientData.name || "Unknown",
+      email: clientData.email || "",
+      avatar: clientData.name?.charAt(0).toUpperCase() || "C",
+      updatedAt: new Date(),
+      company: clientData.company || "",
+      phone: clientData.phone || "",
+      jobTitle: clientData.jobTitle || "",
+      source: clientData.source || "",
+      assignedTo: clientData.assignedTo || ""
     }
   });
   
-  // Log activity
   await prisma.activityLog.create({
     data: {
       action: "created",
       entityType: "Client",
       entityId: client.id,
-      description: `Client created from ${event.entityType} #${event.entityId}`,
-      performedBy: event.userEmail,
+      description: `Client created from ${event.entityType || ""} #${event.entityId}`,
+      performedBy: event.userEmail || "",
       isVisible: true
     }
   });
@@ -494,11 +531,10 @@ async function executeCreateClient(config: any, event: TriggerEvent) {
   return { success: true, clientId: client.id };
 }
 
-async function executeSendNotification(config: any, event: TriggerEvent) {
-  const { message, to } = config;
+async function executeSendNotification(config: Record<string, unknown>, event: TriggerEvent) {
+  const { message, to } = config as { message?: string; to?: string };
   
-  // For now, just log it - could integrate with Slack, Push, etc.
-  logger.info(`Notification: ${resolveTemplateString(message, event)}`, {
+  logger.info(`Notification: ${resolveTemplateString(message || "", event)}`, {
     to,
     entityType: event.entityType,
     entityId: event.entityId
@@ -507,13 +543,13 @@ async function executeSendNotification(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeTagEntity(config: any, event: TriggerEvent) {
-  const { tags } = config;
+async function executeTagEntity(config: Record<string, unknown>, event: TriggerEvent) {
+  const { tags } = config as { tags?: string[] };
   
-  if (event.entityType === "Lead" && event.entityId) {
+  if (event.entityType === "Lead" && event.entityId && Array.isArray(tags)) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
     const currentTags = lead?.tags || [];
-    const newTags = [...new Set([...currentTags, ...tags])];
+    const newTags = [...new Set([...(currentTags as string[]), ...tags])];
     await prisma.lead.update({
       where: { id: event.entityId },
       data: { tags: newTags }
@@ -523,12 +559,12 @@ async function executeTagEntity(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeRemoveTag(config: any, event: TriggerEvent) {
-  const { tags } = config;
+async function executeRemoveTag(config: Record<string, unknown>, event: TriggerEvent) {
+  const { tags } = config as { tags?: string[] };
   
-  if (event.entityType === "Lead" && event.entityId) {
+  if (event.entityType === "Lead" && event.entityId && Array.isArray(tags)) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
-    const currentTags = lead?.tags || [];
+    const currentTags = (lead?.tags || []) as string[];
     const newTags = currentTags.filter((t: string) => !tags.includes(t));
     await prisma.lead.update({
       where: { id: event.entityId },
@@ -539,8 +575,8 @@ async function executeRemoveTag(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeUpdateField(config: any, event: TriggerEvent) {
-  const { field, value } = config;
+async function executeUpdateField(config: Record<string, unknown>, event: TriggerEvent) {
+  const { field, value } = config as { field?: string; value?: unknown };
   
   if (!field || value === undefined) {
     return { success: false, error: "Field and value are required" };
@@ -603,11 +639,57 @@ async function executeUpdateField(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeWebhook(config: any, event: TriggerEvent) {
-  const { url, method, headers, body } = config;
+const BLOCKED_IP_PATTERNS = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+  /^192\.168\./,
+  /^localhost$/i,
+  /^0\.0\.0\.0$/,
+  /^::1$/,
+  /^fc00:/i,
+  /^fe80:/i,
+];
+
+function isUrlSafe(urlString: string): { safe: boolean; reason?: string } {
+  try {
+    const url = new URL(urlString);
+    
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return { safe: false, reason: "Only HTTP and HTTPS protocols are allowed" };
+    }
+    
+    const hostname = url.hostname.toLowerCase();
+    
+    for (const pattern of BLOCKED_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { safe: false, reason: "Internal network addresses are not allowed" };
+      }
+    }
+    
+    const resolved = hostname.replace(/^\[|\]$/g, "");
+    try {
+      const dns = require("dns");
+      dns.reverse(resolved, () => {});
+    } catch {}
+    
+    return { safe: true };
+  } catch {
+    return { safe: false, reason: "Invalid URL format" };
+  }
+}
+
+async function executeWebhook(config: Record<string, unknown>, event: TriggerEvent) {
+  const { url, method, headers, body } = config as { url?: string; method?: string; headers?: Record<string, string>; body?: unknown };
   
   if (!url) {
     return { success: false, error: "Webhook URL is required" };
+  }
+  
+  const safetyCheck = isUrlSafe(url);
+  if (!safetyCheck.safe) {
+    logger.warn(`Webhook blocked: ${safetyCheck.reason}`, { url });
+    return { success: false, error: `Webhook URL blocked: ${safetyCheck.reason}` };
   }
   
   try {
@@ -617,9 +699,11 @@ async function executeWebhook(config: any, event: TriggerEvent) {
       method: method || "POST",
       headers: {
         "Content-Type": "application/json",
-        ...headers
+        ...(headers || {}),
+        "User-Agent": "FocalPoint-Compass-CRM/1.0",
       },
-      body: resolvedBody
+      body: resolvedBody,
+      signal: AbortSignal.timeout(30000),
     });
     
     if (!response.ok) {
@@ -629,12 +713,16 @@ async function executeWebhook(config: any, event: TriggerEvent) {
     logger.info(`Webhook sent to ${url}`, { status: response.status });
     return { success: true };
   } catch (error) {
-    return { success: false, error: `Webhook error: ${String(error)}` };
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    if (errMsg.includes("timeout")) {
+      return { success: false, error: "Webhook request timed out" };
+    }
+    return { success: false, error: `Webhook error: Request failed` };
   }
 }
 
-async function executeAddToCampaign(config: any, event: TriggerEvent) {
-  const { campaignId, campaignName } = config;
+async function executeAddToCampaign(config: Record<string, unknown>, event: TriggerEvent) {
+  const { campaignId, campaignName } = config as { campaignId?: string; campaignName?: string };
   
   let email = "";
   let name = "";
@@ -675,8 +763,8 @@ async function executeAddToCampaign(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeDelay(config: any, event: TriggerEvent) {
-  const { minutes } = config;
+async function executeDelay(config: Record<string, unknown>, event: TriggerEvent) {
+  const { minutes } = config as { minutes?: string };
   
   if (!minutes) {
     return { success: true };
@@ -688,8 +776,8 @@ async function executeDelay(config: any, event: TriggerEvent) {
   return { success: true };
 }
 
-async function executeSlackNotification(config: any, event: TriggerEvent) {
-  const { webhookUrl, channel, message } = config;
+async function executeSlackNotification(config: Record<string, unknown>, event: TriggerEvent) {
+  const { webhookUrl, channel, message } = config as { webhookUrl?: string; channel?: string; message?: string };
   
   if (!webhookUrl) {
     return { success: false, error: "Slack webhook URL is required" };
@@ -726,8 +814,8 @@ async function executeSlackNotification(config: any, event: TriggerEvent) {
   }
 }
 
-async function executeAddToPipeline(config: any, event: TriggerEvent) {
-  const { pipelineId, stage } = config;
+async function executeAddToPipeline(config: Record<string, unknown>, event: TriggerEvent) {
+  const { pipelineId, stage } = config as { pipelineId?: string; stage?: string };
   
   if (event.entityType === "Lead" && event.entityId) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
@@ -751,8 +839,8 @@ async function executeAddToPipeline(config: any, event: TriggerEvent) {
   return { success: false, error: "Can only add leads to pipeline" };
 }
 
-async function executeSendSMS(config: any, event: TriggerEvent) {
-  const { to, message, provider } = config;
+async function executeSendSMS(config: Record<string, unknown>, event: TriggerEvent) {
+  const { to, message, provider } = config as { to?: string; message?: string; provider?: string };
   
   const resolvedMessage = resolveTemplateString(message || "", event);
   
@@ -771,7 +859,7 @@ async function executeSendSMS(config: any, event: TriggerEvent) {
 // GTM ACTION HANDLERS
 // ============================================
 
-async function executeRecalculateScore(config: any, event: TriggerEvent) {
+async function executeRecalculateScore(_config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType === "Lead" && event.entityId) {
     const result = await GTMAutomationService.calculateLeadScore(event.entityId);
     logger.info(`Recalculated score for lead ${event.entityId}: ${result.score}`);
@@ -792,7 +880,7 @@ async function executeRecalculateScore(config: any, event: TriggerEvent) {
   return { success: false, error: "Entity type not supported for score recalculation" };
 }
 
-async function executeAutoTag(config: any, event: TriggerEvent) {
+async function executeAutoTag(_config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType === "Lead" && event.entityId) {
     const tags = await GTMAutomationService.autoTagLead(event.entityId);
     logger.info(`Auto-tagged lead ${event.entityId} with tags: ${tags.join(", ")}`);
@@ -802,7 +890,7 @@ async function executeAutoTag(config: any, event: TriggerEvent) {
   return { success: false, error: "Auto-tagging only works with leads" };
 }
 
-async function executeCreateFollowupSequence(config: any, event: TriggerEvent) {
+async function executeCreateFollowupSequence(_config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType === "Lead" && event.entityId) {
     const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
     if (!lead) return { success: false, error: "Lead not found" };
@@ -822,7 +910,7 @@ async function executeCreateFollowupSequence(config: any, event: TriggerEvent) {
   return { success: false, error: "Follow-up sequence only works with leads" };
 }
 
-async function executeCheckHealthScore(config: any, event: TriggerEvent) {
+async function executeCheckHealthScore(_config: Record<string, unknown>, event: TriggerEvent) {
   if (event.entityType === "Client" && event.entityId) {
     const result = await GTMAutomationService.calculateClientHealthScore(event.entityId);
     
@@ -847,8 +935,8 @@ async function executeCheckHealthScore(config: any, event: TriggerEvent) {
   return { success: false, error: "Health check only works with clients" };
 }
 
-async function executeEscalateToManager(config: any, event: TriggerEvent) {
-  const { reason, priority } = config;
+async function executeEscalateToManager(config: Record<string, unknown>, event: TriggerEvent) {
+  const { reason, priority } = config as { reason?: string; priority?: string };
   
   // Find a manager
   const manager = await prisma.user.findFirst({
@@ -870,8 +958,8 @@ async function executeEscalateToManager(config: any, event: TriggerEvent) {
     data: {
       title: `ESCALATED: ${entityName} - ${reason || "Needs attention"}`,
       assignee: manager.email,
-      priority: priority || "high",
-      column: "todo",
+      priority: (priority === "high" ? "high" : priority === "low" ? "low" : "medium") as "high" | "medium" | "low",
+      column: "todo" as const,
       dueDate: new Date().toISOString().slice(0, 10),
       valueStream: "escalation",
       avatar: "ESC",
@@ -879,15 +967,14 @@ async function executeEscalateToManager(config: any, event: TriggerEvent) {
     }
   });
   
-  // Create alert
   await prisma.alert.create({
     data: {
       type: "escalation",
-      severity: priority === "high" ? "critical" : "warning",
+      severity: (priority === "high" ? "critical" : "warning") as "critical" | "warning",
       title: `Escalation: ${entityName}`,
       message: reason || `Item has been escalated to ${manager.name}`,
-      entityType: event.entityType,
-      entityId: event.entityId,
+      entityType: event.entityType || "",
+      entityId: event.entityId || 0,
       isResolved: false
     }
   });
@@ -897,8 +984,8 @@ async function executeEscalateToManager(config: any, event: TriggerEvent) {
   return { success: true, escalatedTo: manager.email };
 }
 
-async function executeCreateAlert(config: any, event: TriggerEvent) {
-  const { type, severity, title, message } = config;
+async function executeCreateAlert(config: Record<string, unknown>, event: TriggerEvent) {
+  const { type, severity, title, message } = config as { type?: string; severity?: string; title?: string; message?: string };
   
   const alertType = type || "custom";
   const alertSeverity = severity || "info";
@@ -913,12 +1000,12 @@ async function executeCreateAlert(config: any, event: TriggerEvent) {
   
   await prisma.alert.create({
     data: {
-      type: alertType as any,
-      severity: alertSeverity as any,
+      type: alertType as "health_warning" | "churn_risk" | "stale_deal" | "escalation" | "renewal_reminder" | "custom",
+      severity: alertSeverity as "info" | "warning" | "critical",
       title: title || `Alert: ${entityName}`,
       message: message || `Automation triggered for ${entityName}`,
-      entityType: event.entityType,
-      entityId: event.entityId,
+      entityType: event.entityType || "",
+      entityId: event.entityId || 0,
       isResolved: false
     }
   });
@@ -941,7 +1028,7 @@ function resolveTemplateString(template: string, event: TriggerEvent): string {
     .replace(/\{\{userEmail\}\}/g, event.userEmail || "");
 }
 
-function buildEmailFromTemplate(template: string, data: any, event: TriggerEvent): string {
+function buildEmailFromTemplate(template: string, data: Record<string, unknown>, event: TriggerEvent): string {
   // Default templates
   const templates: Record<string, string> = {
     "lead_welcome": `
@@ -995,7 +1082,6 @@ export async function triggerAutomation(
   trigger: TriggerType,
   event: TriggerEvent
 ): Promise<AutomationResult> {
-  const startTime = Date.now();
   const result: AutomationResult = {
     success: true,
     matchedRules: 0,
@@ -1003,17 +1089,15 @@ export async function triggerAutomation(
   };
   
   try {
-    // Get matching rules
     const rules = await getRulesForTrigger(trigger);
     result.matchedRules = rules.length;
     
     for (const rule of rules) {
-      // Check conditions
-      const conditionsMet = checkConditions(rule.conditions, event);
+      const conditions = (rule.conditions as Condition[]) || [];
+      const conditionsMet = checkConditions(conditions, event);
       if (!conditionsMet) continue;
       
-      // Execute actions
-      const actions = Array.isArray(rule.actions) ? rule.actions : [];
+      const actions = (rule.actions as ActionConfig[]) || [];
       
       for (const action of actions) {
         const actionResult = await executeAction(action, event);
@@ -1028,7 +1112,6 @@ export async function triggerAutomation(
         }
       }
       
-      // Log execution
       await logAutomation(
         rule.id,
         event,
@@ -1051,14 +1134,15 @@ export async function triggerAutomation(
 // ============================================
 
 export async function createScheduledJob(input: ScheduledJobInput) {
+  const jobType = input.jobType as "email" | "task" | "alert" | "webhook" | "reminder";
   return prisma.scheduledJob.create({
     data: {
-      jobType: input.jobType as any,
+      jobType,
       name: input.name,
       description: input.description,
       scheduledFor: input.scheduledFor,
       cronExpression: input.cronExpression,
-      payload: input.payload,
+      payload: input.payload as Prisma.InputJsonValue,
       isRecurring: input.isRecurring || false,
       entityType: input.entityType,
       entityId: input.entityId,
@@ -1093,18 +1177,18 @@ export async function executeScheduledJobs() {
         data: { status: "running" }
       });
       
-      const payload = job.payload as any;
+      const payload = job.payload as { to?: string; subject?: string; text?: string; html?: string; title?: string; assignee?: string; priority?: string; dueDate?: string } | null;
       
       // Execute based on job type
-      if (job.jobType === "email") {
+      if (job.jobType === "email" && payload) {
         await sendMail({
-          to: payload.to,
-          subject: payload.subject,
+          to: payload.to || "",
+          subject: payload.subject || "",
           text: payload.text || "",
           html: payload.html || ""
         });
-      } else if (job.jobType === "task") {
-        const validPriority = (["low", "medium", "high"].includes(payload.priority) ? payload.priority : "medium") as "high" | "medium" | "low";
+      } else if (job.jobType === "task" && payload) {
+        const validPriority = (["low", "medium", "high"].includes(payload.priority || "") ? payload.priority : "medium") as "high" | "medium" | "low";
         const taskTitle = String(payload.title || "Scheduled Task");
         await prisma.task.create({
           data: {
@@ -1250,7 +1334,7 @@ export function stopAutomationCron() {
 // ============================================
 
 // This function should be called when certain events happen
-export async function onLeadCreated(leadId: number, data: any) {
+export async function onLeadCreated(leadId: number, data: Record<string, unknown>) {
   await triggerAutomation("lead_created", {
     trigger: "lead_created",
     entityType: "Lead",
@@ -1264,16 +1348,16 @@ export async function onLeadCreated(leadId: number, data: any) {
       action: "created",
       entityType: "Lead",
       entityId: leadId,
-      description: `Lead created: ${data.firstName} ${data.lastName}`,
-      performedBy: data.createdBy,
+      description: `Lead created: ${String(data.firstName || "")} ${String(data.lastName || "")}`,
+      performedBy: String(data.createdBy || ""),
       isVisible: true
     }
   });
 
-  await gtmLifecycleService.syncLeadLifecycle(leadId, data.createdBy);
+  await gtmLifecycleService.syncLeadLifecycle(leadId, String(data.createdBy || ""));
 }
 
-export async function onLeadUpdated(leadId: number, changes: any, userEmail?: string) {
+export async function onLeadUpdated(leadId: number, changes: Record<string, unknown>, userEmail?: string) {
   await triggerAutomation("lead_updated", {
     trigger: "lead_updated",
     entityType: "Lead",
@@ -1314,7 +1398,7 @@ export async function onTaskOverdue(taskId: number) {
   });
 }
 
-export async function onClientCreated(clientId: number, data: any) {
+export async function onClientCreated(clientId: number, data: Record<string, unknown>) {
   await triggerAutomation("client_created", {
     trigger: "client_created",
     entityType: "Client",

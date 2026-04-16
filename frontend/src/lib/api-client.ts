@@ -61,7 +61,31 @@ export async function requestJson<T>(endpoint: string, init?: RequestInit): Prom
     throw new ApiError(message, response.status, endpoint);
   }
 
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+
   return (await response.json()) as T;
+}
+
+export async function requestVoid(endpoint: string, init?: RequestInit): Promise<void> {
+  const authToken = getStoredAuthToken();
+  const response = await fetch(buildUrl(endpoint), {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const message = body || response.statusText || "Request failed";
+    emitNetworkError({ endpoint, status: response.status, message });
+    throw new ApiError(message, response.status, endpoint);
+  }
 }
 
 export function isRemoteApiEnabled() {

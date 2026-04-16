@@ -13,8 +13,8 @@ const IS_PROD = env.NODE_ENV === "production";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: false,
-  sameSite: false as unknown as "lax",
+  secure: IS_PROD,
+  sameSite: "lax" as const,
   path: "/",
 };
 
@@ -77,38 +77,41 @@ export const authController = {
       throw new AppError("Token and new password required", 400, "BAD_REQUEST");
     }
 
+    let payload: ReturnType<typeof verifyPasswordResetToken>;
     try {
-      const payload = verifyPasswordResetToken(token);
+      payload = verifyPasswordResetToken(token);
       if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'password_reset' || !('sub' in payload)) {
         throw new AppError("Invalid token", 400, "INVALID_TOKEN");
       }
+    } catch {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
 
-      const userId = payload.sub as string;
-      const hashedPassword = await hashPassword(newPassword);
+    const userId = payload.sub as string;
+    const hashedPassword = await hashPassword(newPassword);
 
-      await prisma.user.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
         where: { id: userId },
         data: { passwordHash: hashedPassword },
       });
 
-      // Revoke all refresh tokens for security
-      await prisma.refreshToken.updateMany({
+      await tx.refreshToken.updateMany({
         where: { userId },
         data: { revokedAt: new Date() },
       });
+    });
 
-      await logAudit({
-        userId,
-        action: "update",
-        entity: "User",
-        entityId: userId,
-        detail: "Password reset",
-      });
+    await logAudit({
+      userId,
+      action: "update",
+      entity: "User",
+      entityId: userId,
+      detail: "Password reset",
+    });
 
-      res.status(200).json({ message: "Password reset successfully" });
-    } catch (error) {
-      res.status(400).json({ error: "Invalid or expired token" });
-    }
+    res.status(200).json({ message: "Password reset successfully" });
   },
 
   verifyEmail: async (req: Request, res: Response): Promise<void> => {
@@ -117,30 +120,44 @@ export const authController = {
       throw new AppError("Token required", 400, "BAD_REQUEST");
     }
 
+    let payload: ReturnType<typeof verifyPasswordResetToken>;
     try {
-      const payload = verifyPasswordResetToken(token);
+      payload = verifyPasswordResetToken(token);
       if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'email_verification' || !('sub' in payload)) {
         throw new AppError("Invalid token", 400, "INVALID_TOKEN");
       }
-
-      const userId = payload.sub as string;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { emailVerified: true },
-      });
-
-      await logAudit({
-        userId,
-        action: "update",
-        entity: "User",
-        entityId: userId,
-        detail: "Email verified",
-      });
-
-      res.status(200).json({ message: "Email verified successfully" });
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Invalid or expired token" });
+      return;
     }
+
+    const userId = payload.sub as string;
+    
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
+    
+    if (existingUser.emailVerified) {
+      res.status(200).json({ message: "Email already verified" });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { emailVerified: true },
+    });
+
+    await logAudit({
+      userId,
+      action: "update",
+      entity: "User",
+      entityId: userId,
+      detail: "Email verified",
+    });
+
+    res.status(200).json({ message: "Email verified successfully" });
   },
 
   resendVerification: async (req: Request, res: Response): Promise<void> => {

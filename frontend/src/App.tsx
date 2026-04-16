@@ -24,7 +24,6 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
 const TeamsPage = lazy(() => import("@/pages/TeamsPage"));
-const EmployeesPage = lazy(() => import("@/pages/TeamPage"));
 const ClientsPage = lazy(() => import("@/pages/ClientsPage"));
 const ContactsPage = lazy(() => import("@/pages/ContactsPage"));
 const LeadsPage = lazy(() => import("@/pages/LeadsPage"));
@@ -143,7 +142,7 @@ const App = () => {
 
                               <Route path="/hr/hiring" element={<RouteAccessGuard><HiringPage /></RouteAccessGuard>} />
                               <Route path="/hr/candidates" element={<RouteAccessGuard><CandidatesPage /></RouteAccessGuard>} />
-                              <Route path="/hr/employees" element={<RouteAccessGuard><EmployeesPage /></RouteAccessGuard>} />
+                              <Route path="/hr/employees" element={<Navigate to="/people/members" replace />} />
                               <Route path="/hr/payroll" element={<RouteAccessGuard><PayrollPage /></RouteAccessGuard>} />
 
                               <Route path="/insights/analytics" element={<RouteAccessGuard><AnalyticsPage /></RouteAccessGuard>} />

@@ -93,6 +93,34 @@ export default function ProjectDetailModal({ project, open, onOpenChange }: Proj
     const file = event.target.files?.[0];
     if (!file || !project) return;
 
+    const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+    const ALLOWED_TYPES = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("File size must be less than 15MB");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error("File type not allowed. Please upload PDF, DOC, DOCX, TXT, or image files.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
     try {
       const uploadData = await crmService.uploadDocument(file);
 
@@ -110,7 +138,6 @@ export default function ProjectDetailModal({ project, open, onOpenChange }: Proj
       toast.error("Failed to attach file");
     }
 
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
