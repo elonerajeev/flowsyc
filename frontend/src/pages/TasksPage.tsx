@@ -234,6 +234,9 @@ export default function TasksPage() {
   const pinnedKey = `crm-task-pins-${role}`;
   const [pinnedTaskIds, setPinnedTaskIds] = useState<string[]>([]);
   const [board, setBoard] = useState<Record<TaskColumn, TaskRecord[]> | null>(null);
+  const [todoVisible, setTodoVisible] = useState(20);
+  const [inProgressVisible, setInProgressVisible] = useState(20);
+  const [doneVisible, setDoneVisible] = useState(20);
 
   const canEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin" || role === "manager";
