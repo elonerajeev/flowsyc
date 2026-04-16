@@ -252,6 +252,16 @@ export default function TasksPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.removeTask(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.tasks });
+      queryClient.invalidateQueries({ queryKey: crmKeys.projects });
+      toast.success("Task removed successfully");
+    },
+    onError: () => toast.error("Failed to remove task"),
+  });
+
   const togglePin = useCallback((taskId: number) => {
     const key = String(taskId);
     const next = pinnedTaskIds.includes(key)
@@ -306,16 +316,6 @@ export default function TasksPage() {
     setSelectedTask(task);
     setTaskDetailOpen(true);
   }, []);
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => crmService.removeTask(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: crmKeys.tasks });
-      queryClient.invalidateQueries({ queryKey: crmKeys.projects });
-      toast.success("Task removed successfully");
-    },
-    onError: () => toast.error("Failed to remove task"),
-  });
 
   const filteredBoard = useMemo(() => {
     if (!effectiveBoard) return null;
