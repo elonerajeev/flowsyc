@@ -20,6 +20,8 @@ import { useMonitoring } from "@/hooks/use-monitoring";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const SignupPage = lazy(() => import("@/pages/SignupPage"));
+const VerifyEmailPage = lazy(() => import("@/pages/VerifyEmailPage"));
+const GoogleCallback = lazy(() => import("@/pages/GoogleCallbackPage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
@@ -97,6 +99,22 @@ const App = () => {
                     element={
                       <Suspense fallback={<PageLoader />}>
                         <SignupPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/verify-email"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <VerifyEmailPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/auth/google/callback"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <GoogleCallback />
                       </Suspense>
                     }
                   />

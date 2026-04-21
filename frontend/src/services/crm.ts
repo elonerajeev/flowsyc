@@ -121,6 +121,12 @@ export const crmService = {
     requestJson<CalendarEventRecord>(`/calendar/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteCalendarEvent: (eventId: number) => requestVoid(`/calendar/${eventId}`, { method: "DELETE" }),
 
+  getGoogleCalendarStatus: () => requestJson<{ connected: boolean }>("/calendar/google/status"),
+  connectGoogleCalendar: () => requestJson<{ authUrl: string }>("/calendar/google/connect"),
+  disconnectGoogleCalendar: () => requestJson<{ success: boolean }>("/calendar/google/disconnect", { method: "POST" }),
+  createMeetingGoogleMeet: (meetingId: number) =>
+    requestJson<{ meetLink: string | null; eventId: string | null; htmlLink: string | null }>(`/meetings/${meetingId}/google-meet`, { method: "POST" }),
+
   getNotes: () => fetchCollectionApi<NoteRecord>("/notes"),
   createNote: (note: { title: string; content: string; color?: string }) =>
     requestJson<NoteRecord>("/notes", { method: "POST", body: JSON.stringify(note) }),

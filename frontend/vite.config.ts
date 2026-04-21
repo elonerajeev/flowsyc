@@ -27,6 +27,11 @@ export default defineConfig(({ mode }) => {
           secure: false,
           cookieDomainRewrite: "localhost",
         },
+        "/socket.io": {
+          target: "http://localhost:3000",
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
     plugins: [react()],

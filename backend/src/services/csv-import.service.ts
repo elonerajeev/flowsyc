@@ -1,6 +1,6 @@
 import { prisma } from "../config/prisma";
-import { type LeadSource } from "@prisma/client";
 import { GTMAutomationService } from "./gtm-automation.service";
+import { onLeadCreated } from "./automation-engine";
 import { logger } from "../utils/logger";
 
 export type CSVImportRecord = {
@@ -169,7 +169,7 @@ export const csvImportService = {
             source: leadData.source,
           });
 
-          await prisma.lead.create({
+          const lead = await prisma.lead.create({
             data: {
               firstName: leadData.firstName || leadData.company || "Unknown",
               lastName: leadData.lastName || "",
@@ -183,8 +183,21 @@ export const csvImportService = {
               score,
               notes: leadData.notes,
               tags: ["csv_import", `import:${importId}`],
+              createdBy: userEmail,
             },
           });
+          
+          await onLeadCreated(lead.id, {
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            email: lead.email,
+            company: lead.company,
+            phone: lead.phone,
+            source: lead.source,
+            score: lead.score,
+            createdBy: userEmail,
+          }).catch((err) => logger.error("Automation trigger failed for CSV import:", err));
+          
           logger.debug(`[CSV Import ${importId}] Row ${i}: Created lead with tags ["csv_import", "import:${importId}"]`);
         }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, Trash2, PencilLine } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, Trash2, PencilLine, CalendarCheck } from "lucide-react";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -12,6 +12,7 @@ import { useSharedTeamMembers } from "@/lib/team-roster";
 import { cn } from "@/lib/utils";
 import { crmKeys, useCalendarEvents } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { CalendarEventRecord, TeamMemberRecord } from "@/types/crm";
 import CalendarEventDialog from "@/components/crm/CalendarEventDialog";
 import type { EventDraft } from "@/components/crm/CalendarEventDialog";
@@ -110,6 +111,8 @@ export default function CalendarPage() {
   const queryClient = useQueryClient();
   const today = useMemo(() => new Date(), []);
   const sharedTeamMembers = useSharedTeamMembers();
+  const { role } = useTheme();
+  const isAdminOrManager = role === "admin" || role === "manager";
   const [month, setMonth] = useState(() => getMonthStart(today));
   const { data: events = [], isLoading, error: fetchError, refetch } = useCalendarEvents();
   const [selectedDate, setSelectedDate] = useState(() => new Date(today));
@@ -118,6 +121,27 @@ export default function CalendarPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [visibleUpcomingCount, setVisibleUpcomingCount] = useState(8);
   const UPCOMING_PAGE_SIZE = 8;
+
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+
+  useEffect(() => {
+    if (!isAdminOrManager) return;
+    crmService.getGoogleCalendarStatus()
+      .then(({ connected }) => setGoogleConnected(connected))
+      .catch(() => setGoogleConnected(false));
+  }, [isAdminOrManager]);
+
+  const handleConnectGoogle = async () => {
+    setConnectingGoogle(true);
+    try {
+      const { authUrl } = await crmService.connectGoogleCalendar();
+      window.location.href = authUrl;
+    } catch {
+      toast({ title: "Error", description: "Failed to connect Google Calendar.", variant: "destructive" });
+      setConnectingGoogle(false);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (event: EventDraft) => crmService.createCalendarEvent(event),
@@ -351,6 +375,32 @@ export default function CalendarPage() {
             </div>
           ))}
         </div>
+
+        {/* Google Calendar connect banner — admin/manager only */}
+        {isAdminOrManager && googleConnected === false && (
+          <div className="mt-4 flex items-center gap-3 rounded-[1.25rem] border border-blue-200 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20 px-4 py-3">
+            <CalendarCheck className="h-5 w-5 shrink-0 text-blue-600" />
+            <p className="flex-1 text-sm text-blue-800 dark:text-blue-300">
+              Connect Google Calendar to generate real Google Meet links for meetings.
+            </p>
+            <button
+              type="button"
+              onClick={handleConnectGoogle}
+              disabled={connectingGoogle}
+              className="rounded-xl bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+            >
+              {connectingGoogle ? "Connecting..." : "Connect"}
+            </button>
+          </div>
+        )}
+        {isAdminOrManager && googleConnected === true && (
+          <div className="mt-4 flex items-center gap-3 rounded-[1.25rem] border border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20 px-4 py-3">
+            <CalendarCheck className="h-5 w-5 shrink-0 text-green-600" />
+            <p className="flex-1 text-sm text-green-800 dark:text-green-300">
+              Google Calendar connected — Google Meet links will be generated automatically for meetings.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
@@ -493,7 +543,7 @@ export default function CalendarPage() {
 
                     {event.notes && <p className="mt-3 text-sm leading-6 text-muted-foreground">{event.notes}</p>}
 
-                    <div className="mt-4 flex items-center gap-2">
+                    <div className="mt-4 flex items-center gap-2 flex-wrap">
                       <Button variant="outline" size="sm" onClick={() => openEditDialog(event)}>
                         <PencilLine className="h-4 w-4" />
                         Edit
@@ -502,6 +552,17 @@ export default function CalendarPage() {
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
+                      {isAdminOrManager && googleConnected && event.location?.startsWith("https://") && (
+                        <a
+                          href={event.location}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                        >
+                          <CalendarCheck className="h-3.5 w-3.5" />
+                          Join Meet
+                        </a>
+                      )}
                     </div>
                   </article>
                 ))

@@ -16,12 +16,15 @@ router.use(requireAuth);
 // ALERTS
 // ============================================
 
-// Get all alerts
+// Get all alerts - filtered by user's entities
 router.get(
   "/alerts",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const alerts = await automationService.checkAllAlerts();
+    const userEmail = req.auth?.email;
+    const userRole = req.auth?.role;
+    
+    const alerts = await automationService.checkAllAlerts(userEmail, userRole);
     res.json(alerts);
   })
 );
@@ -31,7 +34,9 @@ router.get(
   "/alerts/summary",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const summary = await automationService.getAlertsSummary();
+    const userEmail = req.auth?.email;
+    const userRole = req.auth?.role;
+    const summary = await automationService.getAlertsSummary(userEmail, userRole);
     res.json(summary);
   })
 );
@@ -185,22 +190,28 @@ router.get(
     if (ruleId && !isNaN(ruleId)) where.ruleId = ruleId;
     if (entityType) where.entityType = entityType;
     
-    const [logs, total] = await Promise.all([
-      prisma.automationLog.findMany({
-        where,
-        orderBy: { startedAt: "desc" },
-        take: limit,
-        skip: offset,
-        include: {
-          rule: {
-            select: { name: true }
-          }
-        }
-      }),
-      prisma.automationLog.count({ where })
-    ]);
+    // Fetch logs and filter by user's createdBy in triggerData
+    const allLogs = await prisma.automationLog.findMany({
+      where,
+      orderBy: { startedAt: "desc" },
+      include: {
+        rule: { select: { name: true } }
+      }
+    });
     
-    res.json({ logs, total, limit, offset });
+    // Filter logs: show if createdBy matches user OR createdBy is null/system (shared automations)
+    const userEmail = req.auth?.email;
+    const filteredLogs = allLogs.filter((log: any) => {
+      const triggerData = log.triggerData as any;
+      const createdBy = triggerData?.data?.createdBy;
+      // Show logs created by this user or system (null/undefined createdBy means system)
+      return !createdBy || createdBy === userEmail || createdBy === "system";
+    });
+    
+    const total = filteredLogs.length;
+    const paginatedLogs = filteredLogs.slice(offset, offset + limit);
+    
+    res.json({ logs: paginatedLogs, total, limit, offset });
   })
 );
 
@@ -411,8 +422,8 @@ router.get(
 router.get(
   "/gtm/overview",
   requireRole(["admin", "manager", "employee"]),
-  asyncHandler(async (_req, res) => {
-    const overview = await gtmLifecycleService.getOverview();
+  asyncHandler(async (req, res) => {
+    const overview = await gtmLifecycleService.getOverview(req.auth);
     res.json(overview);
   }),
 );

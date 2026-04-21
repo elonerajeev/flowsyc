@@ -11,6 +11,7 @@ type AuthContextType = {
   user: AuthUser | null;
   login: (credentials: AuthCredentials) => Promise<AuthUser>;
   signup: (credentials: AuthCredentials) => Promise<AuthUser>;
+  loginWithGoogle: () => Promise<AuthUser>;
   logout: () => void;
   updateProfile: (input: ProfileUpdate) => Promise<void>;
   switchRole: (targetRole: UserRole) => Promise<{ success: boolean; error: "NO_SESSION" | "ROLE_MISMATCH" | null }>;
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   login: async (credentials) => (await authService.login(credentials)).user,
   signup: async (credentials) => (await authService.signup(credentials)).user,
+  loginWithGoogle: async () => (await authService.loginWithGoogle()).user,
   logout: () => {},
   updateProfile: async () => {},
   switchRole: async () => ({ success: false, error: "NO_SESSION" }),
@@ -73,6 +75,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const loginWithGoogle = async () => {
+    const session = await authService.loginWithGoogle();
+    setUser(session.user);
+    setSkipInitialFetch(true);
+    return session.user;
+  };
+
   const updateProfile = async (input: ProfileUpdate) => {
     const updated = await authService.updateProfile(input);
     setUser(updated);
@@ -92,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo<AuthContextType>(
-    () => ({ user, login, signup, logout, updateProfile, switchRole }),
+    () => ({ user, login, signup, loginWithGoogle, logout, updateProfile, switchRole }),
     [user],
   );
 

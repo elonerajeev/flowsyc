@@ -19,10 +19,11 @@ function readMailConfig() {
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.trim();
   const from = process.env.SMTP_FROM?.trim();
+  const fromName = process.env.SMTP_FROM_NAME?.trim() || "CRM Team";
 
   if (!host || !port || port <= 0 || !from) {
     throw new AppError(
-      "Offer letter email delivery is not configured. Set SMTP_HOST, SMTP_PORT, and SMTP_FROM.",
+      "Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, and SMTP_FROM.",
       500,
       "EMAIL_NOT_CONFIGURED",
     );
@@ -33,6 +34,7 @@ function readMailConfig() {
     port,
     secure,
     from,
+    fromName,
     auth: user && pass ? { user, pass } : undefined,
   };
 }
@@ -68,16 +70,19 @@ export async function sendMail(input: SendMailInput) {
 
   try {
     const transporter = getTransporter();
-    await transporter.sendMail({
-      from: config.from,
+    
+    // Build proper email - let nodemailer handle multipart MIME automatically
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `${config.fromName} <${config.from}>`,
       to: input.to,
       subject: input.subject,
       text: input.text,
       html: input.html,
       attachments: input.attachments,
-    });
+    };
+    
+    await transporter.sendMail(mailOptions);
   } catch (err) {
     console.warn("Failed to deliver email:", (err as any).message);
-    // We don't re-throw here to allow the rest of the business logic to complete
   }
 }

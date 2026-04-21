@@ -8,7 +8,7 @@ export const createTaskSchema = z.object({
   title: z.string().min(1).max(160),
   assignee: z.string().min(1).max(160),
   priority: taskPrioritySchema,
-  dueDate: z.string().min(1).max(32),
+  dueDate: z.string().max(32).optional().default(""),
   tags: z.array(z.string().min(1).max(40)).optional(),
   valueStream: taskValueStreamSchema.optional(),
   column: taskColumnSchema.optional(),

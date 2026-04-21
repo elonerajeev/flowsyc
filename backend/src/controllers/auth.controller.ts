@@ -8,6 +8,7 @@ import { verifyAccessToken, signAccessToken, signPasswordResetToken, verifyPassw
 import { sendVerificationEmail, sendPasswordResetEmail } from "../utils/email-templates";
 import { hashPassword } from "../utils/password";
 import { prisma } from "../config/prisma";
+import { getGoogleUserInfo, getGoogleAuthUrl } from "../services/google-auth.service";
 
 const IS_PROD = env.NODE_ENV === "production";
 
@@ -243,5 +244,91 @@ export const authController = {
     const { targetRole } = req.body;
     const user = await authService.switchRole(req.auth.userId, targetRole);
     res.status(200).json({ user });
+  },
+
+  googleLogin: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: googleUser.email } });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email.split('@')[0],
+          password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+          role: "member",
+          status: "active",
+          avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
+          metadata: {
+            googleAccessToken: googleUser.accessToken,
+            googleId: googleUser.id,
+            signupMethod: "google",
+          },
+        },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          metadata: {
+            ...(user.metadata as object || {}),
+            googleAccessToken: googleUser.accessToken,
+            googleId: googleUser.id,
+          },
+        },
+      });
+    }
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "login", entity: "Auth", detail: "Google Login" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(200).json({ user, accessToken });
+  },
+
+  googleSignup: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: googleUser.email } });
+    if (existingUser) {
+      throw new AppError("User already exists. Please login with Google.", 400, "USER_EXISTS");
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        email: googleUser.email,
+        name: googleUser.name || googleUser.email.split('@')[0],
+        password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+        role: "member",
+        status: "active",
+        avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
+        metadata: {
+          googleAccessToken: googleUser.accessToken,
+          googleId: googleUser.id,
+          signupMethod: "google",
+        },
+      },
+    });
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "create", entity: "User", detail: "Google Signup" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(201).json({ user, accessToken });
   },
 };

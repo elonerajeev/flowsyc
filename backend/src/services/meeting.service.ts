@@ -2,23 +2,18 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { AccessActor } from "../utils/access-control";
 import { sendMail } from "../utils/mailer";
+import { createCalendarEvent, isGoogleConnected } from "./google-auth.service";
 
-function generateJitsiUrl(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let roomId = "";
-  for (let i = 0; i < 12; i++) {
-    roomId += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `https://meet.jit.si/CRM-${roomId}`;
+function generateJitsiUrl(hostEmail: string): string {
+  const cleanedEmail = hostEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 8) || 'crm';
+  const timestamp = Date.now().toString(36);
+  return `https://meet.jit.si/CRM-${cleanedEmail}-${timestamp}`;
 }
 
-function generateGoogleMeetUrl(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let roomId = "";
-  for (let i = 0; i < 20; i++) {
-    roomId += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `https://meet.google.com/${roomId.slice(0, 3)}-${roomId.slice(3, 7)}-${roomId.slice(7)}`;
+function generateGoogleMeetUrl(hostEmail: string): string {
+  const cleanedEmail = hostEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 6) || 'crm';
+  const uniqueId = Math.random().toString(36).substring(2, 8);
+  return `https://meet.google.com/${cleanedEmail}-${uniqueId}`;
 }
 
 export interface CreateMeetingInput {
@@ -85,11 +80,37 @@ export const meetingService = {
 
   async create(actor: AccessActor, input: CreateMeetingInput) {
     let meetingUrl: string | undefined;
+    let googleEventId: string | undefined;
+    let googleHtmlLink: string | undefined;
+    const hostEmail = String(actor?.email || "crm@focalpoint.com");
+
+    const startTime = new Date(input.scheduledAt);
+    const endTime = new Date(startTime.getTime() + (input.duration || 30) * 60 * 1000);
 
     if (input.meetingType === "jitsi") {
-      meetingUrl = generateJitsiUrl();
+      meetingUrl = generateJitsiUrl(hostEmail);
     } else if (input.meetingType === "google") {
-      meetingUrl = generateGoogleMeetUrl();
+      const googleConnected = await isGoogleConnected(hostEmail);
+      if (googleConnected) {
+        try {
+          const result = await createCalendarEvent({
+            userEmail: hostEmail,
+            summary: input.title,
+            description: input.agenda || `Meeting: ${input.title}\nHosted by: ${hostEmail}`,
+            startTime,
+            endTime,
+            attendees: [input.inviteeEmail],
+          });
+          meetingUrl = result.meetLink || null;
+          googleEventId = result.eventId || undefined;
+          googleHtmlLink = result.htmlLink || undefined;
+        } catch (err) {
+          console.error("Google Calendar error:", err);
+          meetingUrl = generateGoogleMeetUrl(hostEmail);
+        }
+      } else {
+        meetingUrl = generateGoogleMeetUrl(hostEmail);
+      }
     }
 
     const meeting = await prisma.meeting.create({
@@ -145,18 +166,123 @@ export const meetingService = {
       subject: `Meeting Invite: ${input.title}`,
       text: `Hi ${input.inviteeName},\n\nYou have a meeting scheduled.\n\nTitle: ${input.title}\nDate: ${new Date(input.scheduledAt).toLocaleString()}\nDuration: ${input.duration || 30} minutes\n${meetingUrl ? `Join: ${meetingUrl}` : ""}\n${input.agenda ? `\nAgenda:\n${input.agenda}` : ""}\n\nHosted by: ${actor?.email || "CRM"}`,
       html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
-          <h2 style="margin:0 0 4px;font-size:18px;color:#111">📅 ${input.title}</h2>
-          <p style="margin:0 0 16px;color:#6b7280;font-size:14px">You have a meeting scheduled</p>
-          <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px">
-            <tr><td style="padding:6px 0;color:#6b7280;width:90px">Date</td><td style="padding:6px 0;font-weight:500">${new Date(input.scheduledAt).toLocaleString()}</td></tr>
-            <tr><td style="padding:6px 0;color:#6b7280">Duration</td><td style="padding:6px 0;font-weight:500">${input.duration || 30} minutes</td></tr>
-            <tr><td style="padding:6px 0;color:#6b7280">Host</td><td style="padding:6px 0;font-weight:500">${actor?.email || "CRM"}</td></tr>
-            ${input.agenda ? `<tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Agenda</td><td style="padding:6px 0">${input.agenda.replace(/\n/g, "<br>")}</td></tr>` : ""}
-          </table>
-          ${meetingUrl ? `<a href="${meetingUrl}" style="display:inline-block;background:#4285f4;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600">Join Google Meet</a>` : ""}
-          <p style="margin-top:20px;font-size:12px;color:#9ca3af">Sent via Focal Point Compass CRM</p>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Invitation</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 24px; text-align: center;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                      <span style="font-size: 32px;">📅</span>
+                    </div>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.5px;">Meeting Invitation</h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 28px 24px;">
+              <h2 style="margin: 0 0 8px; font-size: 22px; color: #111827; font-weight: 600; letter-spacing: -0.3px;">${input.title}</h2>
+              <p style="margin: 0 0 24px; color: #6b7280; font-size: 14px;">You have been invited to a meeting</p>
+              
+              <!-- Details Card -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="color: #6b7280; font-size: 13px; width: 80px;">📆 Date</td>
+                              <td style="color: #111827; font-size: 14px; font-weight: 500;">${new Date(input.scheduledAt).toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="color: #6b7280; font-size: 13px; width: 80px;">⏱️ Duration</td>
+                              <td style="color: #111827; font-size: 14px; font-weight: 500;">${input.duration || 30} minutes</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="color: #6b7280; font-size: 13px; width: 80px;">👤 Host</td>
+                              <td style="color: #111827; font-size: 14px; font-weight: 500;">${actor?.email || "CRM Team"}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="color: #6b7280; font-size: 13px; width: 80px;">💻 Platform</td>
+                              <td style="color: #111827; font-size: 14px; font-weight: 500;">${input.meetingType === "jitsi" ? "Jitsi Meet (Free)" : input.meetingType === "google" ? "Google Meet" : input.meetingType === "zoom" ? "Zoom" : input.meetingType === "phone" ? "Phone Call" : "In Person"}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      ${input.agenda ? `
+                      <tr>
+                        <td style="padding: 10px 0;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="color: #6b7280; font-size: 13px; width: 80px; vertical-align: top;">📝 Agenda</td>
+                              <td style="color: #111827; font-size: 14px;">${input.agenda.replace(/\n/g, "<br>")}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      ` : ""}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Join Button -->
+              ${meetingUrl ? `
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${meetingUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 10px; font-size: 16px; font-weight: 600; text-align: center;">🎯 Join Meeting</a>
+                  </td>
+                </tr>
+              </table>
+              ` : ""}
+              
+              <!-- Footer -->
+              <p style="margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center;">Sent via Focal Point Compass CRM</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
       `,
     }).catch(() => {}); // non-blocking
 

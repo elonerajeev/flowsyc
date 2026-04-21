@@ -71,7 +71,15 @@ export const dealsService = {
   async list(access?: AccessScope) {
     const where: Prisma.DealWhereInput = { deletedAt: null };
 
-    // RBAC: Admins/Managers see all; Employees see assigned deals
+    // Data isolation: Admin/Manager can only see deals they created or assigned to them
+    if (access?.role === "admin" || access?.role === "manager") {
+      where.OR = [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+    }
+
+    // RBAC: Employees see only assigned deals
     if (access?.role === "employee") {
       where.assignedTo = { in: [access.email, access.userId ?? ""] };
     }
@@ -136,7 +144,7 @@ export const dealsService = {
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
     gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => logger.error("Deal lifecycle sync failed:", err));
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return mapDeal(deal);
   },
 
@@ -183,7 +191,7 @@ export const dealsService = {
     }
 
     gtmLifecycleService.syncDealLifecycle(deal.id, access?.email).catch((err) => logger.error("Deal lifecycle sync failed:", err));
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return mapDeal(deal);
   },
 
@@ -198,6 +206,6 @@ export const dealsService = {
       where: { id },
       data: { deletedAt: new Date() },
     });
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
   },
 };

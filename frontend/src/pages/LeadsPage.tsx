@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -149,6 +149,11 @@ const LeadsPage = () => {
   const [meetingAgenda, setMeetingAgenda] = useState("");
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [selectedImportIds, setSelectedImportIds] = useState<number[]>([]);
+
+  // Clear import filter on mount to show all leads (fix for empty leads issue)
+  useEffect(() => {
+    setSelectedImportIds([]);
+  }, []);
   
   // Bulk selection for regular leads
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);

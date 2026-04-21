@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/auth.middleware";
+import { requireRole } from "../middleware/auth.middleware";
 import { calendarService } from "../services/calendar.service";
 import { asyncHandler } from "../utils/async-handler";
 import { validateBody } from "../middleware/validate.middleware";
@@ -9,6 +10,40 @@ import { createCalendarEventSchema, updateCalendarEventSchema } from "../validat
 const router = Router();
 
 router.use(requireAuth);
+
+// ── Google Calendar integration (admin/manager only) ──────────────────────────
+
+router.get(
+  "/google/status",
+  requireRole(["admin", "manager"]),
+  asyncHandler(async (req, res) => {
+    const { isGoogleConnected } = await import("../services/google-auth.service.js");
+    const connected = await isGoogleConnected(req.auth!.email);
+    res.json({ connected });
+  }),
+);
+
+router.get(
+  "/google/connect",
+  requireRole(["admin", "manager"]),
+  asyncHandler(async (req, res) => {
+    const { getGoogleAuthUrl } = await import("../services/google-auth.service.js");
+    const authUrl = getGoogleAuthUrl(req.auth!.email);
+    res.json({ authUrl });
+  }),
+);
+
+router.post(
+  "/google/disconnect",
+  requireRole(["admin", "manager"]),
+  asyncHandler(async (req, res) => {
+    const { disconnectGoogle } = await import("../services/google-auth.service.js");
+    await disconnectGoogle(req.auth!.email);
+    res.json({ success: true });
+  }),
+);
+
+// ── Calendar events ───────────────────────────────────────────────────────────
 
 router.get(
   "/",

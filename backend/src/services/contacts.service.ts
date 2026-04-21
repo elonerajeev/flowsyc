@@ -52,8 +52,43 @@ export const contactsService = {
   async list(access?: AccessScope) {
     const where: any = { deletedAt: null };
 
-    // RBAC: All authenticated users can see contacts
-    // Employees see contacts from clients they're assigned to, PLUS unassigned contacts (from leads)
+    // Data isolation: Admin/Manager see only contacts from their leads or assigned clients
+    if (access?.role === "admin" || access?.role === "manager") {
+      // Get contacts from leads created by this user
+      const userLeads = await prisma.lead.findMany({
+        where: {
+          OR: [
+            { createdBy: access.email },
+            { assignedTo: access.email },
+            { assignedTo: access.userId ?? "" },
+          ],
+          deletedAt: null,
+        },
+        select: { email: true },
+      });
+      const leadEmails = userLeads.map(l => l.email);
+
+      // Get contacts from clients assigned to this user
+      const assignedClients = await prisma.client.findMany({
+        where: {
+          OR: [
+            { assignedTo: access.email },
+            { assignedTo: access.userId ?? "" },
+          ],
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      const assignedClientIds = assignedClients.map(c => c.id);
+
+      // Show contacts that: belong to user's leads OR belong to assigned clients
+      where.OR = [
+        { email: { in: leadEmails } },
+        { clientId: { in: assignedClientIds } },
+      ];
+    }
+
+    // RBAC: Employees see contacts from clients they're assigned to, PLUS unassigned contacts (from leads)
     if (access?.role === "employee") {
       const assignedClients = await prisma.client.findMany({
         where: {
@@ -65,6 +100,7 @@ export const contactsService = {
       const assignedClientIds = assignedClients.map(c => c.id);
       // Show contacts that either: 1) belong to assigned clients, OR 2) have no clientId (created from leads)
       where.OR = [
+        ...(where.OR || []),
         { clientId: { in: assignedClientIds } },
         { clientId: null },
       ];

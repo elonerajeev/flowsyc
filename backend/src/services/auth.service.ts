@@ -102,6 +102,12 @@ async function createSession(userId: string, email: string, role: AppUserRole): 
 }
 
 export const authService = {
+  async createSession(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new AppError("User not found", 404, "NOT_FOUND");
+    return createSession(user.id, user.email, user.role as AppUserRole);
+  },
+
   async signup(input: { name: string; email: string; password: string; role: SignupRole }): Promise<AuthResponse> {
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {

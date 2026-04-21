@@ -8,8 +8,9 @@ export const staticCrmController = {
     res.status(200).json(companies);
   },
 
-  getSalesMetrics: async (_req: Request, res: Response): Promise<void> => {
-    const metrics = await staticCrmService.getSalesMetrics();
+  getSalesMetrics: async (req: Request, res: Response): Promise<void> => {
+    const access = req.auth;
+    const metrics = await staticCrmService.getSalesMetrics(access);
     res.status(200).json(metrics);
   },
 

@@ -145,6 +145,23 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     });
   }
 
+  // Data isolation: Admin/Manager can only see clients they created or assigned to them
+  if (access?.role === "admin" || access?.role === "manager") {
+    and.push({
+      OR: [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ],
+    });
+  }
+
+  // RBAC: Employees see only assigned clients
+  if (access?.role === "employee") {
+    and.push({
+      assignedTo: { in: [access.email, access.userId ?? ""] },
+    });
+  }
+
   if (filters.status) {
     and.push({ status: toDbClientStatus(filters.status) });
   }
