@@ -1,32 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, Trash2, PencilLine } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Plus, CalendarDays, MapPin, Repeat, Trash2, PencilLine, CalendarCheck } from "lucide-react";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { CalendarSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarPicker } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { useSharedTeamMembers } from "@/lib/team-roster";
 import { cn } from "@/lib/utils";
-import { readStoredJSON, writeStoredJSON } from "@/lib/preferences";
 import { crmKeys, useCalendarEvents } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { CalendarEventRecord, TeamMemberRecord } from "@/types/crm";
+import CalendarEventDialog from "@/components/crm/CalendarEventDialog";
+import type { EventDraft } from "@/components/crm/CalendarEventDialog";
 
-type EventRepeat = "none" | "weekly" | "monthly";
-type AssignmentKind = "none" | "team" | "member";
 type CalendarEvent = CalendarEventRecord;
-
-type EventDraft = Omit<CalendarEvent, "id" | "authorId" | "createdAt" | "updatedAt">;
 
 const eventColors = [
   { value: "primary", label: "Primary", className: "border-primary/25 bg-primary/10 text-primary" },
@@ -120,15 +111,37 @@ export default function CalendarPage() {
   const queryClient = useQueryClient();
   const today = useMemo(() => new Date(), []);
   const sharedTeamMembers = useSharedTeamMembers();
+  const { role } = useTheme();
+  const isAdminOrManager = role === "admin" || role === "manager";
   const [month, setMonth] = useState(() => getMonthStart(today));
   const { data: events = [], isLoading, error: fetchError, refetch } = useCalendarEvents();
   const [selectedDate, setSelectedDate] = useState(() => new Date(today));
   const [draft, setDraft] = useState<EventDraft>(() => emptyDraft(today));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [visibleUpcomingCount, setVisibleUpcomingCount] = useState(8);
   const UPCOMING_PAGE_SIZE = 8;
+
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+
+  useEffect(() => {
+    if (!isAdminOrManager) return;
+    crmService.getGoogleCalendarStatus()
+      .then(({ connected }) => setGoogleConnected(connected))
+      .catch(() => setGoogleConnected(false));
+  }, [isAdminOrManager]);
+
+  const handleConnectGoogle = async () => {
+    setConnectingGoogle(true);
+    try {
+      const { authUrl } = await crmService.connectGoogleCalendar();
+      window.location.href = authUrl;
+    } catch {
+      toast({ title: "Error", description: "Failed to connect Google Calendar.", variant: "destructive" });
+      setConnectingGoogle(false);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (event: EventDraft) => crmService.createCalendarEvent(event),
@@ -178,6 +191,18 @@ export default function CalendarPage() {
   }, [sharedTeamMembers]);
 
   const calendarDays = useMemo(() => getMonthDays(month), [month]);
+
+  const dayEventsMap = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const day of calendarDays) {
+      if (day) {
+        const key = toISODate(day);
+        const dayEvents = events.filter((event) => matchesEventDate(event, day));
+        map.set(key, dayEvents);
+      }
+    }
+    return map;
+  }, [calendarDays, events]);
 
   const visibleEvents = useMemo(
     () =>
@@ -350,6 +375,32 @@ export default function CalendarPage() {
             </div>
           ))}
         </div>
+
+        {/* Google Calendar connect banner — admin/manager only */}
+        {isAdminOrManager && googleConnected === false && (
+          <div className="mt-4 flex items-center gap-3 rounded-[1.25rem] border border-blue-200 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20 px-4 py-3">
+            <CalendarCheck className="h-5 w-5 shrink-0 text-blue-600" />
+            <p className="flex-1 text-sm text-blue-800 dark:text-blue-300">
+              Connect Google Calendar to generate real Google Meet links for meetings.
+            </p>
+            <button
+              type="button"
+              onClick={handleConnectGoogle}
+              disabled={connectingGoogle}
+              className="rounded-xl bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+            >
+              {connectingGoogle ? "Connecting..." : "Connect"}
+            </button>
+          </div>
+        )}
+        {isAdminOrManager && googleConnected === true && (
+          <div className="mt-4 flex items-center gap-3 rounded-[1.25rem] border border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20 px-4 py-3">
+            <CalendarCheck className="h-5 w-5 shrink-0 text-green-600" />
+            <p className="flex-1 text-sm text-green-800 dark:text-green-300">
+              Google Calendar connected — Google Meet links will be generated automatically for meetings.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
@@ -385,7 +436,8 @@ export default function CalendarPage() {
 
           <div className="mt-2 grid grid-cols-7 gap-2">
             {calendarDays.map((day, index) => {
-              const dayEvents = day ? events.filter((event) => matchesEventDate(event, day)) : [];
+              const dayKey = day ? toISODate(day) : null;
+              const dayEvents = dayKey ? dayEventsMap.get(dayKey) ?? [] : [];
               const isToday = day ? toISODate(day) === toISODate(today) : false;
               const isSelected = day ? toISODate(day) === toISODate(selectedDate) : false;
 
@@ -491,7 +543,7 @@ export default function CalendarPage() {
 
                     {event.notes && <p className="mt-3 text-sm leading-6 text-muted-foreground">{event.notes}</p>}
 
-                    <div className="mt-4 flex items-center gap-2">
+                    <div className="mt-4 flex items-center gap-2 flex-wrap">
                       <Button variant="outline" size="sm" onClick={() => openEditDialog(event)}>
                         <PencilLine className="h-4 w-4" />
                         Edit
@@ -500,6 +552,17 @@ export default function CalendarPage() {
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
+                      {isAdminOrManager && googleConnected && event.location?.startsWith("https://") && (
+                        <a
+                          href={event.location}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                        >
+                          <CalendarCheck className="h-3.5 w-3.5" />
+                          Join Meet
+                        </a>
+                      )}
                     </div>
                   </article>
                 ))
@@ -548,215 +611,21 @@ export default function CalendarPage() {
         </aside>
       </section>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit event" : "New event"}</DialogTitle>
-            <DialogDescription>Set the date, time, repeat rule, and notes for the event.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="title">Event title</Label>
-              <Input id="title" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Team standup" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start font-normal">
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {formatDay(fromISODate(draft.date))}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <CalendarPicker
-                    mode="single"
-                    selected={fromISODate(draft.date)}
-                    onSelect={(date) => {
-                      if (!date) return;
-                      setDraft((current) => ({ ...current, date: toISODate(date) }));
-                      setSelectedDate(date);
-                      setMonth(getMonthStart(date));
-                      setDatePopoverOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="repeat">Repeat</Label>
-              <Select value={draft.repeat} onValueChange={(value) => setDraft((current) => ({ ...current, repeat: value as EventRepeat }))}>
-                <SelectTrigger id="repeat">
-                  <SelectValue placeholder="No repeat" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No repeat</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="assignmentKind">Assign to</Label>
-              <Select
-                value={draft.assignmentKind}
-                onValueChange={(value) =>
-                  setDraft((current) => {
-                    const nextKind = value as AssignmentKind;
-                    if (nextKind === "none") {
-                      return { ...current, assignmentKind: "none", assigneeId: "", assigneeName: "", assigneeMeta: "" };
-                    }
-
-                    if (nextKind === "team") {
-                      const firstTeam = teamOptions[0]?.value ?? "";
-                      return {
-                        ...current,
-                        assignmentKind: "team",
-                        assigneeId: current.assigneeId || firstTeam,
-                        assigneeName: current.assigneeName || firstTeam,
-                        assigneeMeta: current.assigneeMeta || "Team",
-                      };
-                    }
-
-                    const firstMember = memberOptions[0];
-                    return {
-                      ...current,
-                      assignmentKind: "member",
-                      assigneeId: current.assigneeId || firstMember?.value || "",
-                      assigneeName: current.assigneeName || firstMember?.label.split(" · ")[0] || "",
-                      assigneeMeta: current.assigneeMeta || firstMember?.meta || "",
-                    };
-                  })
-                }
-              >
-                <SelectTrigger id="assignmentKind">
-                  <SelectValue placeholder="No assignment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No assignment</SelectItem>
-                  <SelectItem value="team">Team</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {draft.assignmentKind === "team" && (
-              <div className="space-y-2">
-                <Label htmlFor="teamAssignment">Team</Label>
-                <Select
-                  value={draft.assigneeId}
-                  onValueChange={(value) => {
-                    const team = teamOptions.find((item) => item.value === value);
-                    setDraft((current) => ({
-                      ...current,
-                      assigneeId: value,
-                      assigneeName: team?.value ?? value,
-                      assigneeMeta: "Team",
-                    }));
-                  }}
-                >
-                  <SelectTrigger id="teamAssignment">
-                    <SelectValue placeholder="Choose team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamOptions.map((team) => (
-                      <SelectItem key={team.value} value={team.value}>
-                        {team.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {draft.assignmentKind === "member" && (
-              <div className="space-y-2">
-                <Label htmlFor="memberAssignment">Team member</Label>
-                <Select
-                  value={draft.assigneeId}
-                  onValueChange={(value) => {
-                    const member = memberOptions.find((item) => item.value === value);
-                    setDraft((current) => ({
-                      ...current,
-                      assigneeId: value,
-                      assigneeName: member?.label.split(" · ")[0] ?? value,
-                      assigneeMeta: member?.meta ?? "",
-                    }));
-                  }}
-                >
-                  <SelectTrigger id="memberAssignment">
-                    <SelectValue placeholder="Choose person" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {memberOptions.map((member) => (
-                      <SelectItem key={member.value} value={member.value}>
-                        {member.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="startTime">Start time</Label>
-              <Input id="startTime" type="time" value={draft.startTime} onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="endTime">End time</Label>
-              <Input id="endTime" type="time" value={draft.endTime} onChange={(event) => setDraft((current) => ({ ...current, endTime: event.target.value }))} />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="location">Location</Label>
-              <Input id="location" value={draft.location} onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))} placeholder="Zoom, board room, HQ floor 3" />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={draft.notes}
-                onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
-                placeholder="Agenda, attendees, or preparation notes"
-                className="min-h-24"
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label>Color</Label>
-              <div className="flex flex-wrap gap-2">
-                {eventColors.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => setDraft((current) => ({ ...current, color: item.value }))}
-                    className={cn(
-                      "rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition",
-                      draft.color === item.value ? item.className : "border-border/70 bg-secondary/10 text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEvent}>{editingId ? "Save changes" : "Create event"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CalendarEventDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        editingId={editingId}
+        draft={draft}
+        onDraftChange={setDraft}
+        onSave={saveEvent}
+        onDateChange={(date) => {
+          setSelectedDate(date);
+          setMonth(getMonthStart(date));
+        }}
+        teamOptions={teamOptions}
+        memberOptions={memberOptions}
+      />
     </div>
   );
 }
+

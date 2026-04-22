@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma";
-import { type LeadSource } from "@prisma/client";
 import { GTMAutomationService } from "./gtm-automation.service";
+import { onLeadCreated } from "./automation-engine";
+import { logger } from "../utils/logger";
 
 export type CSVImportRecord = {
   id: number;
@@ -43,8 +44,9 @@ export const csvImportService = {
     };
   },
 
-  async listImports(): Promise<CSVImportRecord[]> {
+  async listImports(importedBy?: string): Promise<CSVImportRecord[]> {
     const imports = await prisma.csvImport.findMany({
+      where: importedBy ? { importedBy } : undefined,
       orderBy: { createdAt: "desc" },
       take: 50,
     });
@@ -63,9 +65,11 @@ export const csvImportService = {
     }));
   },
 
-  async getImport(id: number): Promise<CSVImportRecord | null> {
+  async getImport(id: number, importedBy?: string): Promise<CSVImportRecord | null> {
     const importRecord = await prisma.csvImport.findUnique({ where: { id } });
     if (!importRecord) return null;
+
+    if (importedBy && importRecord.importedBy !== importedBy) return null;
 
     return {
       id: importRecord.id,
@@ -86,7 +90,7 @@ export const csvImportService = {
     let success = 0;
     let failed = 0;
 
-    console.log(`[CSV Import ${importId}] Starting to process ${rows.length} rows`);
+    logger.info(`[CSV Import ${importId}] Starting to process ${rows.length} rows`);
 
     // Update status to processing
     await prisma.csvImport.update({
@@ -139,7 +143,7 @@ export const csvImportService = {
         });
 
         if (existingLead) {
-          console.log(`[CSV Import ${importId}] Row ${i}: Lead exists, updating ${leadData.email}`);
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Lead exists, updating ${leadData.email}`);
           const existingTags: string[] = existingLead.tags || [];
           const importTag = `import:${importId}`;
           const updatedTags = existingTags.includes(importTag)
@@ -159,7 +163,7 @@ export const csvImportService = {
             },
           });
         } else {
-          console.log(`[CSV Import ${importId}] Row ${i}: Creating new lead ${leadData.email}`);
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Creating new lead ${leadData.email}`);
           // Create new lead
           const score = await GTMAutomationService.calculateLeadScoreFromCriteria({
             companySize: row.companySize || row.company_size || undefined,
@@ -168,7 +172,7 @@ export const csvImportService = {
             source: leadData.source,
           });
 
-          await prisma.lead.create({
+          const lead = await prisma.lead.create({
             data: {
               firstName: leadData.firstName || leadData.company || "Unknown",
               lastName: leadData.lastName || "",
@@ -182,9 +186,22 @@ export const csvImportService = {
               score,
               notes: leadData.notes,
               tags: ["csv_import", `import:${importId}`],
+              createdBy: userEmail,
             },
           });
-          console.log(`[CSV Import ${importId}] Row ${i}: Created lead with tags ["csv_import", "import:${importId}"]`);
+          
+          await onLeadCreated(lead.id, {
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            email: lead.email,
+            company: lead.company,
+            phone: lead.phone,
+            source: lead.source,
+            score: lead.score,
+            createdBy: userEmail,
+          }).catch((err) => logger.error("Automation trigger failed for CSV import:", err));
+          
+          logger.debug(`[CSV Import ${importId}] Row ${i}: Created lead with tags ["csv_import", "import:${importId}"]`);
         }
 
         success++;
@@ -222,7 +239,13 @@ export const csvImportService = {
     return { success, failed, errors };
   },
 
-  async deleteImport(id: number): Promise<boolean> {
+  async deleteImport(id: number, importedBy?: string): Promise<boolean> {
+    if (importedBy) {
+      const record = await prisma.csvImport.findUnique({ where: { id } });
+      if (!record || record.importedBy !== importedBy) {
+        throw new Error("Access denied: you do not own this import");
+      }
+    }
     // Delete the import record
     await prisma.csvImport.delete({ where: { id } });
 

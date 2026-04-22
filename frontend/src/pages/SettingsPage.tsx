@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
-import { Edit3, Palette, Sparkles, SquareDashedMousePointer, User } from "lucide-react";
+import { Edit3, Palette, Sparkles, SquareDashedMousePointer, User, Calendar, Mail } from "lucide-react";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -12,6 +12,7 @@ import { useThemePreviews } from "@/hooks/use-crm-data";
 import { TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 import { findTeamMemberByEmail, useSharedTeamMembers } from "@/lib/team-roster";
+import { crmService } from "@/services/crm";
 
 const colorSwatches: { value: ThemeColor; hex: string }[] = [
   { value: "ocean", hex: "#2563EB" },
@@ -94,6 +95,29 @@ export default function SettingsPage() {
   const liveEmployeeRecord = findTeamMemberByEmail(sharedTeamMembers, user?.email);
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [connectingCalendar, setConnectingCalendar] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+
+  // Only fetch Google status for admin/manager
+  useEffect(() => {
+    if (role !== "admin" && role !== "manager") return;
+    crmService.getGoogleCalendarStatus()
+      .then(({ connected }) => setGoogleConnected(connected))
+      .catch(() => setGoogleConnected(false));
+  }, [role]);
+
+  // Handle redirect back from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleParam = params.get("google");
+    if (googleParam === "connected") {
+      setGoogleConnected(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (googleParam === "error") {
+      setGoogleConnected(false);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
   const [profileDraft, setProfileDraft] = useState<Record<ProfileKey, string>>({
     name: user?.name ?? "",
     employeeId: user?.employeeId ?? "EMP-0000",
@@ -123,6 +147,29 @@ export default function SettingsPage() {
       location: user?.location ?? "San Francisco, CA",
     });
   }, [user]);
+
+  const connectGoogleCalendar = async () => {
+    setConnectingCalendar(true);
+    try {
+      const { authUrl } = await crmService.connectGoogleCalendar();
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error("Failed to connect Google Calendar:", err);
+      setConnectingCalendar(false);
+    }
+  };
+
+  const disconnectGoogleCalendar = async () => {
+    setConnectingCalendar(true);
+    try {
+      await crmService.disconnectGoogleCalendar();
+      setGoogleConnected(false);
+    } catch (err) {
+      console.error("Failed to disconnect Google Calendar:", err);
+    } finally {
+      setConnectingCalendar(false);
+    }
+  };
 
   const handleProfileSave = async () => {
     setIsSaving(true);
@@ -519,6 +566,47 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Google Calendar Integration - admin/manager only */}
+              {(role === "admin" || role === "manager") && (
+                <div className="rounded-2xl border border-border/70 bg-secondary/20 p-4 mt-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                      <Calendar className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground">Google Calendar</p>
+                      <p className="text-xs text-muted-foreground">
+                        {googleConnected
+                          ? "Connected — Google Meet links can be generated for meetings"
+                          : "Connect to create real Google Meet links for meetings"}
+                      </p>
+                    </div>
+                    {googleConnected ? (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>
+                        <button
+                          type="button"
+                          onClick={disconnectGoogleCalendar}
+                          disabled={connectingCalendar}
+                          className="rounded-xl border border-border/70 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/50 disabled:opacity-50 transition"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={connectGoogleCalendar}
+                        disabled={connectingCalendar || googleConnected === null}
+                        className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                      >
+                        {connectingCalendar ? "Connecting..." : "Connect"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -36,7 +36,7 @@ export const projectsController = {
     res.status(200).json(project);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const project = await projectsService.create(req.body);
+    const project = await projectsService.create(req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -50,7 +50,7 @@ export const projectsController = {
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const projectId = readProjectId(req);
-    const project = await projectsService.update(projectId, req.body);
+    const project = await projectsService.update(projectId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -64,7 +64,7 @@ export const projectsController = {
   },
   remove: async (req: Request, res: Response): Promise<void> => {
     const projectId = readProjectId(req);
-    await projectsService.delete(projectId);
+    await projectsService.delete(projectId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,

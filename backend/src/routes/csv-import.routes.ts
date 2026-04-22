@@ -31,20 +31,22 @@ const upload = multer({
 
 // List all imports
 csvImportRouter.get("/", requireAuth, asyncHandler(async (req, res) => {
-  const imports = await csvImportService.listImports();
+  const userEmail = (req as any).auth?.email as string | undefined;
+  const imports = await csvImportService.listImports(userEmail);
   res.json({ data: imports });
 }));
 
 // Get single import with details
 csvImportRouter.get("/:id", requireAuth, asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id as string);
-  const importRecord = await csvImportService.getImport(id);
-  
+  const userEmail = (req as any).auth?.email as string | undefined;
+  const importRecord = await csvImportService.getImport(id, userEmail);
+
   if (!importRecord) {
     res.status(404).json({ error: "Import not found" });
     return;
   }
-  
+
   const leads = await csvImportService.getImportLeads(id);
   res.json({ data: { ...importRecord, leads } });
 }));
@@ -109,7 +111,8 @@ csvImportRouter.post("/", requireAuth, uploadRateLimiter, upload.single("file"),
 // Delete import and its leads
 csvImportRouter.delete("/:id", requireAuth, asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id as string);
-  await csvImportService.deleteImport(id);
+  const userEmail = (req as any).auth?.email as string | undefined;
+  await csvImportService.deleteImport(id, userEmail);
   res.json({ success: true, message: "Import deleted successfully" });
 }));
 

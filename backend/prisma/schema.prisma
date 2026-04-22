@@ -26,6 +26,7 @@ model Candidate {
   offerLetterSent Boolean?       @default(false)
   joiningDate     String?
   offeredSalary   String?
+  createdBy       String?        // User email who created this candidate
   JobPosting      JobPosting     @relation(fields: [jobId], references: [id])
 
   @@index([deletedAt])
@@ -33,6 +34,7 @@ model Candidate {
   @@index([stage])
   @@index([source])
   @@index([rating])
+  @@index([createdBy])
 }
 
 model Client {
@@ -108,6 +110,7 @@ model Invoice {
   date      String
   due       String
   status    ClientStatus @default(pending)
+  createdBy String?      // User email who created this invoice
   deletedAt DateTime?
   createdAt DateTime     @default(now())
   updatedAt DateTime
@@ -182,6 +185,7 @@ model Project {
   budget      String        @default("$0")
   tasksDone   Int           @default(0)
   tasksTotal  Int           @default(0)
+  createdBy   String?       // User email who created this project
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
@@ -378,6 +382,7 @@ model Lead {
   deletedAt  DateTime?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
+  createdBy  String?    // User email who created this lead (for data isolation)
 
   // Extended fields for scoring
   companySize String?
@@ -408,7 +413,9 @@ model Contact {
   phone        String?
   jobTitle     String?
   department   String?
+  seniority    String?
   clientId     Int?
+  leadId       Int?      // Link to original lead (optional, for tracking)
   client       Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   meetings     Meeting[]
   deletedAt    DateTime?
@@ -418,6 +425,7 @@ model Contact {
   @@index([deletedAt])
   @@index([clientId])
   @@index([email])
+  @@index([leadId])
 }
 
 model Deal {
@@ -428,6 +436,7 @@ model Deal {
   stage         DealStage      @default(prospecting)
   probability   Int            @default(50)
   assignedTo    String?
+  createdBy     String?        // User email who created this deal
   expectedClose DateTime?
   actualClose   DateTime?
   description   String?
@@ -440,6 +449,7 @@ model Deal {
   @@index([deletedAt])
   @@index([stage])
   @@index([assignedTo])
+  @@index([createdBy])
   @@index([updatedAt])
 }
 

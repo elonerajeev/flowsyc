@@ -102,6 +102,12 @@ async function createSession(userId: string, email: string, role: AppUserRole): 
 }
 
 export const authService = {
+  async createSession(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new AppError("User not found", 404, "NOT_FOUND");
+    return createSession(user.id, user.email, user.role as AppUserRole);
+  },
+
   async signup(input: { name: string; email: string; password: string; role: SignupRole }): Promise<AuthResponse> {
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
@@ -208,14 +214,18 @@ export const authService = {
     timeZone?: string;
     location?: string;
   }): Promise<AuthUser> {
+    const commonFields = {
+      name: input.name,
+      timeZone: input.timeZone,
+      location: input.location,
+    };
+    
     const allowedInput =
-      role === "admin" || role === "manager"
-        ? input
-        : {
-            ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.timeZone !== undefined ? { timeZone: input.timeZone } : {}),
-            ...(input.location !== undefined ? { location: input.location } : {}),
-          };
+      role === "admin"
+        ? { ...commonFields, department: input.department, team: input.team, designation: input.designation, manager: input.manager, workingHours: input.workingHours, officeLocation: input.officeLocation }
+        : role === "manager"
+        ? { ...commonFields }
+        : commonFields;
 
     const user = await prisma.user.update({
       where: { id: userId },

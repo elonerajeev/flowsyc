@@ -145,6 +145,23 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     });
   }
 
+  // Data isolation: Admin/Manager can only see clients they created or assigned to them
+  if (access?.role === "admin" || access?.role === "manager") {
+    and.push({
+      OR: [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ],
+    });
+  }
+
+  // RBAC: Employees see only assigned clients
+  if (access?.role === "employee") {
+    and.push({
+      assignedTo: { in: [access.email, access.userId ?? ""] },
+    });
+  }
+
   if (filters.status) {
     and.push({ status: toDbClientStatus(filters.status) });
   }
@@ -199,15 +216,29 @@ function isEmailUniqueConstraintError(error: unknown) {
 export const clientsService = {
   async getById(clientId: number, access?: AccessScope) {
     const clientEmail = await getClientAccessEmail(access);
-    const client = clientEmail
-      ? await prisma.client.findFirst({
-          where: {
-            deletedAt: null,
-            id: clientId,
-            email: { equals: clientEmail, mode: "insensitive" },
-          },
-        })
-      : await prisma.client.findUnique({ where: { id: clientId } });
+
+    let client;
+    if (clientEmail) {
+      // Client role: can only see their own record
+      client = await prisma.client.findFirst({
+        where: { deletedAt: null, id: clientId, email: { equals: clientEmail, mode: "insensitive" } },
+      });
+    } else if (access?.role === "admin" || access?.role === "manager") {
+      // Admin/Manager: can only see clients assigned to them
+      client = await prisma.client.findFirst({
+        where: {
+          deletedAt: null,
+          id: clientId,
+          OR: [
+            { assignedTo: access.email },
+            { assignedTo: access.userId ?? "" },
+          ],
+        },
+      });
+    } else {
+      client = await prisma.client.findUnique({ where: { id: clientId } });
+    }
+
     if (!client || client.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
     }
@@ -295,11 +326,19 @@ export const clientsService = {
     }
   },
 
-  async update(clientId: number, patch: Partial<ClientInput>) {
+  async update(clientId: number, patch: Partial<ClientInput>, access?: AccessScope) {
     const existing = await prisma.client.findUnique({ where: { id: clientId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
     }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isAssigned = existing.assignedTo === access.email || existing.assignedTo === access.userId;
+      if (!isAssigned) {
+        throw new AppError("Access denied: you can only update clients assigned to you", 403, "FORBIDDEN");
+      }
+    }
+
     if (patch.email !== undefined && patch.email !== existing.email) {
       const emailOwner = await prisma.client.findUnique({ where: { email: patch.email } });
       if (emailOwner && emailOwner.id !== existing.id) {
@@ -356,10 +395,17 @@ export const clientsService = {
     }
   },
 
-  async delete(clientId: number) {
+  async delete(clientId: number, access?: AccessScope) {
     const existing = await prisma.client.findUnique({ where: { id: clientId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Client not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isAssigned = existing.assignedTo === access.email || existing.assignedTo === access.userId;
+      if (!isAssigned) {
+        throw new AppError("Access denied: you can only delete clients assigned to you", 403, "FORBIDDEN");
+      }
     }
 
     await prisma.client.update({

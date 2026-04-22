@@ -33,22 +33,37 @@ async function buildWhere(query: InvoiceQuery, access: AccessScope) {
   return {
     deletedAt: null,
     ...(query.status ? { status: query.status } : {}),
-    ...(permittedLabels ? { client: { in: permittedLabels } } : {}),
+    ...(permittedLabels
+      ? { client: { in: permittedLabels } }
+      : access?.role === "admin" || access?.role === "manager"
+        ? { createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) } }
+        : {}),
   };
 }
 
 export const invoicesService = {
   async getById(invoiceId: string, access?: AccessScope) {
     const permittedLabels = await getInvoiceClientLabels(access);
-    const invoice = permittedLabels
-      ? await prisma.invoice.findFirst({
-          where: {
-            deletedAt: null,
-            id: invoiceId,
-            client: { in: permittedLabels },
-          },
-        })
-      : await prisma.invoice.findUnique({ where: { id: invoiceId } });
+
+    let invoice;
+    if (permittedLabels) {
+      // Client role: can only see invoices for their own client label
+      invoice = await prisma.invoice.findFirst({
+        where: { deletedAt: null, id: invoiceId, client: { in: permittedLabels } },
+      });
+    } else if (access?.role === "admin" || access?.role === "manager") {
+      // Admin/Manager: can only see invoices they created
+      invoice = await prisma.invoice.findFirst({
+        where: {
+          deletedAt: null,
+          id: invoiceId,
+          createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) },
+        },
+      });
+    } else {
+      invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    }
+
     if (!invoice || invoice.deletedAt) {
       throw new AppError("Invoice not found", 404, "NOT_FOUND");
     }
@@ -93,7 +108,7 @@ export const invoicesService = {
     };
   },
 
-  async create(input: InvoiceInput) {
+  async create(input: InvoiceInput, access?: AccessScope) {
     const invoice = await prisma.invoice.create({
       data: {
         id: crypto.randomUUID(),
@@ -102,6 +117,7 @@ export const invoicesService = {
         date: input.date,
         due: input.due,
         status: input.status ?? "pending",
+        createdBy: access?.email ?? null,
         updatedAt: new Date(),
       },
     });
@@ -127,10 +143,17 @@ export const invoicesService = {
     };
   },
 
-  async update(invoiceId: string, patch: Partial<InvoiceInput>) {
+  async update(invoiceId: string, patch: Partial<InvoiceInput>, access?: AccessScope) {
     const existing = await prisma.invoice.findUnique({ where: { id: invoiceId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Invoice not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied: you can only update invoices you created", 403, "FORBIDDEN");
+      }
     }
 
     const invoice = await prisma.invoice.update({

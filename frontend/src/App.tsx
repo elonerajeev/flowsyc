@@ -20,11 +20,12 @@ import { useMonitoring } from "@/hooks/use-monitoring";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const SignupPage = lazy(() => import("@/pages/SignupPage"));
+const VerifyEmailPage = lazy(() => import("@/pages/VerifyEmailPage"));
+const GoogleCallback = lazy(() => import("@/pages/GoogleCallbackPage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
 const TeamsPage = lazy(() => import("@/pages/TeamsPage"));
-const EmployeesPage = lazy(() => import("@/pages/TeamPage"));
 const ClientsPage = lazy(() => import("@/pages/ClientsPage"));
 const ContactsPage = lazy(() => import("@/pages/ContactsPage"));
 const LeadsPage = lazy(() => import("@/pages/LeadsPage"));
@@ -102,6 +103,22 @@ const App = () => {
                     }
                   />
                   <Route
+                    path="/verify-email"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <VerifyEmailPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/auth/google/callback"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <GoogleCallback />
+                      </Suspense>
+                    }
+                  />
+                  <Route
                     path="/*"
                     element={
                       <>
@@ -143,7 +160,7 @@ const App = () => {
 
                               <Route path="/hr/hiring" element={<RouteAccessGuard><HiringPage /></RouteAccessGuard>} />
                               <Route path="/hr/candidates" element={<RouteAccessGuard><CandidatesPage /></RouteAccessGuard>} />
-                              <Route path="/hr/employees" element={<RouteAccessGuard><EmployeesPage /></RouteAccessGuard>} />
+                              <Route path="/hr/employees" element={<Navigate to="/people/members" replace />} />
                               <Route path="/hr/payroll" element={<RouteAccessGuard><PayrollPage /></RouteAccessGuard>} />
 
                               <Route path="/insights/analytics" element={<RouteAccessGuard><AnalyticsPage /></RouteAccessGuard>} />

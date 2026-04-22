@@ -416,8 +416,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Sync with backend on mount
   useEffect(() => {
-    if (!isRemoteApiEnabled()) {
-      const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
+    const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
+    if (!isRemoteApiEnabled() || !storedUser) {
       if (storedUser?.role) setRoleState(storedUser.role as UserRole);
       return;
     }

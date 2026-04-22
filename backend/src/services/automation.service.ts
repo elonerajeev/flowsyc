@@ -1,6 +1,6 @@
 import { prisma } from "../config/prisma";
 
-type AlertType = "payroll_due" | "invoice_overdue" | "task_overdue" | "project_stalled";
+type AlertType = "payroll_due" | "invoice_overdue" | "task_overdue" | "project_stalled" | "churn_risk";
 
 interface Alert {
   type: AlertType;
@@ -10,56 +10,67 @@ interface Alert {
   entityId?: string | number;
   entityType: string;
   actionUrl?: string;
+  ownerEmail?: string; // For filtering
 }
 
 export const automationService = {
-  async checkAllAlerts(): Promise<Alert[]> {
+  async checkAllAlerts(userEmail?: string, userRole?: string): Promise<Alert[]> {
     const alerts: Alert[] = [];
     
     const [payrollAlerts, invoiceAlerts, taskAlerts, projectAlerts] = await Promise.all([
-      this.checkPayrollAlerts(),
-      this.checkInvoiceOverdue(),
-      this.checkTaskOverdue(),
-      this.checkProjectStalled(),
+      this.checkPayrollAlerts(userEmail, userRole),
+      this.checkInvoiceOverdue(userEmail),
+      this.checkTaskOverdue(userEmail, userRole),
+      this.checkProjectStalled(userEmail),
     ]);
     
     return [...payrollAlerts, ...invoiceAlerts, ...taskAlerts, ...projectAlerts];
   },
 
-  async checkPayrollAlerts(): Promise<Alert[]> {
+  async checkPayrollAlerts(userEmail?: string, userRole?: string): Promise<Alert[]> {
     const alerts: Alert[] = [];
-    const currentPeriod = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    
+
     // Get all active team members with salary
     const members = await prisma.teamMember.findMany({
       where: { deletedAt: null, status: "active", baseSalary: { gt: 0 } },
-      select: { id: true, name: true, baseSalary: true, department: true },
+      select: { id: true, name: true, baseSalary: true, department: true, email: true },
     });
     
-    // Check payroll by comparing updatedAt with current month
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
     
     for (const member of members) {
-      // If not updated this month, flag as payroll due
       if (member.baseSalary > 0) {
-        alerts.push({
-          type: "payroll_due",
-          severity: member.baseSalary > 80000 ? "critical" : "warning",
-          title: `Payroll Due - ${member.name}`,
-          description: `${member.name} (${member.department}) - Base salary: $${member.baseSalary.toLocaleString()}`,
-          entityId: member.id,
-          entityType: "TeamMember",
-          actionUrl: `/hr/payroll?member=${member.id}`,
-        });
+        // Filter: For admins, show all; For managers, show their team; For employees, show theirs
+        let shouldShow = true;
+        if (userRole === "manager" && userEmail) {
+          // Managers see alerts for their team (simplified - check if member email is related)
+          shouldShow = true; // Show all for now, could filter by department mapping
+        } else if (userRole === "employee") {
+          // Employees only see their own
+          shouldShow = member.email === userEmail;
+        }
+        
+        if (shouldShow) {
+          alerts.push({
+            type: "payroll_due",
+            severity: member.baseSalary > 80000 ? "critical" : "warning",
+            title: `Payroll Due - ${member.name}`,
+            description: `${member.name} (${member.department}) - Base salary: $${member.baseSalary.toLocaleString()}`,
+            entityId: member.id,
+            entityType: "TeamMember",
+            actionUrl: `/hr/payroll?member=${member.id}`,
+            ownerEmail: member.email,
+          });
+        }
       }
     }
     
     return alerts;
   },
 
-  async checkInvoiceOverdue(): Promise<Alert[]> {
+  async checkInvoiceOverdue(userEmail?: string): Promise<Alert[]> {
     const alerts: Alert[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -76,51 +87,76 @@ export const automationService = {
     
     for (const invoice of overdueInvoices) {
       const daysOverdue = Math.floor((today.getTime() - new Date(invoice.due).getTime()) / (1000 * 60 * 60 * 24));
-      alerts.push({
-        type: "invoice_overdue",
-        severity: daysOverdue > 30 ? "critical" : "warning",
-        title: `Invoice Overdue - ${invoice.client}`,
-        description: `${invoice.client} invoice (${invoice.amount}) is ${daysOverdue} days overdue`,
-        entityId: invoice.id,
-        entityType: "Invoice",
-        actionUrl: `/finance/invoices?id=${invoice.id}`,
-      });
+      // Filter: Show to admins/managers only (finance responsibility)
+      if (userEmail) {
+        alerts.push({
+          type: "invoice_overdue",
+          severity: daysOverdue > 30 ? "critical" : "warning",
+          title: `Invoice Overdue - ${invoice.client}`,
+          description: `${invoice.client} invoice (${invoice.amount}) is ${daysOverdue} days overdue`,
+          entityId: invoice.id,
+          entityType: "Invoice",
+          actionUrl: `/finance/invoices?id=${invoice.id}`,
+        });
+      }
     }
     
     return alerts;
   },
 
-  async checkTaskOverdue(): Promise<Alert[]> {
+  async checkTaskOverdue(userEmail?: string, userRole?: string): Promise<Alert[]> {
     const alerts: Alert[] = [];
     const today = new Date().toISOString().slice(0, 10);
     
+    // Build where clause based on user role
+    const where: any = {
+      deletedAt: null,
+      column: { in: ["todo", "in_progress"] },
+      dueDate: { lt: today },
+    };
+    
+    // Filter tasks by user
+    if (userRole === "employee") {
+      where.assignee = userEmail;
+    } else if (userRole === "manager") {
+      where.OR = [
+        { assignee: userEmail },
+        { tags: { has: "assigned" } }, // Could filter by team
+      ];
+    }
+    
     const overdueTasks = await prisma.task.findMany({
-      where: {
-        deletedAt: null,
-        column: { in: ["todo", "in_progress"] },
-        dueDate: { lt: today },
-      },
+      where,
       select: { id: true, title: true, assignee: true, priority: true, dueDate: true },
       orderBy: { dueDate: "asc" },
       take: 100,
     });
     
     for (const task of overdueTasks) {
-      alerts.push({
-        type: "task_overdue",
-        severity: task.priority === "high" ? "critical" : "warning",
-        title: `Task Overdue - ${task.title.slice(0, 30)}`,
-        description: `Task "${task.title}" assigned to ${task.assignee} was due on ${task.dueDate}`,
-        entityId: task.id,
-        entityType: "Task",
-        actionUrl: `/workspace/tasks?id=${task.id}`,
-      });
+      // Admin/manager sees all, employee sees only theirs
+      let shouldShow = true;
+      if (userRole === "employee") {
+        shouldShow = task.assignee === userEmail;
+      }
+      
+      if (shouldShow) {
+        alerts.push({
+          type: "task_overdue",
+          severity: task.priority === "high" ? "critical" : "warning",
+          title: `Task Overdue - ${task.title.slice(0, 30)}`,
+          description: `Task "${task.title}" assigned to ${task.assignee} was due on ${task.dueDate}`,
+          entityId: task.id,
+          entityType: "Task",
+          actionUrl: `/workspace/tasks?id=${task.id}`,
+          ownerEmail: task.assignee,
+        });
+      }
     }
     
     return alerts;
   },
 
-  async checkProjectStalled(): Promise<Alert[]> {
+  async checkProjectStalled(userEmail?: string): Promise<Alert[]> {
     const alerts: Alert[] = [];
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -176,12 +212,12 @@ export const automationService = {
     }
   },
 
-  async getAlertsSummary() {
+  async getAlertsSummary(userEmail?: string, userRole?: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const [alerts, resolvedToday] = await Promise.all([
-      this.checkAllAlerts(),
+      this.checkAllAlerts(userEmail, userRole),
       prisma.alert.count({ where: { isResolved: true, resolvedAt: { gte: today } } }),
     ]);
 

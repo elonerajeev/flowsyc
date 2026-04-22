@@ -8,13 +8,14 @@ import { verifyAccessToken, signAccessToken, signPasswordResetToken, verifyPassw
 import { sendVerificationEmail, sendPasswordResetEmail } from "../utils/email-templates";
 import { hashPassword } from "../utils/password";
 import { prisma } from "../config/prisma";
+import { getGoogleUserInfo, getGoogleAuthUrl } from "../services/google-auth.service";
 
 const IS_PROD = env.NODE_ENV === "production";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: false,
-  sameSite: false as unknown as "lax",
+  secure: IS_PROD,
+  sameSite: "lax" as const,
   path: "/",
 };
 
@@ -77,38 +78,41 @@ export const authController = {
       throw new AppError("Token and new password required", 400, "BAD_REQUEST");
     }
 
+    let payload: ReturnType<typeof verifyPasswordResetToken>;
     try {
-      const payload = verifyPasswordResetToken(token);
+      payload = verifyPasswordResetToken(token);
       if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'password_reset' || !('sub' in payload)) {
         throw new AppError("Invalid token", 400, "INVALID_TOKEN");
       }
+    } catch {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
 
-      const userId = payload.sub as string;
-      const hashedPassword = await hashPassword(newPassword);
+    const userId = payload.sub as string;
+    const hashedPassword = await hashPassword(newPassword);
 
-      await prisma.user.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
         where: { id: userId },
         data: { passwordHash: hashedPassword },
       });
 
-      // Revoke all refresh tokens for security
-      await prisma.refreshToken.updateMany({
+      await tx.refreshToken.updateMany({
         where: { userId },
         data: { revokedAt: new Date() },
       });
+    });
 
-      await logAudit({
-        userId,
-        action: "update",
-        entity: "User",
-        entityId: userId,
-        detail: "Password reset",
-      });
+    await logAudit({
+      userId,
+      action: "update",
+      entity: "User",
+      entityId: userId,
+      detail: "Password reset",
+    });
 
-      res.status(200).json({ message: "Password reset successfully" });
-    } catch (error) {
-      res.status(400).json({ error: "Invalid or expired token" });
-    }
+    res.status(200).json({ message: "Password reset successfully" });
   },
 
   verifyEmail: async (req: Request, res: Response): Promise<void> => {
@@ -117,30 +121,44 @@ export const authController = {
       throw new AppError("Token required", 400, "BAD_REQUEST");
     }
 
+    let payload: ReturnType<typeof verifyPasswordResetToken>;
     try {
-      const payload = verifyPasswordResetToken(token);
+      payload = verifyPasswordResetToken(token);
       if (!payload || typeof payload !== 'object' || !('type' in payload) || payload.type !== 'email_verification' || !('sub' in payload)) {
         throw new AppError("Invalid token", 400, "INVALID_TOKEN");
       }
-
-      const userId = payload.sub as string;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { emailVerified: true },
-      });
-
-      await logAudit({
-        userId,
-        action: "update",
-        entity: "User",
-        entityId: userId,
-        detail: "Email verified",
-      });
-
-      res.status(200).json({ message: "Email verified successfully" });
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Invalid or expired token" });
+      return;
     }
+
+    const userId = payload.sub as string;
+    
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
+    
+    if (existingUser.emailVerified) {
+      res.status(200).json({ message: "Email already verified" });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { emailVerified: true },
+    });
+
+    await logAudit({
+      userId,
+      action: "update",
+      entity: "User",
+      entityId: userId,
+      detail: "Email verified",
+    });
+
+    res.status(200).json({ message: "Email verified successfully" });
   },
 
   resendVerification: async (req: Request, res: Response): Promise<void> => {
@@ -226,5 +244,91 @@ export const authController = {
     const { targetRole } = req.body;
     const user = await authService.switchRole(req.auth.userId, targetRole);
     res.status(200).json({ user });
+  },
+
+  googleLogin: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: googleUser.email } });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email.split('@')[0],
+          password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+          role: "member",
+          status: "active",
+          avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
+          metadata: {
+            googleAccessToken: googleUser.accessToken,
+            googleId: googleUser.id,
+            signupMethod: "google",
+          },
+        },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          metadata: {
+            ...(user.metadata as object || {}),
+            googleAccessToken: googleUser.accessToken,
+            googleId: googleUser.id,
+          },
+        },
+      });
+    }
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "login", entity: "Auth", detail: "Google Login" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(200).json({ user, accessToken });
+  },
+
+  googleSignup: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: googleUser.email } });
+    if (existingUser) {
+      throw new AppError("User already exists. Please login with Google.", 400, "USER_EXISTS");
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        email: googleUser.email,
+        name: googleUser.name || googleUser.email.split('@')[0],
+        password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+        role: "member",
+        status: "active",
+        avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
+        metadata: {
+          googleAccessToken: googleUser.accessToken,
+          googleId: googleUser.id,
+          signupMethod: "google",
+        },
+      },
+    });
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "create", entity: "User", detail: "Google Signup" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(201).json({ user, accessToken });
   },
 };

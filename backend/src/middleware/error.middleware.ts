@@ -47,16 +47,16 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     });
   }
 
-  const message = err instanceof Error ? err.message : "Unexpected server error";
+  const internalMessage = "An unexpected error occurred";
   logger.error("Unhandled server error", {
     method: req.method,
     path: req.originalUrl,
-    error: err instanceof Error ? err : new Error(message),
+    error: err instanceof Error ? err : new Error(String(err)),
   });
   return res.status(500).json({
     error: {
       code: "INTERNAL_SERVER_ERROR",
-      message,
+      message: internalMessage,
       timestamp: new Date().toISOString(),
     },
   });
