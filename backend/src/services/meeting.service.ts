@@ -49,6 +49,11 @@ export const meetingService = {
     if (filters?.contactId) where.contactId = filters.contactId;
     if (filters?.status) where.status = filters.status;
 
+    if (actor && (actor.role === "admin" || actor.role === "manager")) {
+      const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+      where.hostId = { in: actorIds };
+    }
+
     const meetings = await prisma.meeting.findMany({
       where,
       orderBy: { scheduledAt: "asc" },
@@ -62,7 +67,7 @@ export const meetingService = {
     return meetings;
   },
 
-  async getById(id: number) {
+  async getById(id: number, actor?: AccessActor) {
     const meeting = await prisma.meeting.findUnique({
       where: { id },
       include: {
@@ -73,6 +78,13 @@ export const meetingService = {
 
     if (!meeting) {
       throw new AppError("Meeting not found", 404, "NOT_FOUND");
+    }
+
+    if (actor && (actor.role === "admin" || actor.role === "manager")) {
+      const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+      if (!actorIds.includes(meeting.hostId)) {
+        throw new AppError("Access denied: you do not own this meeting", 403, "FORBIDDEN");
+      }
     }
 
     return meeting;
@@ -290,7 +302,7 @@ export const meetingService = {
   },
 
   async update(id: number, actor: AccessActor, input: UpdateMeetingInput) {
-    const existing = await this.getById(id);
+    const existing = await this.getById(id, actor);
     if (!existing) {
       throw new AppError("Meeting not found", 404, "NOT_FOUND");
     }
@@ -328,7 +340,7 @@ export const meetingService = {
   },
 
   async delete(id: number, actor: AccessActor) {
-    const existing = await this.getById(id);
+    const existing = await this.getById(id, actor);
     if (!existing) {
       throw new AppError("Meeting not found", 404, "NOT_FOUND");
     }
@@ -339,10 +351,14 @@ export const meetingService = {
   },
 
   async getUpcoming(actor: AccessActor, limit = 10) {
+    const actorIds = actor ? [actor.email, actor.userId].filter(Boolean) as string[] : [];
+    const hostFilter = actorIds.length > 0 ? { hostId: { in: actorIds } } : {};
+
     const meetings = await prisma.meeting.findMany({
       where: {
         scheduledAt: { gte: new Date() },
         status: "scheduled",
+        ...hostFilter,
       },
       orderBy: { scheduledAt: "asc" },
       take: limit,
@@ -354,9 +370,16 @@ export const meetingService = {
     return meetings;
   },
 
-  async getByLead(leadId: number) {
+  async getByLead(leadId: number, actor?: AccessActor) {
+    const where: any = { leadId };
+
+    if (actor && (actor.role === "admin" || actor.role === "manager")) {
+      const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+      where.hostId = { in: actorIds };
+    }
+
     const meetings = await prisma.meeting.findMany({
-      where: { leadId },
+      where,
       orderBy: { scheduledAt: "desc" },
     });
 

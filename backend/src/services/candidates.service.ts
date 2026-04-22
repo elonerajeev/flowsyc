@@ -139,25 +139,36 @@ function buildOfferLetterEmail(data: {
   return { subject, text, html };
 }
 
+type CandidateAccessScope = {
+  role: string;
+  email: string;
+  userId?: string;
+} | null | undefined;
+
 export const candidatesService = {
-  async list(query?: { page?: number; limit?: number; stage?: string; jobId?: number }) {
+  async list(query?: { page?: number; limit?: number; stage?: string; jobId?: number }, access?: CandidateAccessScope) {
     const page = query?.page ?? 1;
     const limit = Math.min(query?.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: { deletedAt: null; stage?: string; jobId?: number } = { deletedAt: null };
-    if (query?.stage) where.stage = query.stage as any;
+    const where: any = { deletedAt: null };
+    if (query?.stage) where.stage = query.stage;
     if (query?.jobId) where.jobId = query.jobId;
+
+    // Data isolation: Admin/Manager only see candidates they created
+    if (access?.role === "admin" || access?.role === "manager") {
+      where.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+    }
 
     const [candidates, total] = await Promise.all([
       prisma.candidate.findMany({
-        where: where as any,
+        where,
         orderBy: { createdAt: "desc" },
         include: { JobPosting: { select: { title: true } } },
         skip,
         take: limit,
       }),
-      prisma.candidate.count({ where: where as any }),
+      prisma.candidate.count({ where }),
     ]);
     return {
       data: candidates.map(mapCandidate),
@@ -165,7 +176,7 @@ export const candidatesService = {
     };
   },
 
-  async getById(candidateId: number) {
+  async getById(candidateId: number, access?: CandidateAccessScope) {
     const candidate = await prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { JobPosting: { select: { title: true } } },
@@ -173,10 +184,18 @@ export const candidatesService = {
     if (!candidate || candidate.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = candidate.createdBy === access.email || candidate.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     return mapCandidate(candidate);
   },
 
-  async create(input: CandidateInput) {
+  async create(input: CandidateInput, access?: CandidateAccessScope) {
     const existingEmail = await prisma.candidate.findUnique({ where: { email: input.email } });
     if (existingEmail) {
       throw new AppError("Candidate email already exists", 409, "CONFLICT");
@@ -196,6 +215,7 @@ export const candidatesService = {
           stage: input.stage ?? "applied",
           resume: input.resume ?? null,
           notes: input.notes ?? null,
+          createdBy: access?.email ?? null,
           updatedAt: new Date(),
         },
         include: { JobPosting: { select: { title: true } } },
@@ -209,10 +229,17 @@ export const candidatesService = {
     }
   },
 
-  async update(candidateId: number, patch: Partial<CandidateInput>) {
+  async update(candidateId: number, patch: Partial<CandidateInput>, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied: you can only update candidates you created", 403, "FORBIDDEN");
+      }
     }
 
     if (patch.jobId !== undefined) {
@@ -251,10 +278,17 @@ export const candidatesService = {
     }
   },
 
-  async delete(candidateId: number) {
+  async delete(candidateId: number, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied: you can only delete candidates you created", 403, "FORBIDDEN");
+      }
     }
 
     await prisma.candidate.update({
@@ -263,13 +297,20 @@ export const candidatesService = {
     });
   },
 
-  async moveToNextStage(candidateId: number, access?: { userId: string; role: string; email?: string }) {
-    const existing = await prisma.candidate.findUnique({ 
+  async moveToNextStage(candidateId: number, access?: { userId?: string; role: string; email?: string }) {
+    const existing = await prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { JobPosting: true },
     });
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const actorIds = [access.email, access.userId].filter(Boolean) as string[];
+      if (existing.createdBy && !actorIds.includes(existing.createdBy)) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
     }
 
     const stageFlow: Record<CandidateStage, CandidateStage | null> = {
@@ -454,10 +495,17 @@ export const candidatesService = {
     return offerLetter;
   },
 
-  async reject(candidateId: number, reason?: string) {
+  async reject(candidateId: number, reason?: string, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
     }
 
     if (existing.stage === "rejected") {

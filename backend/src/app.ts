@@ -6,7 +6,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
-import { apiRateLimiter } from "./middleware/rate-limit.middleware";
+import { apiRateLimiter, writeRateLimiter } from "./middleware/rate-limit.middleware";
 
 interface MetricsModule {
   metricsMiddleware?: express.RequestHandler;
@@ -66,7 +66,21 @@ export function createApp() {
   const app = express();
 
   app.set("trust proxy", 1);
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }));
   app.use(compression());
   app.use(
     cors({
@@ -96,6 +110,7 @@ export function createApp() {
   }
 
   app.use(apiRateLimiter);
+  app.use(writeRateLimiter);
 
   app.get(["/health", "/api/health"], (_req, res) => {
     res.status(200).json({

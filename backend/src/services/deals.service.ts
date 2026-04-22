@@ -74,6 +74,7 @@ export const dealsService = {
     // Data isolation: Admin/Manager can only see deals they created or assigned to them
     if (access?.role === "admin" || access?.role === "manager") {
       where.OR = [
+        { createdBy: access.email },
         { assignedTo: access.email },
         { assignedTo: access.userId ?? "" },
       ];
@@ -106,6 +107,14 @@ export const dealsService = {
       throw new AppError("Deal not found", 404, "NOT_FOUND");
     }
 
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isCreator = deal.createdBy === access.email;
+      const isAssignee = deal.assignedTo === access.email || deal.assignedTo === access.userId;
+      if (!isCreator && !isAssignee) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     if (access?.role === "employee" && deal.assignedTo !== access.email && deal.assignedTo !== access.userId) {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
@@ -113,7 +122,7 @@ export const dealsService = {
     return mapDeal(deal);
   },
 
-  async create(input: DealInput) {
+  async create(input: DealInput, access?: AccessScope) {
     const deal = await prisma.deal.create({
       data: {
         title: input.title,
@@ -125,6 +134,7 @@ export const dealsService = {
         actualClose: input.actualCloseDate ? new Date(input.actualCloseDate) : null,
         description: input.description,
         assignedTo: input.assignedTo,
+        createdBy: access?.email ?? null,
         tags: input.tags ?? [],
       },
     });

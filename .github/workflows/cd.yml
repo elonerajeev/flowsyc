@@ -1,0 +1,130 @@
+name:  CD — Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment target'
+        required: true
+        default: 'production'
+        type: choice
+        options: [production, staging]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false   # Never cancel an in-flight deploy
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  validate:
+    name: 🔍 Pre-deploy validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📦 Install backend deps
+        run: cd backend && npm ci
+
+      - name: 🗄️ Validate Prisma schema
+        run: cd backend && npx prisma validate
+
+      - name: 🔷 Backend typecheck
+        run: cd backend && npx tsc --noEmit
+
+      - name: 📦 Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: 🏗️ Frontend build test
+        run: cd frontend && npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_SOCKET_URL: ${{ secrets.VITE_SOCKET_URL }}
+
+  # ────────────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to EC2
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔑 Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          timeout: 300s
+          script: |
+            set -e
+            cd /home/${{ secrets.EC2_USER }}/CRM
+
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
+            echo "📦 Installing backend dependencies..."
+            cd backend && npm ci --omit=dev
+            
+            echo "🗄️ Running database migrations..."
+            npx prisma migrate deploy
+            npx prisma generate
+
+            echo "🏗️ Building backend..."
+            npm run build
+            cd ..
+
+            echo "📦 Installing frontend dependencies..."
+            cd frontend && npm ci
+            
+            echo "🏗️ Building frontend..."
+            npm run build
+            cd ..
+
+            echo "🔄 Restarting services..."
+            docker-compose up -d --build --no-deps backend frontend
+
+            echo "⏳ Waiting for health check..."
+            sleep 10
+
+      - name: 🏥 Health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            RESPONSE=$(curl -sf http://localhost:3000/api/health || echo "FAILED")
+            echo "Health check response: $RESPONSE"
+            if echo "$RESPONSE" | grep -q "FAILED"; then
+              echo "❌ Health check failed!"
+              exit 1
+            fi
+            echo "✅ Deployment successful!"
+
+      - name: 📢 Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Deployment to production succeeded!"
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "   Actor:  ${{ github.actor }}"
+
+      - name: 📢 Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment FAILED!"
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Actor:  ${{ github.actor }}"
+          echo "   Check GitHub Actions logs for details."

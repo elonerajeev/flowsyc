@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import type { AccessActor } from "../utils/access-control";
 
 type ReportRecord = {
   title: string;
@@ -23,12 +24,19 @@ function formatMonthRange(dates: Date[]) {
   return firstLabel === lastLabel ? firstLabel : `${firstLabel} to ${lastLabel}`;
 }
 
+function buildActorFilter(actor?: AccessActor) {
+  if (!actor || actor.role === "employee") return {};
+  const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+  return { createdBy: { in: actorIds } };
+}
+
 export const reportsService = {
-  async list() {
+  async list(actor?: AccessActor) {
+    const actorFilter = buildActorFilter(actor);
     const [invoices, clients, projects, teamMembers] = await Promise.all([
-      prisma.invoice.findMany({ where: { deletedAt: null }, select: { amount: true, createdAt: true, client: true, status: true, due: true } }),
-      prisma.client.findMany({ where: { deletedAt: null }, select: { name: true, status: true, tier: true, healthScore: true, revenue: true, industry: true } }),
-      prisma.project.findMany({ where: { deletedAt: null }, select: { name: true, status: true, progress: true, stage: true, budget: true } }),
+      prisma.invoice.findMany({ where: { deletedAt: null, ...actorFilter }, select: { amount: true, createdAt: true, client: true, status: true, due: true } }),
+      prisma.client.findMany({ where: { deletedAt: null, ...(actor ? { assignedTo: { in: [actor.email, actor.userId].filter(Boolean) as string[] } } : {}) }, select: { name: true, status: true, tier: true, healthScore: true, revenue: true, industry: true } }),
+      prisma.project.findMany({ where: { deletedAt: null, ...actorFilter }, select: { name: true, status: true, progress: true, stage: true, budget: true } }),
       prisma.teamMember.findMany({ where: { deletedAt: null }, select: { name: true, attendance: true, department: true, role: true, designation: true } }),
     ]);
 
@@ -140,12 +148,14 @@ export const reportsService = {
     return reports;
   },
 
-  async getAnalytics() {
+  async getAnalytics(actor?: AccessActor) {
+    const actorFilter = buildActorFilter(actor);
+    const clientFilter = actor ? { assignedTo: { in: [actor.email, actor.userId].filter(Boolean) as string[] } } : {};
     const [invoices, clients, projects, candidates, teamMembers, payroll] = await Promise.all([
-      prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
-      prisma.client.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
-      prisma.project.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
-      prisma.candidate.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "asc" } }),
+      prisma.invoice.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
+      prisma.client.findMany({ where: { deletedAt: null, ...clientFilter }, orderBy: { createdAt: "asc" } }),
+      prisma.project.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
+      prisma.candidate.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
       prisma.teamMember.findMany({ where: { deletedAt: null } }),
       prisma.payroll.findMany({ where: { deletedAt: null }, orderBy: { period: "asc" } }),
     ]);

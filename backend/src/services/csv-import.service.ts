@@ -44,8 +44,9 @@ export const csvImportService = {
     };
   },
 
-  async listImports(): Promise<CSVImportRecord[]> {
+  async listImports(importedBy?: string): Promise<CSVImportRecord[]> {
     const imports = await prisma.csvImport.findMany({
+      where: importedBy ? { importedBy } : undefined,
       orderBy: { createdAt: "desc" },
       take: 50,
     });
@@ -64,9 +65,11 @@ export const csvImportService = {
     }));
   },
 
-  async getImport(id: number): Promise<CSVImportRecord | null> {
+  async getImport(id: number, importedBy?: string): Promise<CSVImportRecord | null> {
     const importRecord = await prisma.csvImport.findUnique({ where: { id } });
     if (!importRecord) return null;
+
+    if (importedBy && importRecord.importedBy !== importedBy) return null;
 
     return {
       id: importRecord.id,
@@ -236,7 +239,13 @@ export const csvImportService = {
     return { success, failed, errors };
   },
 
-  async deleteImport(id: number): Promise<boolean> {
+  async deleteImport(id: number, importedBy?: string): Promise<boolean> {
+    if (importedBy) {
+      const record = await prisma.csvImport.findUnique({ where: { id } });
+      if (!record || record.importedBy !== importedBy) {
+        throw new Error("Access denied: you do not own this import");
+      }
+    }
     // Delete the import record
     await prisma.csvImport.delete({ where: { id } });
 

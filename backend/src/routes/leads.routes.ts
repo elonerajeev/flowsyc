@@ -31,7 +31,7 @@ router.get(
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
     const minScore = Number(req.query.minScore) || 80;
-    const leads = await leadsService.getHotLeads(minScore);
+    const leads = await leadsService.getHotLeads(minScore, req.auth);
     res.json(leads);
   }),
 );
@@ -52,7 +52,7 @@ router.get(
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
     const days = Number(req.query.days) || 14;
-    const leads = await leadsService.getColdLeads(days);
+    const leads = await leadsService.getColdLeads(days, req.auth);
     res.json(leads);
   }),
 );

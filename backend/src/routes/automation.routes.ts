@@ -338,24 +338,29 @@ router.get(
 // ACTIVITY LOG
 // ============================================
 
-// Get recent activities
+// Get recent activities — scoped to the requesting user
 router.get(
   "/activities",
+  requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 100);
     const entityType = req.query.entityType as string | undefined;
     const entityId = req.query.entityId ? Number(req.query.entityId) : undefined;
-    
-    const where: any = { isVisible: true };
+
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const where: any = {
+      isVisible: true,
+      ...(actorIds.length > 0 ? { performedBy: { in: actorIds } } : {}),
+    };
     if (entityType) where.entityType = entityType;
     if (entityId && !isNaN(entityId)) where.entityId = entityId;
-    
+
     const activities = await prisma.activityLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: limit
+      take: limit,
     });
-    
+
     res.json(activities);
   })
 );
@@ -433,15 +438,20 @@ router.get(
   "/gtm/lead-score/:leadId",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
-    const lead = await prisma.lead.findUnique({
-      where: { id: Number(req.params.leadId) }
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id: Number(req.params.leadId),
+        deletedAt: null,
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
+      }
     });
-    
+
     if (!lead) {
       res.status(404).json({ error: "Lead not found" });
       return;
     }
-    
+
     const score = await GTMAutomationService.calculateLeadScore(lead.id);
     res.json({ leadId: lead.id, leadName: `${lead.firstName} ${lead.lastName}`, score });
   })
@@ -452,7 +462,10 @@ router.post(
   "/gtm/recalculate-lead-scores",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const leads = await prisma.lead.findMany();
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const leads = await prisma.lead.findMany({
+      where: actorIds.length > 0 ? { assignedTo: { in: actorIds }, deletedAt: null } : { deletedAt: null },
+    });
     
     const results = [];
     for (const lead of leads) {
@@ -489,7 +502,10 @@ router.post(
   "/gtm/recalculate-client-health",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const clients = await prisma.client.findMany();
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const clients = await prisma.client.findMany({
+      where: actorIds.length > 0 ? { assignedTo: { in: actorIds }, deletedAt: null } : { deletedAt: null },
+    });
     
     const results = [];
     for (const client of clients) {
@@ -507,10 +523,12 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const days = Math.max(1, Math.min(90, Number(req.query.days) || 14));
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const coldLeads = await prisma.lead.findMany({
       where: {
         updatedAt: { lt: new Date(Date.now() - days * 24 * 60 * 60 * 1000) },
-        tags: { has: "cold-lead" }
+        tags: { has: "cold-lead" },
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
       }
     });
     res.json({ days, count: coldLeads.length, leads: coldLeads.map(l => ({ id: l.id, name: `${l.firstName} ${l.lastName}`, company: l.company })) });
@@ -524,10 +542,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const days = Math.max(1, Math.min(90, Number(req.query.days) || 7));
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const staleDeals = await prisma.deal.findMany({
       where: {
         updatedAt: { lt: cutoffDate },
-        stage: { notIn: ["closed_won", "closed_lost"] }
+        stage: { notIn: ["closed_won", "closed_lost"] },
+        ...(actorIds.length > 0 ? { createdBy: { in: actorIds } } : {}),
       }
     });
     res.json({ days, count: staleDeals.length, deals: staleDeals });
@@ -540,13 +560,15 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const threshold = Math.max(0, Math.min(100, Number(req.query.threshold) || 50));
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const clients = await prisma.client.findMany({
       where: {
         healthScore: { lt: threshold },
-        status: "active"
+        status: "active",
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
       }
     });
-    
+
     res.json({ threshold, count: clients.length, clients: clients.map(c => ({ id: c.id, name: c.name, healthScore: c.healthScore, healthGrade: c.healthGrade })) });
   })
 );
@@ -627,7 +649,7 @@ router.get(
       orderBy: { createdAt: "desc" },
       take: 50
     });
-    
+
     res.json(alerts);
   })
 );

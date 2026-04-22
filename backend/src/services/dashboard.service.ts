@@ -93,7 +93,19 @@ function buildHeatmap(timestamps: Date[]) {
   });
 }
 
-async function buildStaffDashboard() {
+async function buildStaffDashboard(actor?: AccessActor) {
+  // Scope all queries to the actor's own resources (prevents cross-admin data leaks)
+  const actorIds = actor ? [actor.email, actor.userId].filter(Boolean) as string[] : [];
+  const clientWhere = actorIds.length > 0
+    ? { deletedAt: null, OR: actorIds.map(id => ({ assignedTo: id })) } as const
+    : { deletedAt: null } as const;
+  const projectWhere = actorIds.length > 0
+    ? { deletedAt: null, OR: actorIds.map(id => ({ createdBy: id })) } as const
+    : { deletedAt: null } as const;
+  const invoiceWhere = actorIds.length > 0
+    ? { deletedAt: null, OR: actorIds.map(id => ({ createdBy: id })) } as const
+    : { deletedAt: null } as const;
+
   const [
     clientCounts,
     projectCounts,
@@ -106,12 +118,12 @@ async function buildStaffDashboard() {
   ] = await Promise.all([
     prisma.client.groupBy({
       by: ["status"],
-      where: { deletedAt: null },
+      where: clientWhere,
       _count: { _all: true },
     }),
     prisma.project.groupBy({
       by: ["status"],
-      where: { deletedAt: null },
+      where: projectWhere,
       _count: { _all: true },
     }),
     prisma.task.groupBy({
@@ -120,7 +132,7 @@ async function buildStaffDashboard() {
       _count: { _all: true },
     }),
     prisma.invoice.findMany({
-      where: { deletedAt: null },
+      where: invoiceWhere,
       orderBy: { createdAt: "asc" },
       select: { amount: true, createdAt: true, date: true },
       take: 500,
@@ -234,35 +246,23 @@ async function buildStaffDashboard() {
 
   const [recentTasks, recentClients, recentProjects, recentInvoices] = await Promise.all([
     prisma.task.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 1000 }),
-    prisma.client.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
-    prisma.project.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
-    prisma.invoice.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 500 }),
+    prisma.client.findMany({ where: { ...clientWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
+    prisma.project.findMany({ where: { ...projectWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
+    prisma.invoice.findMany({ where: { ...invoiceWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
   ]);
 
   const atRiskClients = await prisma.client.count({
-    where: {
-      deletedAt: null,
-      healthScore: { lt: 70 },
-    },
+    where: { ...clientWhere, healthScore: { lt: 70 } },
   });
 
   const priorityAccounts = await prisma.client.findMany({
-    where: {
-      deletedAt: null,
-      status: "active",
-    },
-    orderBy: [
-      { tier: "asc" },
-      { healthScore: "desc" },
-    ],
+    where: { ...clientWhere, status: "active" },
+    orderBy: [{ tier: "asc" }, { healthScore: "desc" }],
     take: 3,
   });
 
   const atRiskAccountDetails = await prisma.client.findMany({
-    where: {
-      deletedAt: null,
-      healthScore: { lt: 70 },
-    },
+    where: { ...clientWhere, healthScore: { lt: 70 } },
     orderBy: { healthScore: "asc" },
     take: 5,
   });
@@ -600,6 +600,6 @@ export const dashboardService = {
       return buildClientDashboard(actor);
     }
 
-    return buildStaffDashboard();
+    return buildStaffDashboard(actor);
   },
 };

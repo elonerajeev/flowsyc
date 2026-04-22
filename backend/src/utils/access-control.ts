@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
+import { AppError } from "../middleware/error.middleware";
 
 export type AccessActor =
   | {
@@ -9,6 +10,9 @@ export type AccessActor =
     }
   | null
   | undefined;
+
+// Alias used by older service files
+export type AccessScope = AccessActor;
 
 function deriveInitials(value: string) {
   return value
@@ -116,6 +120,27 @@ export async function getClientAccessEmail(actor: AccessActor) {
   }
 
   return actor.email.trim().toLowerCase();
+}
+
+/**
+ * Throws 403 if the actor doesn't own the resource.
+ * A resource is "owned" when its createdBy OR assignedTo matches the actor's email/userId.
+ */
+export function assertResourceOwnership(
+  actor: AccessActor,
+  resource: { createdBy?: string | null; assignedTo?: string | null },
+  label = "resource",
+) {
+  if (!actor || actor.role === "employee") return; // employees handled by their own scope
+  if (actor.role !== "admin" && actor.role !== "manager") return;
+
+  const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+  const resourceOwners = [resource.createdBy, resource.assignedTo].filter(Boolean) as string[];
+  const hasAccess = resourceOwners.some(o => actorIds.includes(o));
+
+  if (!hasAccess) {
+    throw new AppError(`Access denied: you do not own this ${label}`, 403, "FORBIDDEN");
+  }
 }
 
 export async function getInvoiceClientLabels(actor: AccessActor) {

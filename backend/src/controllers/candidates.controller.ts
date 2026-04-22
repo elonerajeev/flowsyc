@@ -13,16 +13,16 @@ function readCandidateId(request: Request) {
 }
 
 export const candidatesController = {
-  list: async (_req: Request, res: Response): Promise<void> => {
-    const candidates = await candidatesService.list();
+  list: async (req: Request, res: Response): Promise<void> => {
+    const candidates = await candidatesService.list(req.query as any, req.auth);
     res.status(200).json(candidates);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const candidate = await candidatesService.getById(readCandidateId(req));
+    const candidate = await candidatesService.getById(readCandidateId(req), req.auth);
     res.status(200).json(candidate);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const candidate = await candidatesService.create(req.body);
+    const candidate = await candidatesService.create(req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -36,7 +36,7 @@ export const candidatesController = {
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const candidateId = readCandidateId(req);
-    const candidate = await candidatesService.update(candidateId, req.body);
+    const candidate = await candidatesService.update(candidateId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -50,7 +50,7 @@ export const candidatesController = {
   },
   remove: async (req: Request, res: Response): Promise<void> => {
     const candidateId = readCandidateId(req);
-    await candidatesService.delete(candidateId);
+    await candidatesService.delete(candidateId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -100,7 +100,7 @@ export const candidatesController = {
   },
   reject: async (req: Request, res: Response): Promise<void> => {
     const candidateId = readCandidateId(req);
-    const candidate = await candidatesService.reject(candidateId, req.body.reason);
+    const candidate = await candidatesService.reject(candidateId, req.body.reason, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,

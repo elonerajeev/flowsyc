@@ -52,8 +52,16 @@ export const activityService = {
     }));
   },
 
-  async getRecent(limit = 20) {
+  async getRecent(limit = 20, actor?: AccessActor) {
+    const where: any = {};
+
+    if (actor && (actor.role === "admin" || actor.role === "manager")) {
+      const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+      where.createdBy = { in: actorIds };
+    }
+
     const activities = await prisma.activity.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       take: limit,
     });

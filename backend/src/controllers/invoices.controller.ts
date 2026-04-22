@@ -37,7 +37,7 @@ export const invoicesController = {
     res.status(200).json(invoice);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const invoice = await invoicesService.create(req.body);
+    const invoice = await invoicesService.create(req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -71,7 +71,7 @@ export const invoicesController = {
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const invoiceId = readInvoiceId(req);
-    const invoice = await invoicesService.update(invoiceId, req.body);
+    const invoice = await invoicesService.update(invoiceId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,

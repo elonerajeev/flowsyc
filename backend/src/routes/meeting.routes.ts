@@ -26,7 +26,7 @@ router.get("/upcoming", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const meeting = await meetingService.getById(Number(req.params.id));
+  const meeting = await meetingService.getById(Number(req.params.id), req.auth);
   res.json({ data: meeting });
 });
 
@@ -48,7 +48,7 @@ router.delete("/:id", async (req, res) => {
 });
 
 router.get("/lead/:leadId", async (req, res) => {
-  const meetings = await meetingService.getByLead(Number(req.params.leadId));
+  const meetings = await meetingService.getByLead(Number(req.params.leadId), req.auth);
   res.json({ data: meetings });
 });
 
@@ -68,7 +68,7 @@ router.post(
   "/:id/google-meet",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const meeting = await meetingService.getById(Number(req.params.id));
+    const meeting = await meetingService.getById(Number(req.params.id), req.auth);
     if (!meeting) {
       return res.status(404).json({ error: "Meeting not found" });
     }

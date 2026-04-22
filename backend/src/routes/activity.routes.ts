@@ -24,7 +24,7 @@ router.get("/:entityType/:entityId", async (req, res) => {
 
 router.get("/recent", async (req, res) => {
   const limit = req.query.limit ? Number(req.query.limit) : 20;
-  const activities = await activityService.getRecent(limit);
+  const activities = await activityService.getRecent(limit, req.auth);
   res.json({ data: activities });
 });
 

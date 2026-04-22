@@ -1,0 +1,144 @@
+name: ✅ CI — Lint, Type-check & Test
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  backend:
+    name: 🔧 Backend — Lint + Typecheck + Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/crm_test
+      JWT_SECRET: ci-test-secret-do-not-use-in-production-32chars
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-do-not-use-32chars
+      NODE_ENV: test
+      FRONTEND_URL: http://localhost:5173
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🗄️ Generate Prisma client
+        run: npx prisma generate
+
+      - name: 🗄️ Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: 🔍 Lint
+        run: npm run lint
+
+      - name: 🔷 TypeScript check
+        run: npx tsc --noEmit
+
+      - name: 🧪 Run tests
+        run: npm test -- --coverage --passWithNoTests
+
+      - name: 📊 Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+
+  # ────────────────────────────────────────────────────────────
+  frontend:
+    name: 🎨 Frontend — Lint + Typecheck + Test + Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      VITE_API_URL: http://localhost:3000/api
+      VITE_SOCKET_URL: http://localhost:3000
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Lint
+        run: npm run lint
+
+      - name: 🔷 TypeScript check
+        run: npx tsc --noEmit
+
+      - name: 🧪 Run tests
+        run: npm run test -- --run --passWithNoTests
+
+      - name: 🏗️ Build (validate bundle)
+        run: npm run build
+
+      - name: 📊 Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 1
+
+  # ────────────────────────────────────────────────────────────
+  summary:
+    name: 📋 CI Summary
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: ✅ All checks passed
+        if: ${{ needs.backend.result == 'success' && needs.frontend.result == 'success' }}
+        run: echo "All CI checks passed! Ready to merge."
+
+      - name: ❌ Checks failed
+        if: ${{ needs.backend.result == 'failure' || needs.frontend.result == 'failure' }}
+        run: |
+          echo "CI failed!"
+          echo "Backend: ${{ needs.backend.result }}"
+          echo "Frontend: ${{ needs.frontend.result }}"
+          exit 1

@@ -156,12 +156,12 @@ export const leadsService = {
     const sortBy = params.sortBy || "createdAt";
     const sortOrder = params.sortOrder === "asc" ? "asc" : "desc";
 
-    // Cache full unfiltered admin/manager list (most common case)
+    // Cache full unfiltered admin/manager list (most common case) — keyed per user to prevent cross-user leaks
     const isUnfiltered = !params.status && !params.source && !params.search &&
       !params.assignedTo && !params.minScore && !params.maxScore &&
       access?.role !== "employee" && (params.limit || 50) >= 500;
 
-    const cacheKey = `leads:list:${params.limit || 50}`;
+    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.limit || 50}`;
     if (isUnfiltered) {
       const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
       if (cached) return cached;
@@ -504,26 +504,30 @@ const leads = await prisma.lead.findMany({
     return { total: leads.length, hotLeads, warmLeads, mediumLeads, coldLeads, message: "All lead scores recalculated" };
   },
 
-  async getHotLeads(minScore: number = 80) {
+  async getHotLeads(minScore: number = 80, access?: AccessScope) {
+    const ownerFilter: Prisma.LeadWhereInput =
+      access?.role === "admin" || access?.role === "manager"
+        ? { OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }] }
+        : access?.role === "employee"
+          ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
+          : {};
     const leads = await prisma.lead.findMany({
-      where: {
-        score: { gte: minScore },
-        status: { notIn: ["closed_won", "closed_lost"] },
-        deletedAt: null,
-      },
+      where: { score: { gte: minScore }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
       orderBy: { score: "desc" },
     });
     return leads.map(mapLead);
   },
 
-  async getColdLeads(days: number = 14) {
+  async getColdLeads(days: number = 14, access?: AccessScope) {
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const ownerFilter: Prisma.LeadWhereInput =
+      access?.role === "admin" || access?.role === "manager"
+        ? { OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }] }
+        : access?.role === "employee"
+          ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
+          : {};
     const leads = await prisma.lead.findMany({
-      where: {
-        updatedAt: { lt: cutoffDate },
-        status: { notIn: ["closed_won", "closed_lost"] },
-        deletedAt: null,
-      },
+      where: { updatedAt: { lt: cutoffDate }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
       orderBy: { updatedAt: "asc" },
     });
     return leads.map(mapLead);

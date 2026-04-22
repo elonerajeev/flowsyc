@@ -216,13 +216,31 @@ export const contactsService = {
   async getById(id: number, access?: AccessScope) {
     const where: any = { id, deletedAt: null };
 
-    // RBAC: Admins/Managers see all; Employees see contacts from clients they're assigned to
-    if (access?.role === "employee") {
+    if (access?.role === "admin" || access?.role === "manager") {
+      // Same isolation as list(): contacts from leads or assigned clients only
+      const [userLeads, assignedClients] = await Promise.all([
+        prisma.lead.findMany({
+          where: {
+            OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }],
+            deletedAt: null,
+          },
+          select: { email: true },
+        }),
+        prisma.client.findMany({
+          where: {
+            OR: [{ assignedTo: access.email }, { assignedTo: access.userId ?? "" }],
+            deletedAt: null,
+          },
+          select: { id: true },
+        }),
+      ]);
+      where.OR = [
+        { email: { in: userLeads.map(l => l.email) } },
+        { clientId: { in: assignedClients.map(c => c.id) } },
+      ];
+    } else if (access?.role === "employee") {
       const assignedClients = await prisma.client.findMany({
-        where: {
-          assignedTo: access.email,
-          deletedAt: null,
-        },
+        where: { assignedTo: access.email, deletedAt: null },
         select: { id: true },
       });
       where.clientId = { in: assignedClients.map(c => c.id) };
