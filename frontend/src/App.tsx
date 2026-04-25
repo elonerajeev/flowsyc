@@ -56,6 +56,7 @@ const AutomationScheduledPage = lazy(() => import("@/pages/AutomationScheduledPa
 const AutomationLogsPage = lazy(() => import("@/pages/AutomationLogsPage"));
 const GTMOpsPage = lazy(() => import("@/pages/GTMOpsPage"));
 const GTMFlowPage = lazy(() => import("@/pages/GTMFlowPage"));
+const InboxPage = lazy(() => import("@/pages/InboxPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -133,6 +134,7 @@ const App = () => {
                               <Route path="/overview" element={<RouteAccessGuard><Dashboard /></RouteAccessGuard>} />
                               <Route path="/overview/activity" element={<RouteAccessGuard><ActivityPage /></RouteAccessGuard>} />
                               <Route path="/overview/messages" element={<RouteAccessGuard><MessagesPage /></RouteAccessGuard>} />
+                              <Route path="/overview/inbox" element={<RouteAccessGuard><InboxPage /></RouteAccessGuard>} />
 
                               <Route path="/people/team" element={<Navigate to="/people/teams" replace />} />
                               <Route path="/people/teams" element={<RouteAccessGuard><TeamsPage /></RouteAccessGuard>} />

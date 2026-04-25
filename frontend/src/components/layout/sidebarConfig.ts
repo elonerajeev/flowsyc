@@ -65,6 +65,7 @@ export const sidebarSections: SidebarSection[] = [
       { to: "/overview", icon: Home, label: "Dashboard", roles: ["admin", "manager", "employee", "client"] },
       { to: "/overview/activity", icon: Inbox, label: "Activity", roles: ["admin", "manager", "employee", "client"], badge: "New" },
       { to: "/overview/messages", icon: MessageSquare, label: "Messages", roles: ["admin", "manager"], badge: "3" },
+      { to: "/overview/inbox", icon: Inbox, label: "Email Inbox", roles: ["admin", "manager", "employee"] },
     ],
   },
   {

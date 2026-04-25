@@ -1057,10 +1057,7 @@ function resolveTemplateString(template: string, event: TriggerEvent): string {
 }
 
 function buildEmailFromTemplate(template: string, data: Record<string, unknown>, event: TriggerEvent): string {
-<<<<<<< HEAD
-=======
   // Default templates
->>>>>>> security-fix
   const templates: Record<string, string> = {
     "lead_welcome": `
 <!DOCTYPE html>
