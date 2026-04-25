@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Send, Clock, Inbox, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Mail, Send, Clock, Inbox, ArrowUpRight, ArrowDownLeft, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { crmService } from "@/services/crm";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  lead: { id: number; firstName: string; lastName: string; email: string };
+  // Single lead mode
+  lead?: { id: number; firstName: string; lastName: string; email: string };
+  // Bulk mode
+  leads?: Array<{ id: number; firstName: string; lastName: string; email: string }>;
 }
 
 const TEMPLATES = [
@@ -38,25 +42,37 @@ const TEMPLATES = [
   },
 ];
 
-export default function LeadEmailDialog({ open, onClose, lead }: Props) {
+export default function LeadEmailDialog({ open, onClose, lead, leads }: Props) {
+  const { user } = useAuth();
+  const senderName = user?.name ?? "the team";
+
+  // Resolve targets — single or bulk
+  const targets = leads ?? (lead ? [lead] : []);
+  const isBulk = targets.length > 1;
+  const firstLead = targets[0];
+
   const [subject, setSubject] = useState("");
   const [body, setBody]       = useState("");
   const [sending, setSending] = useState(false);
 
-  // Email history
+  // Email history only in single mode
   const { data: history, isLoading: historyLoading } = useQuery({
-    queryKey: ["lead-emails", lead.id],
-    queryFn: () => crmService.getLeadEmails(lead.id),
-    enabled: open,
+    queryKey: ["lead-emails", firstLead?.id],
+    queryFn: () => crmService.getLeadEmails(firstLead!.id),
+    enabled: open && !isBulk && !!firstLead,
     staleTime: 30_000,
   });
 
   const applyTemplate = (tpl: typeof TEMPLATES[0]) => {
-    setSubject(tpl.subject.replace("{{firstName}}", lead.firstName));
+    const firstName = isBulk ? "{{firstName}}" : (firstLead?.firstName ?? "");
+    setSubject(tpl.subject
+      .replace(/\{\{firstName\}\}/g, firstName)
+      .replace(/\{\{senderName\}\}/g, senderName)
+    );
     setBody(tpl.body
-      .replace(/\{\{firstName\}\}/g, lead.firstName)
-      .replace(/\{\{company\}\}/g, "your company")
-      .replace(/\{\{senderName\}\}/g, "the team")
+      .replace(/\{\{firstName\}\}/g, firstName)
+      .replace(/\{\{company\}\}/g, isBulk ? "your company" : "your company")
+      .replace(/\{\{senderName\}\}/g, senderName)
     );
   };
 
@@ -66,16 +82,36 @@ export default function LeadEmailDialog({ open, onClose, lead }: Props) {
       return;
     }
     setSending(true);
+    let sent = 0;
+    let failed = 0;
     try {
-      await crmService.sendLeadEmail(lead.id, { subject: subject.trim(), body: body.trim() });
-      toast.success(`Email sent to ${lead.email}`, {
-        description: lead.status === "new" ? "Lead status auto-advanced to 'Contacted'" : undefined,
-      });
+      await Promise.allSettled(
+        targets.map(async (t) => {
+          // Personalise body per recipient in bulk mode
+          const personalBody = body
+            .replace(/\{\{firstName\}\}/g, t.firstName)
+            .replace(/\{\{lastName\}\}/g, t.lastName);
+          const personalSubject = subject
+            .replace(/\{\{firstName\}\}/g, t.firstName);
+          try {
+            await crmService.sendLeadEmail(t.id, { subject: personalSubject, body: personalBody });
+            sent++;
+          } catch {
+            failed++;
+          }
+        })
+      );
+
+      if (failed === 0) {
+        toast.success(isBulk ? `Sent to ${sent} leads` : `Email sent to ${firstLead?.email}`, {
+          description: !isBulk && firstLead ? "Lead auto-advanced to 'Contacted' if status was 'New'" : undefined,
+        });
+      } else {
+        toast.warning(`Sent: ${sent}, Failed: ${failed}`);
+      }
       setSubject("");
       setBody("");
       onClose();
-    } catch (err) {
-      toast.error("Failed to send email. Check your SMTP settings.");
     } finally {
       setSending(false);
     }
@@ -90,14 +126,25 @@ export default function LeadEmailDialog({ open, onClose, lead }: Props) {
     return new Date(bDate).getTime() - new Date(aDate).getTime();
   });
 
+  if (!firstLead) return null;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="w-4 h-4 text-primary" />
-            Email — {lead.firstName} {lead.lastName}
-            <span className="text-xs font-normal text-muted-foreground ml-1">{lead.email}</span>
+            {isBulk ? (
+              <>
+                <Users className="w-4 h-4" />
+                Bulk Email — {targets.length} leads
+              </>
+            ) : (
+              <>
+                Email — {firstLead.firstName} {firstLead.lastName}
+                <span className="text-xs font-normal text-muted-foreground ml-1">{firstLead.email}</span>
+              </>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -106,12 +153,14 @@ export default function LeadEmailDialog({ open, onClose, lead }: Props) {
             <TabsTrigger value="compose" className="flex-1 gap-1.5">
               <Send className="w-3.5 h-3.5" /> Compose
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex-1 gap-1.5">
-              <Clock className="w-3.5 h-3.5" /> History
-              {allEmails.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">{allEmails.length}</Badge>
-              )}
-            </TabsTrigger>
+            {!isBulk && (
+              <TabsTrigger value="history" className="flex-1 gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> History
+                {allEmails.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1">{allEmails.length}</Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Compose ── */}
@@ -133,8 +182,27 @@ export default function LeadEmailDialog({ open, onClose, lead }: Props) {
 
             <div className="space-y-1.5">
               <Label className="text-xs">To</Label>
-              <Input value={lead.email} disabled className="bg-muted/40 text-sm" />
+              {isBulk ? (
+                <div className="flex flex-wrap gap-1 p-2 rounded-md bg-muted/40 border text-xs min-h-[36px]">
+                  {targets.slice(0, 5).map((t) => (
+                    <Badge key={t.id} variant="secondary" className="text-[10px]">
+                      {t.firstName} {t.lastName}
+                    </Badge>
+                  ))}
+                  {targets.length > 5 && (
+                    <Badge variant="outline" className="text-[10px]">+{targets.length - 5} more</Badge>
+                  )}
+                </div>
+              ) : (
+                <Input value={firstLead.email} disabled className="bg-muted/40 text-sm" />
+              )}
             </div>
+
+            {isBulk && (
+              <p className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/30 rounded-md px-3 py-2">
+                Use <code className="font-mono">{"{{firstName}}"}</code> in subject/body — it will be replaced per recipient.
+              </p>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">Subject</Label>

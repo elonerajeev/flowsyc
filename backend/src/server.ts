@@ -6,6 +6,7 @@ import { initializeIO, getIO } from "./socket";
 import http from "http";
 import { startAutomationCron, stopAutomationCron } from "./services/automation-engine";
 import { startInboxScheduler, stopInboxScheduler } from "./services/inbox-scheduler.service";
+import { purgeOldAuditLogs } from "./utils/audit";
 
 const app = createApp();
 const server = http.createServer(app);
@@ -15,6 +16,7 @@ initializeIO(server);
 
 async function start() {
   await prisma.$connect();
+  purgeOldAuditLogs().catch(() => {}); // one-time cleanup on startup
   server.listen(env.PORT, () => {
     logger.info("Backend listening", {
       url: `http://localhost:${env.PORT}`,

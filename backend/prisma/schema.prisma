@@ -234,6 +234,9 @@ model Task {
   @@index([projectId])
   @@index([dueDate])
   @@index([assignee])
+  @@index([deletedAt, column, updatedAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt, projectId, column, updatedAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt, priority, column, updatedAt(sort: Desc), id(sort: Desc)])
 }
 
 model Comment {
@@ -254,6 +257,8 @@ model Comment {
   @@index([taskId])
   @@index([projectId])
   @@index([deletedAt])
+  @@index([taskId, deletedAt, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([projectId, deletedAt, createdAt(sort: Desc), id(sort: Desc)])
 }
 
 model Attachment {
@@ -278,6 +283,8 @@ model Attachment {
   @@index([taskId])
   @@index([projectId])
   @@index([deletedAt])
+  @@index([taskId, deletedAt, createdAt(sort: Desc)])
+  @@index([projectId, deletedAt, createdAt(sort: Desc)])
 }
 
 model TeamMember {

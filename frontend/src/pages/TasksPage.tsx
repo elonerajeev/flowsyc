@@ -651,36 +651,42 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6" ref={boardRef}>
-      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
-        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -left-16 -bottom-16 h-52 w-52 rounded-full bg-info/5 blur-3xl" />
-
-        <div className="relative space-y-5 p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
                 <ListTodo className="h-3.5 w-3.5 text-primary" />
-                Workspace
+                <span className="text-xs font-medium text-muted-foreground">Workspace · Tasks</span>
               </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                Task <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Board</span>
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Plan work by status, track delivery flow, and keep priorities moving across your active projects.
-              </p>
+              <h1 className="font-display text-3xl font-semibold text-foreground">Task Board</h1>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Plan work by status, track delivery flow, and keep priorities moving.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
-                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                Refresh
-              </Button>
-              {canUseQuickCreate && (
-                <Button size="sm" onClick={() => openQuickCreate("task")} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  New Task
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+                <ListTodo className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium">{stats.total} total</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2">
+                <span className="text-sm font-medium text-warning">{stats.todo} to do</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-info/30 bg-info/10 px-4 py-2">
+                <span className="text-sm font-medium text-info">{stats.inProgress} in progress</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+                <span className="text-sm font-medium text-success">{stats.done} done</span>
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
+                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                  Refresh
                 </Button>
-              )}
+                {canUseQuickCreate && (
+                  <Button size="sm" onClick={() => openQuickCreate("task")} className="gap-2">
+                    <Plus className="h-4 w-4" /> New Task
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 

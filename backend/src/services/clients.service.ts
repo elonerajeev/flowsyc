@@ -47,6 +47,7 @@ type ClientFilters = {
   limit: number;
   status?: "active" | "pending" | "completed";
   tier?: "Enterprise" | "Growth" | "Strategic";
+  segment?: "Expansion" | "Renewal" | "New Business";
   search?: string;
   sort: "name" | "revenue" | "createdAt" | "healthScore";
   order: "asc" | "desc";
@@ -170,6 +171,10 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     and.push({ tier: toDbClientTier(filters.tier) });
   }
 
+  if (filters.segment) {
+    and.push({ segment: toDbClientSegment(filters.segment) });
+  }
+
   if (filters.search?.trim()) {
     const search = filters.search.trim();
     and.push({
@@ -177,6 +182,9 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
         { name: { contains: search, mode: "insensitive" } },
         { email: { contains: search, mode: "insensitive" } },
         { company: { contains: search, mode: "insensitive" } },
+        { industry: { contains: search, mode: "insensitive" } },
+        { manager: { contains: search, mode: "insensitive" } },
+        { location: { contains: search, mode: "insensitive" } },
       ],
     });
   }

@@ -6,7 +6,6 @@ import { Plus, Trash2, Zap, Mail, Bell, Users, Activity, ChevronRight, CheckCirc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +30,12 @@ const triggers = [
   { value: "churn_risk", label: "Churn Risk", icon: AlertTriangle, description: "When client at risk of churn", category: "client" },
   { value: "followup_due", label: "Follow-up Due", icon: Bell, description: "When follow-up is due", category: "task" },
   { value: "renewal_due", label: "Renewal Due", icon: Calendar, description: "When contract renewal approaches", category: "client" },
-  { value: "contact_created", label: "Contact Created", icon: Plus, description: "When a contact is created", category: "contact" },
+  { value: "invoice_created", label: "Invoice Created", icon: Plus, description: "When an invoice is created", category: "finance" },
+  { value: "invoice_overdue", label: "Invoice Overdue", icon: AlertTriangle, description: "When an invoice becomes overdue", category: "finance" },
+  { value: "payroll_due", label: "Payroll Due", icon: Clock, description: "When payroll run is due", category: "finance" },
+  { value: "project_stalled", label: "Project Stalled", icon: AlertTriangle, description: "When project progress stalls", category: "operations" },
   { value: "custom_schedule", label: "Scheduled", icon: Activity, description: "Run on a schedule (cron)", category: "schedule" },
+  { value: "manual", label: "Manual Trigger", icon: Zap, description: "Run manually from automation controls", category: "system" },
 ];
 
 const triggerCategories = [
@@ -41,9 +44,29 @@ const triggerCategories = [
   { id: "deal", label: "Deals" },
   { id: "task", label: "Tasks" },
   { id: "client", label: "Clients" },
-  { id: "contact", label: "Contacts" },
+  { id: "finance", label: "Finance" },
+  { id: "operations", label: "Operations" },
   { id: "schedule", label: "Scheduled" },
+  { id: "system", label: "System" },
 ];
+
+const conditionOperators = [
+  { value: "equals", label: "Equals" },
+  { value: "not_equals", label: "Not equals" },
+  { value: "contains", label: "Contains" },
+  { value: "greater_than", label: "Greater than" },
+  { value: "less_than", label: "Less than" },
+  { value: "gte", label: "Greater or equal" },
+  { value: ">=", label: "Greater or equal (legacy)" },
+  { value: "lte", label: "Less or equal" },
+  { value: "<=", label: "Less or equal (legacy)" },
+  { value: "in", label: "In list" },
+  { value: "not_in", label: "Not in list" },
+  { value: "is_empty", label: "Is empty" },
+  { value: "is_not_empty", label: "Is not empty" },
+] as const;
+
+const operatorsWithoutValue = new Set(["is_empty", "is_not_empty"]);
 
 const actions = [
   // Lead Actions
@@ -89,15 +112,48 @@ interface ActionConfig {
   config: Record<string, string | number | boolean | string[]>;
 }
 
+interface AutomationRuleCondition {
+  field: string;
+  operator: string;
+  value?: unknown;
+}
+
+interface RuleConditionInput {
+  field: string;
+  operator: string;
+  value: string;
+}
+
 interface AutomationRule {
   id: number;
   name: string;
   description?: string;
   trigger: string;
+  conditions?: AutomationRuleCondition[];
   actions: ActionConfig[];
   isActive: boolean;
   priority: number;
   cronExpression?: string;
+}
+
+function normalizeConditionValue(operator: string, rawValue: string): unknown {
+  if (operatorsWithoutValue.has(operator)) return undefined;
+
+  const value = rawValue.trim();
+  if (!value) return "";
+
+  if (operator === "in" || operator === "not_in") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (!Number.isNaN(Number(value)) && value !== "") return Number(value);
+
+  return value;
 }
 
 interface RuleBuilderProps {
@@ -111,6 +167,7 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
   const [ruleName, setRuleName] = useState("");
   const [ruleDescription, setRuleDescription] = useState("");
   const [selectedTrigger, setSelectedTrigger] = useState("");
+  const [conditions, setConditions] = useState<RuleConditionInput[]>([]);
   const [selectedActions, setSelectedActions] = useState<ActionConfig[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [priority, setPriority] = useState(0);
@@ -127,12 +184,32 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
       setRuleName(editRule.name);
       setRuleDescription(editRule.description || "");
       setSelectedTrigger(editRule.trigger);
+      setConditions((editRule.conditions || []).map((condition) => ({
+        field: condition.field || "",
+        operator: condition.operator || "equals",
+        value: Array.isArray(condition.value)
+          ? condition.value.join(", ")
+          : condition.value === undefined || condition.value === null
+          ? ""
+          : String(condition.value),
+      })));
       setSelectedActions(editRule.actions || []);
       setIsActive(editRule.isActive);
       setPriority(editRule.priority || 0);
       setCronExpression(editRule.cronExpression || "");
       setStep("details");
+      return;
     }
+
+    setRuleName("");
+    setRuleDescription("");
+    setSelectedTrigger("");
+    setConditions([]);
+    setSelectedActions([]);
+    setIsActive(true);
+    setPriority(0);
+    setCronExpression("");
+    setStep("trigger");
   }, [editRule]);
 
   const createMutation = useMutation({
@@ -205,9 +282,6 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
       add_to_campaign: { campaignName: "Welcome Campaign" },
       add_to_pipeline: { stage: "prospecting" },
       delay: { minutes: 30 },
-      add_to_pipeline: { stage: "prospecting" },
-      add_to_campaign: { campaignName: "Welcome Campaign" },
-      delay: { minutes: 30 },
     };
 
     setSelectedActions([
@@ -226,16 +300,65 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
     setSelectedActions(selectedActions.filter((_, i) => i !== index));
   };
 
+  const handleAddCondition = () => {
+    setConditions([...conditions, { field: "", operator: "equals", value: "" }]);
+  };
+
+  const handleUpdateCondition = (index: number, update: Partial<RuleConditionInput>) => {
+    const next = [...conditions];
+    next[index] = { ...next[index], ...update };
+    setConditions(next);
+  };
+
+  const handleRemoveCondition = (index: number) => {
+    setConditions(conditions.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = () => {
     if (!ruleName || !selectedTrigger || selectedActions.length === 0) {
       toast.error("Please fill in all required fields");
       return;
     }
 
+    if (selectedTrigger === "custom_schedule" && !cronExpression.trim()) {
+      toast.error("Cron expression is required for scheduled rules");
+      return;
+    }
+
+    const activeConditions = conditions.filter((condition) => condition.field.trim() || condition.value.trim());
+
+    const invalidCondition = activeConditions.find((condition) => {
+      if (!condition.field.trim()) return true;
+      if (operatorsWithoutValue.has(condition.operator)) return false;
+      return !condition.value.trim();
+    });
+
+    if (invalidCondition) {
+      toast.error("Each condition needs a field and value");
+      return;
+    }
+
+    const normalizedConditions = activeConditions.map((condition) => {
+      const normalized: {
+        field: string;
+        operator: string;
+        value?: unknown;
+      } = {
+        field: condition.field.trim(),
+        operator: condition.operator,
+      };
+      const normalizedValue = normalizeConditionValue(condition.operator, condition.value);
+      if (normalizedValue !== undefined) {
+        normalized.value = normalizedValue;
+      }
+      return normalized;
+    });
+
     const ruleData = {
       name: ruleName,
       description: ruleDescription,
       trigger: selectedTrigger,
+      conditions: normalizedConditions,
       actions: selectedActions,
       isActive,
       priority,
@@ -526,6 +649,70 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
             />
           </div>
 
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conditions (optional)</Label>
+              <Button type="button" size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={handleAddCondition}>
+                <Plus className="h-3 w-3" />
+                Add Condition
+              </Button>
+            </div>
+            {conditions.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/70 bg-secondary/20 px-3 py-2 text-xs text-muted-foreground">
+                No conditions set. Rule will run for every matching trigger event.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {conditions.map((condition, index) => {
+                  const hideValueInput = operatorsWithoutValue.has(condition.operator);
+                  return (
+                    <div key={index} className="grid gap-2 rounded-lg border border-border/60 bg-card p-2 sm:grid-cols-[1.4fr_1fr_1.2fr_auto]">
+                      <Input
+                        value={condition.field}
+                        onChange={(event) => handleUpdateCondition(index, { field: event.target.value })}
+                        placeholder="Field (e.g. score, status)"
+                        className="h-8 text-xs"
+                      />
+                      <select
+                        value={condition.operator}
+                        onChange={(event) => {
+                          const nextOperator = event.target.value;
+                          handleUpdateCondition(index, {
+                            operator: nextOperator,
+                            value: operatorsWithoutValue.has(nextOperator) ? "" : condition.value,
+                          });
+                        }}
+                        className="h-8 rounded-lg border border-input bg-background px-2 text-xs"
+                      >
+                        {conditionOperators.map((operator) => (
+                          <option key={operator.value} value={operator.value}>
+                            {operator.label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={condition.value}
+                        onChange={(event) => handleUpdateCondition(index, { value: event.target.value })}
+                        placeholder={condition.operator === "in" || condition.operator === "not_in" ? "Value list (comma-separated)" : "Expected value"}
+                        className="h-8 text-xs"
+                        disabled={hideValueInput}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveCondition(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {selectedTrigger === "custom_schedule" && (
             <div className="space-y-2">
               <Label htmlFor="cron" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cron Expression</Label>
@@ -563,6 +750,10 @@ export default function RuleBuilder({ onSuccess, editRule }: RuleBuilderProps) {
               <span>
                 <span className="text-muted-foreground">Actions:</span>{" "}
                 {selectedActions.map((a) => actions.find((ac) => ac.value === a.type)?.label).join(", ")}
+              </span>
+              <span>
+                <span className="text-muted-foreground">Conditions:</span>{" "}
+                {conditions.filter((condition) => condition.field.trim() || condition.value.trim()).length}
               </span>
             </div>
           </div>

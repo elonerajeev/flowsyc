@@ -187,6 +187,8 @@ export interface AuditLogQueryParams {
   search?: string;
   action?: string;
   entity?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface AuditLogListResponse {

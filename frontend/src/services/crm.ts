@@ -65,7 +65,30 @@ function buildQuery(params: Record<string, string | number | undefined>) {
 
 export const crmService = {
   getDashboard: () => fetchApi<DashboardSnapshot>("/dashboard"),
-  getClients: () => fetchCollectionApi<ClientRecord>("/clients"),
+  getClients: () => fetchCollectionApi<ClientRecord>("/clients?limit=50"),
+  getClientsPage: (params: {
+    page?: number;
+    limit?: number;
+    status?: "active" | "pending" | "completed";
+    segment?: "Expansion" | "Renewal" | "New Business";
+    search?: string;
+    sort?: "name" | "revenue" | "createdAt" | "healthScore";
+    order?: "asc" | "desc";
+  } = {}) => {
+    const query = buildQuery({
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+      status: params.status,
+      segment: params.segment,
+      search: params.search,
+      sort: params.sort ?? "createdAt",
+      order: params.order ?? "desc",
+    });
+    return requestJson<{
+      data: ClientRecord[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/clients${query}`);
+  },
   getProjects: () => fetchCollectionApi<ProjectRecord>("/projects"),
   getTasks: (projectId?: number) => fetchApi<Record<TaskColumn, TaskRecord[]>>(`/tasks${projectId ? `?projectId=${projectId}` : ""}`),
   getTasksPage: (params: { column: TaskColumn; page?: number; limit?: number; projectId?: number; priority?: TaskPriority }) => {
@@ -107,6 +130,8 @@ export const crmService = {
       search: params.search,
       action: params.action,
       entity: params.entity,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
     });
     return requestJson<AuditLogListResponse>(`/system/audit${query}`);
   },
@@ -189,13 +214,30 @@ export const crmService = {
     requestJson<Record<string, unknown>>(`/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteContact: (contactId: number) => requestJson<void>(`/contacts/${contactId}`, { method: "DELETE" }),
 
-  getLeads: () => fetchCollectionApi<Lead>(`/leads?limit=1000`),
-  getLeadsPage: (params: { limit?: number; page?: number; status?: string; search?: string } = {}) => {
+  getLeads: () => fetchCollectionApi<Lead>(`/leads?limit=100`),
+  getLeadsPage: (params: {
+    limit?: number;
+    page?: number;
+    status?: string;
+    source?: string;
+    assignedState?: "assigned" | "unassigned";
+    minScore?: number;
+    maxScore?: number;
+    search?: string;
+    sortBy?: "firstName" | "lastName" | "email" | "score" | "createdAt" | "updatedAt";
+    sortOrder?: "asc" | "desc";
+  } = {}) => {
     const q = new URLSearchParams();
     if (params.limit) q.set("limit", String(params.limit));
     if (params.page) q.set("page", String(params.page));
     if (params.status) q.set("status", params.status);
+    if (params.source) q.set("source", params.source);
+    if (params.assignedState) q.set("assignedState", params.assignedState);
+    if (params.minScore !== undefined) q.set("minScore", String(params.minScore));
+    if (params.maxScore !== undefined) q.set("maxScore", String(params.maxScore));
     if (params.search) q.set("search", params.search);
+    if (params.sortBy) q.set("sortBy", params.sortBy);
+    if (params.sortOrder) q.set("sortOrder", params.sortOrder);
     return requestJson<{ data: Lead[]; total: number; page: number; limit: number }>(`/leads?${q}`);
   },
   createLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) =>

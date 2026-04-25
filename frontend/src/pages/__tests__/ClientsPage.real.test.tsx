@@ -1,21 +1,42 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
-import { useClients } from '@/hooks/use-crm-data'
 import ClientsPage from '@/pages/ClientsPage'
 
-// Mock the hooks with real data structure
-vi.mock('@/hooks/use-crm-data', () => ({
-  useClients: vi.fn(),
-}))
+vi.mock('@/hooks/use-crm-data', async (importActual) => {
+  const actual = await importActual<typeof import('@/hooks/use-crm-data')>()
+  return { ...actual }
+})
 
 vi.mock('@/hooks/use-list-preferences', () => ({
   useListPreferences: vi.fn((key, items) => ({
     orderedItems: items || [],
-    pinnedIds: [], // Use array instead of Set for .includes() method
+    pinnedIds: [],
     togglePin: vi.fn(),
     move: vi.fn(),
   })),
 }))
+
+vi.mock('@/services/crm', () => ({
+  crmService: {
+    getClientsPage: vi.fn(),
+    removeClient: vi.fn(),
+    recalculateClientHealth: vi.fn(),
+    exportClients: vi.fn(),
+  },
+}))
+
+const mockInfiniteData = {
+  pages: [{ data: [] as any[], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } }],
+  pageParams: [undefined],
+}
+
+vi.mock('@tanstack/react-query', async (importActual) => {
+  const actual = await importActual<typeof import('@tanstack/react-query')>()
+  return {
+    ...actual,
+    useInfiniteQuery: vi.fn(),
+  }
+})
 
 // Use actual mock data structure from your app
 const mockClientsData = [
@@ -79,12 +100,17 @@ const mockClientsData = [
 ]
 
 describe('ClientsPage - Real App Logic', () => {
-  beforeEach(() => {
-    vi.mocked(useClients).mockReturnValue({
-      data: mockClientsData,
+  beforeEach(async () => {
+    const { useInfiniteQuery } = await import('@tanstack/react-query')
+    vi.mocked(useInfiniteQuery).mockReturnValue({
+      data: { pages: [{ data: mockClientsData, pagination: { total: mockClientsData.length, page: 1, limit: 50, totalPages: 1 } }], pageParams: [undefined] },
       isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
       error: null,
-    } as ReturnType<typeof useClients>)
+      refetch: vi.fn(),
+    } as any)
   })
 
   it('renders page with correct title and description', () => {
@@ -152,13 +178,17 @@ describe('ClientsPage - Real App Logic', () => {
     expect(statusSelect).toHaveValue('pending')
   })
 
-  it('shows loading state correctly', () => {
-    vi.mocked(useClients).mockReturnValue({
-      data: [],
+  it('shows loading state correctly', async () => {
+    const { useInfiniteQuery } = await import('@tanstack/react-query')
+    vi.mocked(useInfiniteQuery).mockReturnValue({
+      data: undefined,
       isLoading: true,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
       error: null,
-    } as unknown as ReturnType<typeof useClients>)
-    
+      refetch: vi.fn(),
+    } as any)
     render(<ClientsPage />)
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })

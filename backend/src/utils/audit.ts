@@ -53,6 +53,18 @@ export async function resolveAuditActorName(userId: string, fallback?: string) {
   return user?.name ?? user?.email ?? "Unknown";
 }
 
+const AUDIT_RETENTION_DAYS = 7;
+
+function retentionCutoff(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - AUDIT_RETENTION_DAYS);
+  return d;
+}
+
+export async function purgeOldAuditLogs() {
+  await prisma.auditLog.deleteMany({ where: { createdAt: { lt: retentionCutoff() } } });
+}
+
 export async function logAudit(params: {
   userId: string;
   userName?: string;
@@ -72,6 +84,8 @@ export async function logAudit(params: {
         detail: params.detail ?? null,
       },
     });
+    // Purge old logs — fire-and-forget, never blocks the caller
+    prisma.auditLog.deleteMany({ where: { createdAt: { lt: retentionCutoff() } } }).catch(() => {});
   } catch {
     // Never let audit logging break the main flow
   }
@@ -104,6 +118,10 @@ function normalizeAuditOptions(input: number | GetAuditLogsOptions): GetAuditLog
 function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; action: string; entity: string }, params: unknown[]) {
   const conditions: string[] = [];
 
+  // Always restrict to retention window
+  params.push(retentionCutoff().toISOString());
+  conditions.push(`"createdAt" >= $${params.length}::timestamptz`);
+
   if (options.role === "employee" && options.userId) {
     params.push(options.userId);
     conditions.push(`"userId" = $${params.length}`);
@@ -127,12 +145,12 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
 
   if (options.dateFrom) {
     params.push(options.dateFrom);
-    conditions.push(`"createdAt" >= $${params.length}`);
+    conditions.push(`"createdAt" >= $${params.length}::timestamptz`);
   }
 
   if (options.dateTo) {
     params.push(options.dateTo);
-    conditions.push(`"createdAt" <= $${params.length}`);
+    conditions.push(`"createdAt" <= $${params.length}::timestamptz`);
   }
 
   return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
