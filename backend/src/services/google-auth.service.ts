@@ -270,7 +270,7 @@ export async function getGoogleUserInfo(code: string): Promise<GoogleUserInfo> {
     id: userInfo.data.id || "",
     email: userInfo.data.email || "",
     name: userInfo.data.name || "",
-    picture: userInfo.data.picture,
+    picture: userInfo.data.picture ?? undefined,
     accessToken: tokens.access_token || "",
   };
 }
@@ -294,10 +294,10 @@ export async function authenticateWithGoogleProfile(
         name: googleUser.name || googleUser.email.split("@")[0],
         email: googleUser.email,
         passwordHash: await hashPassword(`google_${crypto.randomUUID()}`),
-        emailVerified: true,
         role,
         updatedAt: new Date(),
         ...profile,
+        emailVerified: true, // override after spread to avoid duplicate
       },
     });
   } else if (!user.emailVerified) {

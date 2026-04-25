@@ -2,6 +2,7 @@ import { prisma } from "../config/prisma";
 import { GTMAutomationService } from "./gtm-automation.service";
 import { cache, TTL } from "../utils/cache";
 import { logger } from "../utils/logger";
+import type { AccessScope } from "../utils/access-control";
 
 type LifecycleSummary = {
   leadId: number;

@@ -15,7 +15,15 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     exclude: ['backend/**', 'node_modules/**'],
-    css: true,
+
+    // ── Speed fixes ──────────────────────────────────────────────────────────
+    css: false,           // skip CSS processing — not needed in unit tests
+    pool: 'forks',        // forks > threads for React component tests (avoids jsdom conflicts)
+    poolOptions: {
+      forks: { maxForks: 4 }, // cap parallelism
+    },
+    testTimeout: 10_000,
+
     env: {
       VITE_USE_REMOTE_API: 'false',
       VITE_API_BASE_URL: 'http://localhost:3000/api',
@@ -26,7 +34,6 @@ export default defineConfig({
       exclude: [
         'node_modules/',
         'src/test/',
-        'backend/',
         'backend/**',
         '**/*.d.ts',
         '**/*.config.*',

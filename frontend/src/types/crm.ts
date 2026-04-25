@@ -187,6 +187,8 @@ export interface AuditLogQueryParams {
   search?: string;
   action?: string;
   entity?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface AuditLogListResponse {
@@ -258,6 +260,22 @@ export interface TaskRecord {
 }
 
 export type TaskColumn = "todo" | "in-progress" | "done";
+
+export interface TaskPageResponse {
+  data: TaskRecord[];
+  column: TaskColumn;
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export interface TaskBoardStats {
+  todo: number;
+  "in-progress": number;
+  done: number;
+  total: number;
+}
 
 export interface CommentRecord {
   id: number;

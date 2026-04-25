@@ -193,148 +193,33 @@ export default function AutomationScheduledPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-info via-primary to-success" />
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Clock className="h-3.5 w-3.5 text-primary" />
-                Automation
-              </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                <span className="bg-gradient-to-r from-info to-primary bg-clip-text text-transparent">
-                  Scheduled
-                </span> Jobs
-              </h1>
-              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
-                Manage your scheduled automation jobs and recurring tasks.
-              </p>
+            {/* Header */}
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">Automation · Scheduled</span>
             </div>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
-              <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-              Refresh
-            </Button>
-            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Job
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Create Scheduled Job</DialogTitle>
-                  <DialogDescription>
-                    Schedule an automation job to run at a specific time.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="jobName">Job Name *</Label>
-                    <Input
-                      id="jobName"
-                      value={jobName}
-                      onChange={(e) => setJobName(e.target.value)}
-                      placeholder="e.g., Follow up email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="jobDescription">Description</Label>
-                    <Input
-                      id="jobDescription"
-                      value={jobDescription}
-                      onChange={(e) => setJobDescription(e.target.value)}
-                      placeholder="Optional description"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="jobType">Job Type</Label>
-                    <Select value={jobType} onValueChange={setJobType}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {jobTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            <div className="flex items-center gap-2">
-                              <type.icon className="h-4 w-4" />
-                              {type.label}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="scheduledFor">Schedule For *</Label>
-                    <Input
-                      id="scheduledFor"
-                      type="datetime-local"
-                      value={scheduledFor}
-                      onChange={(e) => setScheduledFor(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="isRecurring"
-                      checked={isRecurring}
-                      onChange={(e) => setIsRecurring(e.target.checked)}
-                      className="h-4 w-4 rounded border-input"
-                    />
-                    <Label htmlFor="isRecurring">Recurring job</Label>
-                  </div>
-                  {isRecurring && (
-                    <div className="space-y-2">
-                      <Label htmlFor="cronExpression">Cron Expression</Label>
-                      <Input
-                        id="cronExpression"
-                        value={cronExpression}
-                        onChange={(e) => setCronExpression(e.target.value)}
-                        placeholder="0 9 * * * (daily at 9am)"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Format: minute hour day month weekday
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetForm(); }}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleCreateJob} disabled={createMutation.isPending}>
-                      {createMutation.isPending ? "Creating..." : "Create Job"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Scheduled Jobs</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Configure recurring tasks and time-based automation workflows.</p>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[
-              { label: "Pending Jobs", value: pendingJobs.length, icon: Clock, gradient: "from-warning to-warning/60" },
-              { label: "Recurring", value: recurringJobs.length, icon: Calendar, gradient: "from-info to-info/60" },
-              { label: "Completed Today", value: completedToday, icon: CheckCircle2, gradient: "from-success to-success/60" },
-              { label: "Failed Today", value: failedToday, icon: XCircle, gradient: "from-destructive to-destructive/60" },
-            ].map((stat) => (
-              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
-                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-2">
-                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
-                    <stat.icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
-                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <Clock className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{jobs.length} total jobs</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <span className="text-sm font-medium text-success">{jobs.filter((j: any) => j.isActive).length} active</span>
+            </div>
+            {stats?.scheduledRuns != null && (
+              <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+                <span className="text-sm font-medium text-primary">{stats.scheduledRuns} runs today</span>
               </div>
-            ))}
+            )}
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* Status Filter Tabs */}
       <motion.section variants={item}>

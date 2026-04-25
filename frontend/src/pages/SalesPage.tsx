@@ -21,15 +21,13 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import { SalesSkeleton } from "@/components/skeletons";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
-import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
+import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import AdminOnly from "@/components/shared/AdminOnly";
@@ -167,26 +165,17 @@ const SalesPage = () => {
       animate={{ opacity: 1 }}
       className="space-y-6"
     >
-      <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
-        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
-        <div className="absolute -left-20 -bottom-20 h-60 w-60 rounded-full bg-gradient-to-tr from-success/5 to-primary/5 blur-3xl" />
-
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
                 <Target className="h-3.5 w-3.5 text-primary" />
-                Sales Workspace
+                <span className="text-xs font-medium text-muted-foreground">Sales · Pipeline</span>
               </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Sales</span> Pipeline
-              </h1>
-              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
-                Track deals through stages, manage leads, and monitor your sales performance.
-              </p>
+              <h1 className="font-display text-3xl font-semibold text-foreground">Sales Pipeline</h1>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Track deals through stages, manage leads, and monitor your sales performance.</p>
             </div>
-
             <div className="flex items-center gap-2">
               <Link to="/automation/gtm">
                 <Button variant="outline" size="sm" className="gap-2">
@@ -194,20 +183,13 @@ const SalesPage = () => {
                   GTM Center
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="gap-2"
-              >
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
                 <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
                 Refresh
               </Button>
               {canUseQuickCreate ? (
                 <Button size="sm" onClick={() => openQuickCreate("lead")} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Deal
+                  <Plus className="h-4 w-4" /> Add Deal
                 </Button>
               ) : (
                 <div className="inline-flex h-10 items-center rounded-xl border border-border/60 bg-secondary/40 px-4 text-xs font-medium text-muted-foreground">
@@ -216,30 +198,30 @@ const SalesPage = () => {
               )}
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {metrics && [
-              { label: "Pipeline Value", value: formatCurrency(metrics.pipelineValue), icon: DollarSign, gradient: "from-primary to-primary/60" },
-              { label: "Conversion", value: `${metrics.conversionRate}%`, icon: TrendingUp, gradient: "from-info to-info/60" },
-              { label: "Deals Won", value: String(metrics.dealsWon), icon: Handshake, gradient: "from-success to-success/60" },
-              { label: "Sales Cycle", value: `${metrics.salesCycle}d`, icon: Calendar, gradient: "from-warning to-warning/60" },
-            ].map((stat) => (
-              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
-                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-2">
-                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
-                    <stat.icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
-                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                  </div>
-                </div>
+          {metrics && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+                <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium text-primary">{formatCurrency(metrics.pipelineValue)}</span>
               </div>
-            ))}
-          </div>
+              <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+                <TrendingUp className="h-4 w-4 text-success flex-shrink-0" />
+                <span className="text-sm font-medium text-success">{metrics.conversionRate}% conversion</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-info/30 bg-info/10 px-4 py-2">
+                <Handshake className="h-4 w-4 text-info flex-shrink-0" />
+                <span className="text-sm font-medium text-info">{metrics.dealsWon} won</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+                <span className="text-sm font-medium text-muted-foreground">{metrics.salesCycle}d avg cycle</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
-          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="rounded-[1.75rem] border border-border bg-card px-4 py-3 shadow-card">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex gap-2">
               {["pipeline", "leads"].map((tab) => (
                 <button
@@ -248,8 +230,8 @@ const SalesPage = () => {
                   className={cn(
                     "rounded-xl px-4 py-2 text-sm font-semibold transition-all",
                     activeTab === tab
-                      ? "bg-gradient-to-r from-primary to-info text-white shadow-md"
-                      : "border border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "border border-border bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   )}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -264,14 +246,14 @@ const SalesPage = () => {
                   placeholder={activeTab === "pipeline" ? "Search deals..." : "Search leads..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 pl-10 rounded-xl border border-border/40 bg-background/70 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+                  className="h-9 pl-10 text-sm"
                 />
               </div>
               {activeTab === "pipeline" && (
                 <select
                   value={stageFilter}
                   onChange={(event) => setStageFilter(event.target.value)}
-                  className="h-10 rounded-xl border border-border/40 bg-background/70 px-4 text-sm outline-none transition-colors focus:border-primary/50"
+                  className="h-9 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary/50"
                 >
                   <option value="all">All Stages</option>
                   <option value="prospecting">Prospecting</option>
@@ -284,10 +266,9 @@ const SalesPage = () => {
               )}
             </div>
           </div>
-        </div>
-      </motion.section>
+      </section>
 
-      <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+      <section>
         {activeTab === "pipeline" && (
           <div className="space-y-4">
             {filteredDeals.length > 0 ? (
@@ -505,7 +486,7 @@ const SalesPage = () => {
             )}
           </div>
         )}
-      </motion.section>
+      </section>
     </motion.div>
   );
 };

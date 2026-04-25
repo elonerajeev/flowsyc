@@ -384,7 +384,11 @@ test_automation() {
 test_auth() {
   log_section "11. AUTH"
   
-  http_get "/auth/me"
+  if [ -z "$AUTH_TOKEN" ]; then
+    log_skip "GET /auth/me" "No auth"
+  else
+    http_get "/auth/me"
+  fi
   
   # Test invalid login
   local http_code

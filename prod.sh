@@ -138,7 +138,7 @@ if ! $API_ONLY; then
   BE_TEST_LOG="$TMPDIR_LOGS/be_test.log"
   FE_TEST_LOG="$TMPDIR_LOGS/fe_test.log"
   ( cd backend  && npm run test 2>&1 ) > "$BE_TEST_LOG" & BE_TEST_PID=$!
-  ( cd frontend && npm run test 2>&1 ) > "$FE_TEST_LOG" & FE_TEST_PID=$!
+  ( cd frontend && npm run test -- --run 2>&1 ) > "$FE_TEST_LOG" & FE_TEST_PID=$!
   wait $BE_TEST_PID; check_result $? "Backend tests"  "$BE_TEST_LOG"
   wait $FE_TEST_PID; check_result $? "Frontend tests" "$FE_TEST_LOG"
 
@@ -178,21 +178,7 @@ if ! $API_ONLY; then
 fi  # end of !API_ONLY
 
 # ════════════════════════════════════════════════════════
-# 5. TESTING (parallel)
-# ════════════════════════════════════════════════════════
-log_section "TESTING (parallel)"
-
-BE_TEST_LOG="$TMPDIR_LOGS/be_test.log"
-FE_TEST_LOG="$TMPDIR_LOGS/fe_test.log"
-
-( cd backend  && npm run test 2>&1 ) > "$BE_TEST_LOG" & BE_TEST_PID=$!
-( cd frontend && npm run test --run 2>&1 ) > "$FE_TEST_LOG" & FE_TEST_PID=$!
-
-wait $BE_TEST_PID; check_result $? "Backend tests"  "$BE_TEST_LOG"
-wait $FE_TEST_PID; check_result $? "Frontend tests" "$FE_TEST_LOG"
-
-# ════════════════════════════════════════════════════════
-# 6. SANITY
+# 5. SANITY
 
 # ════════════════════════════════════════════════════════
 log_section "API TESTS"

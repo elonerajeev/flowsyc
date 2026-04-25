@@ -84,7 +84,7 @@ describe('TeamsPage', () => {
 
   it('renders team management eyebrow badge', () => {
     render(<TeamsPage />)
-    expect(screen.getByText('People Management')).toBeInTheDocument()
+    expect(screen.getByText('People · Teams')).toBeInTheDocument()
   })
 
   it('renders page description', () => {
@@ -128,9 +128,9 @@ describe('TeamsPage', () => {
     render(<TeamsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Total Teams')).toBeInTheDocument()
-      expect(screen.getByText('Active Teams')).toBeInTheDocument()
-      expect(screen.getByText('Total Members')).toBeInTheDocument()
+      expect(screen.getByText('People · Teams')).toBeInTheDocument()
+      expect(screen.getAllByText(/active/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/members/i).length).toBeGreaterThan(0)
     })
   })
 

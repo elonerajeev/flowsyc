@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2, ClipboardList, DollarSign, FolderKanban, Search, Sparkles, UserPlus, Users, Zap } from "lucide-react";
 
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { useClients, useProjects, useTasks, useTeamMembers } from "@/hooks/use-crm-data";
+import { useClients, useProjects, useTeamMembers } from "@/hooks/use-crm-data";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,7 @@ const remoteTypeMap: Record<string, EntryType> = {
   invoice: "invoice",
   job: "job",
 };
+const TASK_PREVIEW_LIMIT = 4;
 
 export default function CommandPalette() {
   const { commandOpen, closeCommandPalette, openQuickCreate, canUseQuickCreate } = useWorkspace();
@@ -57,8 +58,30 @@ export default function CommandPalette() {
   // Local data hooks (used for initial display and as fallback)
   const { data: clients = [] } = useClients({ enabled: commandOpen && canSeeClients && !useRemote });
   const { data: projects = [] } = useProjects({ enabled: commandOpen && canSeeProjects && !useRemote });
-  const { data: tasks = { todo: [], "in-progress": [], done: [] } } = useTasks(undefined, { enabled: commandOpen && canSeeTasks && !useRemote });
+  const { data: todoTasksPage } = useQuery({
+    queryKey: ["command-palette", "tasks", "todo"],
+    queryFn: () => crmService.getTasksPage({ column: "todo", page: 1, limit: TASK_PREVIEW_LIMIT }),
+    enabled: commandOpen && canSeeTasks && !useRemote,
+    staleTime: 60_000,
+  });
+  const { data: inProgressTasksPage } = useQuery({
+    queryKey: ["command-palette", "tasks", "in-progress"],
+    queryFn: () => crmService.getTasksPage({ column: "in-progress", page: 1, limit: TASK_PREVIEW_LIMIT }),
+    enabled: commandOpen && canSeeTasks && !useRemote,
+    staleTime: 60_000,
+  });
+  const { data: doneTasksPage } = useQuery({
+    queryKey: ["command-palette", "tasks", "done"],
+    queryFn: () => crmService.getTasksPage({ column: "done", page: 1, limit: TASK_PREVIEW_LIMIT }),
+    enabled: commandOpen && canSeeTasks && !useRemote,
+    staleTime: 60_000,
+  });
   const { data: teamMembers = [] } = useTeamMembers({ enabled: commandOpen && canSeeTeam && !useRemote });
+  const tasks = useMemo(() => ({
+    todo: todoTasksPage?.data ?? [],
+    "in-progress": inProgressTasksPage?.data ?? [],
+    done: doneTasksPage?.data ?? [],
+  }), [doneTasksPage?.data, inProgressTasksPage?.data, todoTasksPage?.data]);
 
   // Backend search (debounced via React Query)
   const { data: remoteResults = [] } = useQuery({

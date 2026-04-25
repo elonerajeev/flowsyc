@@ -113,7 +113,7 @@ export const meetingService = {
             endTime,
             attendees: [input.inviteeEmail],
           });
-          meetingUrl = result.meetLink || null;
+          meetingUrl = result.meetLink ?? undefined;
           googleEventId = result.eventId || undefined;
           googleHtmlLink = result.htmlLink || undefined;
         } catch (err) {

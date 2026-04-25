@@ -505,89 +505,47 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
               <Shield className="h-3.5 w-3.5 text-primary" />
-              Team Operations
+              <span className="text-xs font-medium text-muted-foreground">People · Members</span>
             </div>
-            <div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">Members</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Manage team members, access, attendance, and status changes.
-              </p>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Members</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Manage team members, access, attendance, and status changes.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <BadgeCheck className="h-4 w-4 text-success flex-shrink-0" />
+              <span className="text-sm font-medium text-success">{summary.active} active</span>
             </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            {(role === "admin" || role === "manager") && (
-              <>
-                <motion.div whileTap={{ scale: 0.94 }}>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
-                  >
-                    <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                    "Refresh Members"
-                  </Button>
-                </motion.div>
-                
-                <motion.div whileTap={{ scale: 0.94 }}>
-                  <Button
-                    variant="outline"
-                    onClick={handleExportCSV}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
-                  >
-                    <Download className="h-4 w-4 text-primary" />
-                    Export CSV
-                  </Button>
-                </motion.div>
-                <motion.div whileTap={{ scale: 0.94 }}>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/people/teams")}
-                    className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition transition h-11"
-                  >
-                    <Shield className="h-4 w-4 text-primary" />
-                    Manage Teams
-                  </Button>
-                </motion.div>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={() => canEditTeam && setShowAddForm((current) => !current)}
-              disabled={!canEditTeam}
-              className={cn(
-                "inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-sm font-semibold text-primary-foreground transition hover:brightness-105",
-                canEditTeam ? "bg-primary" : "cursor-not-allowed bg-primary/40",
-              )}
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Member
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Active", value: summary.active, icon: BadgeCheck },
-            { label: "Admins", value: summary.admins, icon: Shield },
-            { label: "Remote Today", value: summary.remote, icon: UserRoundCheck },
-            { label: "Absent", value: summary.absent, icon: AlertTriangle },
-          ].map((item) => (
-              <div key={item.label} className="rounded-[1.25rem] border border-border/70 bg-secondary/20 p-4">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-5 w-5" />
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <Shield className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{summary.admins} admins</span>
+            </div>
+            {summary.absent > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive/10 px-4 py-2">
+                <span className="text-sm font-medium text-destructive">{summary.absent} absent</span>
               </div>
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-foreground">{item.value}</p>
+            )}
+            <div className="flex items-center gap-2 ml-1">
+              {(role === "admin" || role === "manager") && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
+                    <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} /> Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
+                    <Download className="h-4 w-4" /> Export
+                  </Button>
+                </>
+              )}
+              <Button size="sm" onClick={() => canEditTeam && setShowAddForm((c) => !c)} disabled={!canEditTeam} className="gap-2">
+                <UserPlus className="h-4 w-4" /> Add Member
+              </Button>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 

@@ -74,66 +74,36 @@ export default function AutomationLogsPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-success via-info to-primary" />
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Zap className="h-3.5 w-3.5 text-primary" />
-                Automation
-              </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                <span className="bg-gradient-to-r from-success to-info bg-clip-text text-transparent">
-                  Activity Logs
-                </span>
-              </h1>
-              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
-                Execution history of all automation rules.
-              </p>
+            {/* Header */}
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">Automation · Activity</span>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-10 rounded-xl border border-border/40 bg-background/70 px-4 text-sm outline-none transition-colors focus:border-primary/50"
-              >
-                <option value="all">All Status</option>
-                <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
-                <option value="running">Running</option>
-                <option value="pending">Pending</option>
-              </select>
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
-                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                Refresh
-              </Button>
-            </div>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Activity Logs</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Full trail of automation executions — what ran, when, and the outcome.</p>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[
-              { label: "Total Executions", value: stats.total, icon: Activity, gradient: "from-primary to-primary/60" },
-              { label: "Completed", value: stats.completed, icon: CheckCircle2, gradient: "from-success to-success/60" },
-              { label: "Failed", value: stats.failed, icon: XCircle, gradient: "from-destructive to-destructive/60" },
-              { label: "Today", value: stats.today, icon: Clock, gradient: "from-info to-info/60" },
-            ].map((stat) => (
-              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3", RADIUS.md)}>
-                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-2">
-                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
-                    <stat.icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
-                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <Activity className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{stats.total} total runs</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <span className="text-sm font-medium text-success">{stats.completed} completed</span>
+            </div>
+            {stats.failed > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive/10 px-4 py-2">
+                <span className="text-sm font-medium text-destructive">{stats.failed} failed</span>
               </div>
-            ))}
+            )}
+            <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+              <span className="text-sm font-medium text-primary">{stats.today} today</span>
+            </div>
           </div>
         </div>
-      </motion.section>
+      </section>
 
       <motion.section variants={item} className="space-y-3">
         {isLoading ? (

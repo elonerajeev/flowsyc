@@ -15,6 +15,19 @@ type ReportDetail = {
   rows: Array<{ label: string; value: string; badge?: string }>;
 };
 
+type MonthlyTrend = {
+  month: string;
+  revenue: number;
+  clients: number;
+  projects: number;
+  candidates: number;
+};
+
+const REPORT_SNAPSHOT_LIMIT = 600;
+const ANALYTICS_SNAPSHOT_LIMIT = 1200;
+const REPORT_MONTH_WINDOW = 18;
+const ANALYTICS_MONTH_WINDOW = 12;
+
 function formatMonthRange(dates: Date[]) {
   if (!dates.length) return "No activity yet";
   const first = dates[0];
@@ -27,59 +40,133 @@ function formatMonthRange(dates: Date[]) {
 function buildActorFilter(actor?: AccessActor) {
   if (!actor || actor.role === "employee") return {};
   const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
-  return { createdBy: { in: actorIds } };
+  return actorIds.length > 0 ? { createdBy: { in: actorIds } } : {};
+}
+
+function buildClientActorFilter(actor?: AccessActor) {
+  if (!actor) return {};
+  const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+  return actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {};
+}
+
+function parseCurrency(value: unknown): number {
+  const parsed = Number(String(value ?? "0").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function subtractMonths(date: Date, months: number) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() - months);
+  return result;
+}
+
+function monthKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
+}
+
+function buildMonthlyTrendSkeleton(windowMonths: number): { key: string; value: MonthlyTrend }[] {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (windowMonths - 1), 1);
+
+  const rows: { key: string; value: MonthlyTrend }[] = [];
+  for (let index = 0; index < windowMonths; index += 1) {
+    const monthDate = new Date(start.getFullYear(), start.getMonth() + index, 1);
+    rows.push({
+      key: monthKey(monthDate),
+      value: {
+        month: monthDate.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+        revenue: 0,
+        clients: 0,
+        projects: 0,
+        candidates: 0,
+      },
+    });
+  }
+
+  return rows;
+}
+
+function safeAverage(total: number, count: number) {
+  if (count <= 0) return 0;
+  return Math.round(total / count);
 }
 
 export const reportsService = {
   async list(actor?: AccessActor) {
     const actorFilter = buildActorFilter(actor);
+    const clientActorFilter = buildClientActorFilter(actor);
+    const reportSince = subtractMonths(new Date(), REPORT_MONTH_WINDOW);
+
     const [invoices, clients, projects, teamMembers] = await Promise.all([
-      prisma.invoice.findMany({ where: { deletedAt: null, ...actorFilter }, select: { amount: true, createdAt: true, client: true, status: true, due: true } }),
-      prisma.client.findMany({ where: { deletedAt: null, ...(actor ? { assignedTo: { in: [actor.email, actor.userId].filter(Boolean) as string[] } } : {}) }, select: { name: true, status: true, tier: true, healthScore: true, revenue: true, industry: true } }),
-      prisma.project.findMany({ where: { deletedAt: null, ...actorFilter }, select: { name: true, status: true, progress: true, stage: true, budget: true } }),
-      prisma.teamMember.findMany({ where: { deletedAt: null }, select: { name: true, attendance: true, department: true, role: true, designation: true } }),
+      prisma.invoice.findMany({
+        where: { deletedAt: null, ...actorFilter, createdAt: { gte: reportSince } },
+        select: { amount: true, createdAt: true, client: true, status: true, due: true },
+        orderBy: { createdAt: "desc" },
+        take: REPORT_SNAPSHOT_LIMIT,
+      }),
+      prisma.client.findMany({
+        where: { deletedAt: null, ...clientActorFilter, createdAt: { gte: reportSince } },
+        select: { name: true, status: true, tier: true, healthScore: true, revenue: true, industry: true },
+        orderBy: { createdAt: "desc" },
+        take: REPORT_SNAPSHOT_LIMIT,
+      }),
+      prisma.project.findMany({
+        where: { deletedAt: null, ...actorFilter, createdAt: { gte: reportSince } },
+        select: { name: true, status: true, progress: true, stage: true, budget: true },
+        orderBy: { createdAt: "desc" },
+        take: REPORT_SNAPSHOT_LIMIT,
+      }),
+      prisma.teamMember.findMany({
+        where: { deletedAt: null },
+        select: { name: true, attendance: true, department: true, role: true, designation: true },
+        orderBy: { createdAt: "desc" },
+        take: REPORT_SNAPSHOT_LIMIT,
+      }),
     ]);
 
-    const totalInvoiceAmount = invoices.reduce((sum, inv) => {
-      const n = Number(String(inv.amount).replace(/[^0-9.]/g, ""));
-      return sum + (Number.isFinite(n) ? n : 0);
-    }, 0);
+    const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + parseCurrency(inv.amount), 0);
 
-    const activeClients = clients.filter(c => c.status === "active");
-    const enterpriseClients = clients.filter(c => c.tier === "Enterprise").length;
-    const growthClients = clients.filter(c => c.tier === "Growth").length;
-    const strategicClients = clients.filter(c => c.tier === "Strategic").length;
-    const activeProjects = projects.filter(p => p.status === "active" || p.status === "in_progress").length;
-    const completedProjects = projects.filter(p => p.status === "completed").length;
-    const presentMembers = teamMembers.filter(m => m.attendance === "present").length;
-    const remoteMembers = teamMembers.filter(m => m.attendance === "remote").length;
-    const absentMembers = teamMembers.filter(m => m.attendance === "absent").length;
-    const lateMembers = teamMembers.filter(m => m.attendance === "late").length;
+    const activeClients = clients.filter((client) => client.status === "active");
+    const enterpriseClients = clients.filter((client) => client.tier === "Enterprise").length;
+    const growthClients = clients.filter((client) => client.tier === "Growth").length;
+    const strategicClients = clients.filter((client) => client.tier === "Strategic").length;
+    const activeProjects = projects.filter((project) => project.status === "active" || project.status === "in_progress").length;
+    const completedProjects = projects.filter((project) => project.status === "completed").length;
+    const presentMembers = teamMembers.filter((member) => member.attendance === "present").length;
+    const remoteMembers = teamMembers.filter((member) => member.attendance === "remote").length;
+    const absentMembers = teamMembers.filter((member) => member.attendance === "absent").length;
+    const lateMembers = teamMembers.filter((member) => member.attendance === "late").length;
 
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
-    const invoiceDates = invoices.map(i => i.createdAt).sort((a, b) => a.getTime() - b.getTime());
-    const completedInvoices = invoices.filter(i => i.status === "completed");
-    const pendingInvoices = invoices.filter(i => i.status === "pending");
-    const avgHealth = clients.length ? Math.round(clients.reduce((s, c) => s + (c.healthScore ?? 0), 0) / clients.length) : 0;
+    const invoiceDates = invoices
+      .map((invoice) => invoice.createdAt)
+      .sort((a, b) => a.getTime() - b.getTime());
+    const completedInvoices = invoices.filter((invoice) => invoice.status === "completed");
+    const pendingInvoices = invoices.filter((invoice) => invoice.status === "pending");
+    const avgHealth = safeAverage(
+      clients.reduce((sum, client) => sum + (client.healthScore ?? 0), 0),
+      clients.length,
+    );
 
     const reports: ReportRecord[] = [
       {
         title: "Revenue Summary",
-        description: `Total invoiced revenue is $${Math.round(totalInvoiceAmount).toLocaleString()} across ${invoices.length} invoices.`,
+        description: `Recent invoiced revenue is $${Math.round(totalInvoiceAmount).toLocaleString()} across ${invoices.length} invoices.`,
         date: formatMonthRange(invoiceDates),
         type: "Financial",
         gradient: "from-success/18 via-success/6 to-transparent",
         details: {
           metrics: [
-            { label: "Total Revenue", value: `$${Math.round(totalInvoiceAmount).toLocaleString()}`, sub: "All invoices" },
-            { label: "Collected", value: `$${completedInvoices.reduce((s, i) => s + Number(String(i.amount).replace(/[^0-9.]/g, "")), 0).toLocaleString()}`, sub: `${completedInvoices.length} paid` },
-            { label: "Outstanding", value: `$${pendingInvoices.reduce((s, i) => s + Number(String(i.amount).replace(/[^0-9.]/g, "")), 0).toLocaleString()}`, sub: `${pendingInvoices.length} pending` },
-            { label: "Total Invoices", value: String(invoices.length), sub: "All time" },
+            { label: "Total Revenue", value: `$${Math.round(totalInvoiceAmount).toLocaleString()}`, sub: "Recent snapshot" },
+            { label: "Collected", value: `$${completedInvoices.reduce((sum, invoice) => sum + parseCurrency(invoice.amount), 0).toLocaleString()}`, sub: `${completedInvoices.length} paid` },
+            { label: "Outstanding", value: `$${pendingInvoices.reduce((sum, invoice) => sum + parseCurrency(invoice.amount), 0).toLocaleString()}`, sub: `${pendingInvoices.length} pending` },
+            { label: "Invoices", value: String(invoices.length), sub: `Last ${REPORT_MONTH_WINDOW} months` },
           ],
-          rows: invoices.slice(0, 8).map(i => ({
-            label: i.client,
-            value: `$${Number(String(i.amount).replace(/[^0-9.]/g, "")).toLocaleString()}`,
-            badge: i.status,
+          rows: invoices.slice(0, 8).map((invoice) => ({
+            label: invoice.client,
+            value: `$${parseCurrency(invoice.amount).toLocaleString()}`,
+            badge: invoice.status,
           })),
         },
       },
@@ -91,15 +178,15 @@ export const reportsService = {
         gradient: "from-accent/18 via-accent/8 to-transparent",
         details: {
           metrics: [
-            { label: "Total Clients", value: String(clients.length), sub: "All accounts" },
+            { label: "Clients", value: String(clients.length), sub: `Last ${REPORT_MONTH_WINDOW} months` },
             { label: "Active", value: String(activeClients.length), sub: "Currently active" },
             { label: "Avg Health Score", value: `${avgHealth}%`, sub: "Portfolio health" },
             { label: "Enterprise", value: String(enterpriseClients), sub: "Top tier" },
           ],
-          rows: clients.slice(0, 8).map(c => ({
-            label: c.name,
-            value: c.revenue ?? "$0",
-            badge: c.status,
+          rows: clients.slice(0, 8).map((client) => ({
+            label: client.name,
+            value: client.revenue ?? "$0",
+            badge: client.status,
           })),
         },
       },
@@ -111,15 +198,19 @@ export const reportsService = {
         gradient: "from-primary/18 via-primary/8 to-transparent",
         details: {
           metrics: [
-            { label: "Total Projects", value: String(projects.length), sub: "All time" },
+            { label: "Projects", value: String(projects.length), sub: `Last ${REPORT_MONTH_WINDOW} months` },
             { label: "Active", value: String(activeProjects), sub: "In progress" },
             { label: "Completed", value: String(completedProjects), sub: "Delivered" },
-            { label: "Avg Progress", value: projects.length ? `${Math.round(projects.reduce((s, p) => s + p.progress, 0) / projects.length)}%` : "0%", sub: "Across all" },
+            {
+              label: "Avg Progress",
+              value: projects.length ? `${safeAverage(projects.reduce((sum, project) => sum + project.progress, 0), projects.length)}%` : "0%",
+              sub: "Across snapshot",
+            },
           ],
-          rows: projects.slice(0, 8).map(p => ({
-            label: p.name,
-            value: `${p.progress}%`,
-            badge: p.stage,
+          rows: projects.slice(0, 8).map((project) => ({
+            label: project.name,
+            value: `${project.progress}%`,
+            badge: project.stage,
           })),
         },
       },
@@ -131,15 +222,15 @@ export const reportsService = {
         gradient: "from-info/16 via-info/8 to-transparent",
         details: {
           metrics: [
-            { label: "Total Members", value: String(teamMembers.length), sub: "Active team" },
+            { label: "Team Members", value: String(teamMembers.length), sub: "Latest snapshot" },
             { label: "Present", value: String(presentMembers), sub: "In office" },
             { label: "Remote", value: String(remoteMembers), sub: "Working remote" },
             { label: "Absent / Late", value: String(absentMembers + lateMembers), sub: "Needs follow-up" },
           ],
-          rows: teamMembers.slice(0, 8).map(m => ({
-            label: m.name,
-            value: m.designation,
-            badge: m.attendance,
+          rows: teamMembers.slice(0, 8).map((member) => ({
+            label: member.name,
+            value: member.designation,
+            badge: member.attendance,
           })),
         },
       },
@@ -150,71 +241,90 @@ export const reportsService = {
 
   async getAnalytics(actor?: AccessActor) {
     const actorFilter = buildActorFilter(actor);
-    const clientFilter = actor ? { assignedTo: { in: [actor.email, actor.userId].filter(Boolean) as string[] } } : {};
-    const [invoices, clients, projects, candidates, teamMembers, payroll] = await Promise.all([
-      prisma.invoice.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
-      prisma.client.findMany({ where: { deletedAt: null, ...clientFilter }, orderBy: { createdAt: "asc" } }),
-      prisma.project.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
-      prisma.candidate.findMany({ where: { deletedAt: null, ...actorFilter }, orderBy: { createdAt: "asc" } }),
-      prisma.teamMember.findMany({ where: { deletedAt: null } }),
-      prisma.payroll.findMany({ where: { deletedAt: null }, orderBy: { period: "asc" } }),
+    const clientFilter = buildClientActorFilter(actor);
+    const analyticsSince = subtractMonths(new Date(), ANALYTICS_MONTH_WINDOW + 1);
+
+    const [invoices, clients, projects, candidates, teamMembers] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { deletedAt: null, ...actorFilter, createdAt: { gte: analyticsSince } },
+        select: { amount: true, createdAt: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: ANALYTICS_SNAPSHOT_LIMIT,
+      }),
+      prisma.client.findMany({
+        where: { deletedAt: null, ...clientFilter, createdAt: { gte: analyticsSince } },
+        select: { createdAt: true, tier: true, revenue: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: ANALYTICS_SNAPSHOT_LIMIT,
+      }),
+      prisma.project.findMany({
+        where: { deletedAt: null, ...actorFilter, createdAt: { gte: analyticsSince } },
+        select: { createdAt: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: ANALYTICS_SNAPSHOT_LIMIT,
+      }),
+      prisma.candidate.findMany({
+        where: { deletedAt: null, ...actorFilter, createdAt: { gte: analyticsSince } },
+        select: { createdAt: true, stage: true },
+        orderBy: { createdAt: "desc" },
+        take: ANALYTICS_SNAPSHOT_LIMIT,
+      }),
+      prisma.teamMember.findMany({
+        where: { deletedAt: null },
+        select: { department: true, attendance: true },
+        orderBy: { createdAt: "desc" },
+        take: ANALYTICS_SNAPSHOT_LIMIT,
+      }),
     ]);
 
-    // Monthly revenue and growth
-    const months: Record<string, { month: string; revenue: number; clients: number; projects: number; candidates: number }> = {};
-    invoices.forEach((inv) => {
-      const m = inv.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
-      const n = Number(String(inv.amount).replace(/[^0-9.]/g, ""));
-      months[m].revenue += Number.isFinite(n) ? n : 0;
+    const monthRows = buildMonthlyTrendSkeleton(ANALYTICS_MONTH_WINDOW);
+    const monthMap = new Map(monthRows.map((row) => [row.key, row.value]));
+
+    invoices.forEach((invoice) => {
+      const row = monthMap.get(monthKey(invoice.createdAt));
+      if (row) row.revenue += parseCurrency(invoice.amount);
     });
-    clients.forEach((c) => {
-      const m = c.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
-      months[m].clients += 1;
+    clients.forEach((client) => {
+      const row = monthMap.get(monthKey(client.createdAt));
+      if (row) row.clients += 1;
     });
-    projects.forEach((p) => {
-      const m = p.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
-      months[m].projects += 1;
+    projects.forEach((project) => {
+      const row = monthMap.get(monthKey(project.createdAt));
+      if (row) row.projects += 1;
     });
-    candidates.forEach((ca) => {
-      const m = ca.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      if (!months[m]) months[m] = { month: m, revenue: 0, clients: 0, projects: 0, candidates: 0 };
-      months[m].candidates += 1;
+    candidates.forEach((candidate) => {
+      const row = monthMap.get(monthKey(candidate.createdAt));
+      if (row) row.candidates += 1;
     });
 
-    // Conversion rates
-    const hiredCandidates = candidates.filter(c => c.stage === "hired").length;
+    const hiredCandidates = candidates.filter((candidate) => candidate.stage === "hired").length;
     const totalCandidates = candidates.length;
     const conversionRate = totalCandidates > 0 ? (hiredCandidates / totalCandidates) * 100 : 0;
 
-    // Team performance
     const departmentStats = teamMembers.reduce((acc, member) => {
       if (!acc[member.department]) {
         acc[member.department] = { department: member.department, count: 0, present: 0 };
       }
       acc[member.department].count += 1;
-      if (member.attendance === "present") acc[member.department].present += 1;
+      if (member.attendance === "present") {
+        acc[member.department].present += 1;
+      }
       return acc;
     }, {} as Record<string, { department: string; count: number; present: number }>);
 
-    // Revenue by client tier
     const revenueByTier = clients.reduce((acc, client) => {
       const tier = client.tier || "Unknown";
-      const revenue = Number(String(client.revenue || "$0").replace(/[^0-9.]/g, "")) || 0;
-      acc[tier] = (acc[tier] || 0) + revenue;
+      acc[tier] = (acc[tier] || 0) + parseCurrency(client.revenue || "$0");
       return acc;
     }, {} as Record<string, number>);
 
-    // Project completion trends
     const projectStatusStats = projects.reduce((acc, project) => {
       acc[project.status] = (acc[project.status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     return {
-      monthlyTrends: Object.values(months),
+      monthlyTrends: monthRows.map((row) => row.value),
       conversionRate,
       departmentStats: Object.values(departmentStats),
       revenueByTier,
@@ -224,7 +334,7 @@ export const reportsService = {
         projects: projects.length,
         candidates: candidates.length,
         teamMembers: teamMembers.length,
-        totalRevenue: invoices.reduce((sum, inv) => sum + Number(String(inv.amount).replace(/[^0-9.]/g, "")), 0),
+        totalRevenue: invoices.reduce((sum, invoice) => sum + parseCurrency(invoice.amount), 0),
       },
     };
   },

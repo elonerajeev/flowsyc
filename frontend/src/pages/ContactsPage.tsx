@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -327,142 +327,111 @@ const ContactsPage = () => {
       </section>
 
       {/* Filters and Actions */}
-      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-[1.75rem] border border-border bg-card px-4 py-3 shadow-card">
+        <div className="flex flex-wrap items-center gap-2">
+
           {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search contacts by name, email, company..."
+              placeholder="Search contacts..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-8 h-8 text-sm"
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Select value={companyFilter} onValueChange={setCompanyFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Companies" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
-                {companyOptions.map((company) => (
-                  <SelectItem key={company.value} value={company.value}>
-                    {company.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Company filter */}
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="w-36 h-8 text-sm">
+              <SelectValue placeholder="Company" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Companies</SelectItem>
+              {companyOptions.map((c) => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {DEPARTMENTS.map((dept) => (
-                  <SelectItem key={dept} value={dept}>
-                    {dept}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Department filter */}
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger className="w-32 h-8 text-sm">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Depts</SelectItem>
+              {DEPARTMENTS.map((d) => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={seniorityFilter} onValueChange={setSeniorityFilter}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="All Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                {SENIORITY_LEVELS.map((level) => (
-                  <SelectItem key={level} value={level}>
-                    {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Sort */}
+          <Select value={`${sortBy}-${sortOrder}`} onValueChange={(v) => {
+            const [field, order] = v.split("-");
+            setSortBy(field);
+            setSortOrder(order as "asc" | "desc");
+          }}>
+            <SelectTrigger className="w-36 h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name-asc">Name A–Z</SelectItem>
+              <SelectItem value="name-desc">Name Z–A</SelectItem>
+              <SelectItem value="company-asc">Company A–Z</SelectItem>
+              <SelectItem value="createdAt-desc">Recently Added</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
-              const [field, order] = value.split("-");
-              setSortBy(field);
-              setSortOrder(order as "asc" | "desc");
-            }}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name-asc">Name A-Z</SelectItem>
-                <SelectItem value="name-desc">Name Z-A</SelectItem>
-                <SelectItem value="company-asc">Company A-Z</SelectItem>
-                <SelectItem value="company-desc">Company Z-A</SelectItem>
-                <SelectItem value="jobTitle-asc">Title A-Z</SelectItem>
-                <SelectItem value="createdAt-desc">Recently Added</SelectItem>
-                <SelectItem value="createdAt-asc">Oldest First</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearchTerm("");
-                setCompanyFilter("all");
-                setDepartmentFilter("all");
-                setSeniorityFilter("all");
-                setSortBy("name");
-                setSortOrder("asc");
-              }}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-4 flex items-center gap-3">
-          <Link to="/automation/gtm">
-            <Button variant="outline">
-              <Target className="h-4 w-4 mr-2" />
-              GTM Center
-            </Button>
-          </Link>
-          {canEdit && canUseQuickCreate && (
-            <Button onClick={() => openQuickCreate?.("contact")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Contact
+          {/* Reset */}
+          {(searchTerm || companyFilter !== "all" || departmentFilter !== "all" || seniorityFilter !== "all") && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => { setSearchTerm(""); setCompanyFilter("all"); setDepartmentFilter("all"); setSeniorityFilter("all"); setSortBy("name"); setSortOrder("asc"); }}>
+              <RefreshCw className="h-3 w-3 mr-1" /> Reset
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            onClick={() => exportMutation.mutate()}
-            disabled={exportMutation.isPending || filteredContacts.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
+          <div className="flex-1" />
 
-          {/* View Toggle */}
-          <div className="flex items-center gap-2 ml-auto">
-            <Button
-              variant={viewMode === "table" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("table")}
-            >
-              <TableIcon className="h-4 w-4 mr-2" />
-              Table
+          {/* View toggle */}
+          <div className="flex items-center rounded-md border overflow-hidden">
+            <Button variant={viewMode === "table" ? "default" : "ghost"} size="sm" className="h-8 rounded-none px-2.5" onClick={() => setViewMode("table")}>
+              <TableIcon className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              variant={viewMode === "cards" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("cards")}
-            >
-              <Grid3X3 className="h-4 w-4 mr-2" />
-              Cards
+            <Button variant={viewMode === "cards" ? "default" : "ghost"} size="sm" className="h-8 rounded-none px-2.5" onClick={() => setViewMode("cards")}>
+              <Grid3X3 className="h-3.5 w-3.5" />
             </Button>
           </div>
+
+          {/* Add Contact */}
+          {canEdit && canUseQuickCreate && (
+            <Button size="sm" className="h-8" onClick={() => openQuickCreate?.("contact")}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Contact
+            </Button>
+          )}
+
+          {/* More */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-2">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending || filteredContacts.length === 0}>
+                <Download className="h-4 w-4 mr-2" />
+                {exportMutation.isPending ? "Exporting..." : "Export CSV"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/automation/gtm" className="flex items-center gap-2">
+                  <Target className="h-4 w-4" /> GTM Center
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
         </div>
       </section>
 

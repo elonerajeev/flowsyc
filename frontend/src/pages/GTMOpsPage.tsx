@@ -176,106 +176,50 @@ export default function GTMOpsPage() {
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       {/* Header */}
-      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-success to-info" />
-        <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-primary/5 to-success/5 blur-3xl" />
-
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Activity className="h-3.5 w-3.5 text-primary" />
-                Sales & Marketing
-              </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                Sales <span className="bg-gradient-to-r from-primary to-success bg-clip-text text-transparent">Dashboard</span>
-              </h1>
-              <p className={cn("max-w-2xl text-muted-foreground", TEXT.body)}>
-                Track your sales pipeline, manage leads, monitor client health, and stay on top of follow-ups.
-              </p>
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">Automation · GTM Center</span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Link to="/sales/leads">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Target className="h-4 w-4" />
-                  All Leads
-                </Button>
-              </Link>
-              <Link to="/sales/clients">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Clients
-                </Button>
-              </Link>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Sales Dashboard</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Track your pipeline, manage leads, monitor client health, and stay on top of follow-ups.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <Target className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{data.summary.totalLeads} leads</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-info/30 bg-info/10 px-4 py-2">
+              <span className="text-sm font-medium text-info">{data.summary.totalDeals} deals</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <span className="text-sm font-medium text-success">{wonRate}% win rate</span>
+            </div>
+            {data.summary.pendingFollowups > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2">
+                <span className="text-sm font-medium text-warning">{data.summary.pendingFollowups} follow-ups due</span>
+              </div>
+            )}
+            {data.summary.churnRiskClients > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive/10 px-4 py-2">
+                <span className="text-sm font-medium text-destructive">{data.summary.churnRiskClients} at risk</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 ml-1">
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 Refresh
               </Button>
-            </div>
-          </div>
-
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
-            {[
-              { label: "Total Leads", value: data.summary.totalLeads, icon: Target, gradient: "from-primary to-primary/60", color: "text-primary", trend: null },
-              { label: "Active Deals", value: data.summary.totalDeals, icon: Workflow, gradient: "from-info to-info/60", color: "text-info", trend: null },
-              { label: "Clients", value: data.summary.totalClients, icon: Building2, gradient: "from-success to-success/60", color: "text-success", trend: null },
-              { label: "Follow-ups Due", value: data.summary.pendingFollowups, icon: Clock, gradient: "from-warning to-warning/60", color: "text-warning", trend: data.summary.pendingFollowups > 5 ? "up" : null },
-              { label: "At Risk", value: data.summary.churnRiskClients, icon: AlertTriangle, gradient: "from-destructive to-destructive/60", color: "text-destructive", trend: data.summary.churnRiskClients > 3 ? "up" : null },
-              { label: "Stale Deals", value: data.summary.staleDeals, icon: Activity, gradient: "from-muted to-muted/60", color: "text-muted-foreground", trend: null },
-            ].map((stat) => (
-              <div key={stat.label} className={cn("relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-4", RADIUS.md)}>
-                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-3">
-                  <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
-                    <stat.icon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                    <div className="flex items-center gap-1">
-                      <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                      {stat.trend === "up" && <ArrowUpRight className="h-3 w-3 text-destructive" />}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick Stats Bar */}
-          <div className="flex flex-wrap items-center gap-4 pt-2">
-            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1.5">
-              <Flame className="h-4 w-4 text-success" />
-              <span className="text-sm font-medium text-success">{wonRate}% Win Rate</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-info/30 bg-info/10 px-3 py-1.5">
-              <BarChart3 className="h-4 w-4 text-info" />
-              <span className="text-sm font-medium text-info">{qualifiedRate}% Qualified</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-primary">{data.hotLeads.length} Hot Leads</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-3 py-1.5">
-              <Timer className="h-4 w-4 text-warning" />
-              <span className="text-sm font-medium text-warning">{data.summary.pendingAutomations} Pending</span>
-            </div>
-            <div className="ml-auto">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => recalculateMutation.mutate()}
-                disabled={recalculateMutation.isPending}
-                className="gap-2 text-xs"
-              >
-                <Zap className={cn("h-3 w-3", recalculateMutation.isPending && "animate-pulse")} />
-                {recalculateMutation.isPending ? "Recalculating..." : "Recalculate Scores"}
+              <Button variant="outline" size="sm" onClick={() => recalculateMutation.mutate()} disabled={recalculateMutation.isPending} className="gap-2">
+                <Zap className={cn("h-3.5 w-3.5", recalculateMutation.isPending && "animate-pulse")} />
+                {recalculateMutation.isPending ? "Recalculating..." : "Recalculate"}
               </Button>
             </div>
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">

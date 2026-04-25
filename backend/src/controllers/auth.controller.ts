@@ -260,31 +260,29 @@ export const authController = {
     let user = await prisma.user.findUnique({ where: { email: googleUser.email } });
 
     if (!user) {
+      const { nanoid } = await import("nanoid");
       user = await prisma.user.create({
         data: {
+          id: nanoid(),
           email: googleUser.email,
-          name: googleUser.name || googleUser.email.split('@')[0],
-          password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
-          role: "member",
-          status: "active",
-          avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
-          metadata: {
-            googleAccessToken: googleUser.accessToken,
-            googleId: googleUser.id,
-            signupMethod: "google",
-          },
+          name: googleUser.name || googleUser.email.split("@")[0],
+          passwordHash: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+          role: "employee",
+          employeeId: `EMP-${Date.now()}`,
+          department: "", team: "", designation: "", manager: "",
+          workingHours: "", officeLocation: "", timeZone: "Asia/Kolkata",
+          baseSalary: 0, allowances: 0, deductions: 0,
+          paymentMode: "bank_transfer", payrollCycle: "monthly",
+          payrollDueDate: "", joinedAt: new Date().toISOString().split("T")[0],
+          location: "", updatedAt: new Date(),
+          signatureUrl: googleUser.picture ?? null,
         },
       });
     } else {
+      // No metadata field in schema — just update signatureUrl if missing
       await prisma.user.update({
         where: { id: user.id },
-        data: {
-          metadata: {
-            ...(user.metadata as object || {}),
-            googleAccessToken: googleUser.accessToken,
-            googleId: googleUser.id,
-          },
-        },
+        data: { signatureUrl: user.signatureUrl ?? googleUser.picture ?? null },
       });
     }
 
@@ -310,19 +308,22 @@ export const authController = {
       throw new AppError("User already exists. Please login with Google.", 400, "USER_EXISTS");
     }
 
+    const { nanoid } = await import("nanoid");
     const user = await prisma.user.create({
       data: {
+        id: nanoid(),
         email: googleUser.email,
-        name: googleUser.name || googleUser.email.split('@')[0],
-        password: await hashPassword(`google_${Date.now()}_${Math.random()}`),
-        role: "member",
-        status: "active",
-        avatar: googleUser.picture || googleUser.email.charAt(0).toUpperCase(),
-        metadata: {
-          googleAccessToken: googleUser.accessToken,
-          googleId: googleUser.id,
-          signupMethod: "google",
-        },
+        name: googleUser.name || googleUser.email.split("@")[0],
+        passwordHash: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+        role: "employee",
+        employeeId: `EMP-${Date.now()}`,
+        department: "", team: "", designation: "", manager: "",
+        workingHours: "", officeLocation: "", timeZone: "Asia/Kolkata",
+        baseSalary: 0, allowances: 0, deductions: 0,
+        paymentMode: "bank_transfer", payrollCycle: "monthly",
+        payrollDueDate: "", joinedAt: new Date().toISOString().split("T")[0],
+        location: "", updatedAt: new Date(),
+        signatureUrl: googleUser.picture ?? null,
       },
     });
 

@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { AppError } from "../middleware/error.middleware";
 import { tasksService } from "../services/tasks.service";
 import { logAudit } from "../utils/audit";
-import { taskQuerySchema } from "../validators/query.schema";
+import { taskPaginatedQuerySchema, taskQuerySchema, taskStatsQuerySchema } from "../validators/query.schema";
 
 function readTaskId(request: Request) {
   const taskId = Number(request.params.id);
@@ -30,6 +30,40 @@ export const tasksController = {
 
     const tasks = await tasksService.list(parsed.data, req.auth);
     res.status(200).json(tasks);
+  },
+  paginated: async (req: Request, res: Response): Promise<void> => {
+    const parsed = taskPaginatedQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid query parameters",
+          details: parsed.error.flatten(),
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const tasks = await tasksService.listPaginated(parsed.data, req.auth);
+    res.status(200).json(tasks);
+  },
+  stats: async (req: Request, res: Response): Promise<void> => {
+    const parsed = taskStatsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid query parameters",
+          details: parsed.error.flatten(),
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const stats = await tasksService.stats(parsed.data, req.auth);
+    res.status(200).json(stats);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
     const task = await tasksService.getById(readTaskId(req), req.auth);

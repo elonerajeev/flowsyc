@@ -131,14 +131,14 @@ export function assertResourceOwnership(
   resource: { createdBy?: string | null; assignedTo?: string | null },
   label = "resource",
 ) {
-  if (!actor || actor.role === "employee") return; // employees handled by their own scope
-  if (actor.role !== "admin" && actor.role !== "manager") return;
+  if (!actor) return;
+  if (actor.role === "admin") return;    // admins have full access
+  if (actor.role === "employee") return; // employees handled by their own scope
 
-  const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
-  const resourceOwners = [resource.createdBy, resource.assignedTo].filter(Boolean) as string[];
-  const hasAccess = resourceOwners.some(o => actorIds.includes(o));
-
-  if (!hasAccess) {
+  // managers must own the resource
+  const ids = [actor.email, actor.userId].filter(Boolean) as string[];
+  const owners = [resource.createdBy, resource.assignedTo].filter(Boolean) as string[];
+  if (owners.length > 0 && !owners.some(o => ids.includes(o))) {
     throw new AppError(`Access denied: you do not own this ${label}`, 403, "FORBIDDEN");
   }
 }
@@ -167,4 +167,13 @@ export async function getInvoiceClientLabels(actor: AccessActor) {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+}
+
+/**
+ * Returns a deduplicated array of identifiers (email + userId) for an actor.
+ * Used in WHERE clauses to match records owned by or assigned to this actor.
+ */
+export function actorIds(actor: AccessActor): string[] {
+  if (!actor) return [];
+  return [...new Set([actor.email, actor.userId].filter((v): v is string => Boolean(v)))];
 }

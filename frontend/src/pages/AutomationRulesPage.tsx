@@ -55,19 +55,28 @@ const triggerLabels: Record<string, string> = {
   lead_updated: "Lead Updated",
   lead_scored: "Lead Scored",
   lead_assigned: "Lead Assigned",
+  lead_score_above: "Score Above X",
+  lead_score_below: "Score Below X",
+  cold_lead_detected: "Cold Lead Detected",
   deal_created: "Deal Created",
   deal_stage_changed: "Deal Stage Changed",
   deal_closed: "Deal Closed",
+  deal_stale: "Deal Stale",
   task_created: "Task Created",
   task_completed: "Task Completed",
   task_overdue: "Task Overdue",
+  followup_due: "Follow-up Due",
   client_created: "Client Created",
   client_health_changed: "Client Health Changed",
+  client_health_low: "Client Health Low",
+  churn_risk: "Churn Risk",
+  renewal_due: "Renewal Due",
   invoice_created: "Invoice Created",
   invoice_overdue: "Invoice Overdue",
   payroll_due: "Payroll Due",
   project_stalled: "Project Stalled",
   custom_schedule: "Scheduled",
+  manual: "Manual Trigger",
 };
 
 const triggerIcons: Record<string, any> = {
@@ -75,19 +84,28 @@ const triggerIcons: Record<string, any> = {
   lead_updated: Edit2,
   lead_scored: Activity,
   lead_assigned: Bell,
+  lead_score_above: Activity,
+  lead_score_below: Activity,
+  cold_lead_detected: AlertCircle,
   deal_created: Plus,
   deal_stage_changed: ChevronRight,
   deal_closed: CheckCircle2,
+  deal_stale: Clock,
   task_created: Plus,
   task_completed: CheckCircle2,
   task_overdue: AlertCircle,
+  followup_due: Clock,
   client_created: Plus,
   client_health_changed: Activity,
+  client_health_low: AlertCircle,
+  churn_risk: AlertCircle,
+  renewal_due: Clock,
   invoice_created: Plus,
   invoice_overdue: AlertCircle,
   payroll_due: Clock,
   project_stalled: AlertCircle,
   custom_schedule: Clock,
+  manual: Zap,
 };
 
 const actionLabels: Record<string, string> = {
@@ -186,112 +204,40 @@ export default function AutomationRulesPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      {/* Hero Section */}
-      <motion.section
-        variants={item}
-        className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card"
-      >
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
-        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
-
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Zap className="h-3.5 w-3.5 text-primary" />
-                Automation
-              </div>
-              <h1 className="font-display text-3xl font-semibold text-foreground">
-                <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
-                  Automation
-                </span>{" "}
-                Rules
-              </h1>
-              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
-                Create rules to automate your GTM workflow. Triggers fire actions automatically.
-              </p>
+      {/* Header */}
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
+              <Zap className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">Automation · Rules</span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="gap-2"
-              >
-                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                Refresh
+            <h1 className="font-display text-3xl font-semibold text-foreground">Automation Rules</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Build conditional triggers to automate lead assignments, notifications, and status changes.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <Zap className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{rules.length} total rules</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
+              <span className="text-sm font-medium text-success">{activeRules} active</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <span className="text-sm font-medium text-muted-foreground">{rules.length - activeRules} inactive</span>
+            </div>
+            <div className="flex items-center gap-2 ml-1">
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setLogsDialogOpen(true)}>
+                <Activity className="h-3.5 w-3.5" /> Logs
               </Button>
-              <Dialog open={ruleDialogOpen} onOpenChange={open => { setRuleDialogOpen(open); if (!open) setSelectedRule(null); }}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Create Rule
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                  <DialogHeader className="shrink-0">
-                    <DialogTitle>{selectedRule ? "Edit Automation Rule" : "Create Automation Rule"}</DialogTitle>
-                    <DialogDescription>
-                      {selectedRule ? "Modify your automation rule settings." : "Set up a trigger and actions to automate your workflow."}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex-1 overflow-y-auto">
-                    <RuleBuilder onSuccess={() => { setRuleDialogOpen(false); setSelectedRule(null); }} editRule={selectedRule} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[
-              { label: "Total Rules", value: rules.length, icon: Zap, gradient: "from-primary to-primary/60" },
-              { label: "Active", value: activeRules, icon: Play, gradient: "from-success to-success/60" },
-              { label: "Paused", value: pausedRules, icon: Pause, gradient: "from-warning to-warning/60" },
-              { label: "Executions", value: stats?.totalLogs || 0, icon: Activity, gradient: "from-info to-info/60" },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className={cn(
-                  "relative overflow-hidden rounded-xl border border-border/40 bg-secondary/20 p-3",
-                  RADIUS.md
-                )}
-              >
-                <div className={cn("absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br border",
-                      stat.gradient,
-                      "text-white border-transparent"
-                    )}
-                  >
-                    <stat.icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{stat.value}</p>
-                    <p className={cn("text-muted-foreground", TEXT.meta)}>{stat.label}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search rules..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-10 pl-10 rounded-xl border border-border/40 bg-background/70 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
-              />
+              <Button size="sm" className="gap-2" onClick={() => setRuleDialogOpen(true)}>
+                <Plus className="h-3.5 w-3.5" /> New Rule
+              </Button>
             </div>
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* Rules List */}
       <motion.section variants={item}>
@@ -500,6 +446,21 @@ export default function AutomationRulesPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedRule && <RuleLogs ruleId={selectedRule.id} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create / Edit Rule Dialog */}
+      <Dialog open={ruleDialogOpen} onOpenChange={open => { setRuleDialogOpen(open); if (!open) setSelectedRule(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{selectedRule ? "Edit Automation Rule" : "Create Automation Rule"}</DialogTitle>
+            <DialogDescription>
+              {selectedRule ? "Modify your automation rule settings." : "Set up a trigger and actions to automate your workflow."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <RuleBuilder onSuccess={() => { setRuleDialogOpen(false); setSelectedRule(null); }} editRule={selectedRule} />
+          </div>
         </DialogContent>
       </Dialog>
     </motion.div>

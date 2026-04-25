@@ -61,6 +61,7 @@ type QueryParams = {
   status?: string;
   source?: string;
   assignedTo?: string;
+  assignedState?: "assigned" | "unassigned";
   minScore?: number;
   maxScore?: number;
   search?: string;
@@ -127,8 +128,14 @@ export const leadsService = {
     }
     if (params.source) filterConditions.push({ source: params.source as any });
     if (params.assignedTo) filterConditions.push({ assignedTo: params.assignedTo });
-    if (params.minScore) filterConditions.push({ score: { gte: params.minScore } });
-    if (params.maxScore) filterConditions.push({ score: { lte: params.maxScore } });
+    if (params.assignedState === "assigned") {
+      filterConditions.push({ assignedTo: { not: null } });
+    }
+    if (params.assignedState === "unassigned") {
+      filterConditions.push({ OR: [{ assignedTo: null }, { assignedTo: "" }] });
+    }
+    if (params.minScore !== undefined) filterConditions.push({ score: { gte: params.minScore } });
+    if (params.maxScore !== undefined) filterConditions.push({ score: { lte: params.maxScore } });
 
     // Data isolation: Admin/Manager can only see leads they created or assigned to them
     if (access?.role === "admin" || access?.role === "manager") {
@@ -158,16 +165,16 @@ export const leadsService = {
 
     // Cache full unfiltered admin/manager list (most common case) — keyed per user to prevent cross-user leaks
     const isUnfiltered = !params.status && !params.source && !params.search &&
-      !params.assignedTo && !params.minScore && !params.maxScore &&
-      access?.role !== "employee" && (params.limit || 50) >= 500;
+      !params.assignedTo && !params.assignedState && params.minScore === undefined && params.maxScore === undefined &&
+      access?.role !== "employee" && (params.limit || 50) >= 100;
 
-    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.limit || 50}`;
+    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.page || 1}:${params.limit || 50}`;
     if (isUnfiltered) {
       const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
       if (cached) return cached;
     }
 
-const leads = await prisma.lead.findMany({
+    const leads = await prisma.lead.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
       take: params.limit || 50,

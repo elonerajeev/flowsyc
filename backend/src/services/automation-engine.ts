@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma";
-import { Prisma } from "@prisma/client";
+import { AutomationTrigger as PrismaAutomationTrigger, Prisma } from "@prisma/client";
 import { sendMail } from "../utils/mailer";
 import { logger } from "../utils/logger";
 import cron, { ScheduledTask } from "node-cron";
@@ -17,24 +17,7 @@ function buildTaskAvatar(title: string): string {
 }
 
 // Types for automation
-type TriggerType = 
-  | "lead_created" 
-  | "lead_updated" 
-  | "lead_scored" 
-  | "lead_assigned"
-  | "deal_created" 
-  | "deal_stage_changed" 
-  | "deal_closed"
-  | "task_created" 
-  | "task_completed" 
-  | "task_overdue"
-  | "client_created" 
-  | "client_health_changed"
-  | "invoice_created" 
-  | "invoice_overdue"
-  | "payroll_due" 
-  | "project_stalled"
-  | "custom_schedule";
+type TriggerType = PrismaAutomationTrigger;
 
 type ActionType = 
   | "send_email"
@@ -150,7 +133,9 @@ function checkConditions(conditions: Condition[], event: TriggerEvent): boolean 
       case "not_equals":
         return fieldValue !== value;
       case "contains":
-        return String(fieldValue).includes(String(value));
+        return Array.isArray(fieldValue)
+          ? fieldValue.includes(value)
+          : String(fieldValue ?? "").includes(String(value ?? ""));
       case "greater_than":
         return Number(fieldValue) > Number(value);
       case "less_than":
@@ -161,10 +146,26 @@ function checkConditions(conditions: Condition[], event: TriggerEvent): boolean 
       case "<=":
       case "lte":
         return Number(fieldValue) <= Number(value);
+      case "in":
+        return Array.isArray(value)
+          ? value.includes(fieldValue)
+          : String(value ?? "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .includes(String(fieldValue ?? ""));
+      case "not_in":
+        return Array.isArray(value)
+          ? !value.includes(fieldValue)
+          : !String(value ?? "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .includes(String(fieldValue ?? ""));
       case "is_empty":
-        return !fieldValue || fieldValue === "";
+        return fieldValue === undefined || fieldValue === null || fieldValue === "";
       case "is_not_empty":
-        return fieldValue && fieldValue !== "";
+        return fieldValue !== undefined && fieldValue !== null && fieldValue !== "";
       default:
         return true;
     }
@@ -1057,10 +1058,7 @@ function resolveTemplateString(template: string, event: TriggerEvent): string {
 }
 
 function buildEmailFromTemplate(template: string, data: Record<string, unknown>, event: TriggerEvent): string {
-<<<<<<< HEAD
-=======
   // Default templates
->>>>>>> security-fix
   const templates: Record<string, string> = {
     "lead_welcome": `
 <!DOCTYPE html>

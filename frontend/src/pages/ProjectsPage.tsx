@@ -121,85 +121,54 @@ export default function ProjectsPage() {
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       {/* Header */}
-      <motion.section variants={item} className="rounded-[1.75rem] border border-border/70 bg-card/90 p-6 shadow-card">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
               <FolderKanban className="h-3.5 w-3.5 text-primary" />
-              Program Delivery
+              <span className="text-xs font-medium text-muted-foreground">Workspace · Projects</span>
             </div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
-              <div className="flex items-center gap-2">
-                {(role === "admin" || role === "manager" || role === "employee") && (
-                  <motion.div whileTap={{ scale: 0.94 }}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open("/api/system/export/projects/csv", "_blank")}
-                      className="inline-flex items-center gap-1.5 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
-                    >
-                      <Download className="h-3 w-3 text-primary" />
-                      Export
-                    </Button>
-                  </motion.div>
-                )}
-                <motion.div whileTap={{ scale: 0.94 }}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefresh}
-                      disabled={isRefreshing}
-                      className="inline-flex items-center gap-1.5 border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary/40"
-                    >
-                      <RefreshCw className={cn("h-3 w-3 text-primary", isRefreshing && "animate-spin")} />
-                      Refresh
-                  </Button>
-                </motion.div>
-                {canUseQuickCreate && (
-                  <Button
-                    size="sm"
-                    onClick={() => openQuickCreate("project")}
-                    className="inline-flex items-center gap-1.5 font-semibold"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    New Project
-                  </Button>
-                )}
-              </div>
-            </div>
-            <p className={cn("max-w-xl text-muted-foreground", TEXT.body)}>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Projects</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
               {canViewBudget
                 ? "Track delivery stages, budgets, and progress across all active programs."
-                : "Track the projects assigned to you without exposing portfolio budget details."}
+                : "Track the projects assigned to you."}
             </p>
           </div>
 
-          {/* Summary stats - hide for employees with no projects */}
-          {(role !== "employee" || preferredProjects.length > 0) && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:flex lg:gap-3">
-              {[
-                { label: "Active", value: summary.active, icon: FolderKanban, color: "text-primary bg-primary/10" },
-                { label: "Done", value: summary.completed, icon: CheckCircle2, color: "text-success bg-success/10" },
-                { label: "Avg Progress", value: `${summary.avgProgress}%`, icon: Gauge, color: "text-warning bg-warning/10" },
-                canViewBudget
-                  ? { label: "Total Budget", value: summary.totalBudget >= 1000 ? `$${(summary.totalBudget/1000).toFixed(0)}K` : `$${summary.totalBudget}`, icon: Wallet, color: "text-accent bg-accent/10" }
-                  : { label: "Assigned", value: String(preferredProjects.length), icon: Wallet, color: "text-accent bg-accent/10" },
-              ].map(({ label, value, icon: Icon, color }) => (
-                <div key={label} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-secondary/20 px-4 py-3 min-w-[110px]">
-                  <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color)}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-                    <p className="font-display text-lg font-bold text-foreground">{value}</p>
-                  </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {(role !== "employee" || preferredProjects.length > 0) && (
+              <>
+                <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+                  <FolderKanban className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm font-medium text-primary">{summary.active} active</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+                  <span className="text-sm font-medium text-success">{summary.completed} done</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2">
+                  <span className="text-sm font-medium text-warning">{summary.avgProgress}% avg progress</span>
+                </div>
+              </>
+            )}
+            <div className="flex items-center gap-2 ml-1">
+              {(role === "admin" || role === "manager" || role === "employee") && (
+                <Button variant="outline" size="sm" onClick={() => window.open("/api/system/export/projects/csv", "_blank")} className="gap-2">
+                  <Download className="h-3.5 w-3.5" /> Export
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
+                <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} /> Refresh
+              </Button>
+              {canUseQuickCreate && (
+                <Button size="sm" onClick={() => openQuickCreate("project")} className="gap-2">
+                  <Plus className="h-3.5 w-3.5" /> New Project
+                </Button>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* Project list */}
       <motion.div variants={item} className="space-y-3">

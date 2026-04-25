@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useMemo, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   Building2,
@@ -16,7 +16,7 @@ import {
   Video,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useClients, crmKeys } from "@/hooks/use-crm-data";
+import { crmKeys } from "@/hooks/use-crm-data";
 import { useListPreferences } from "@/hooks/use-list-preferences";
 import { useRefresh } from "@/hooks/use-refresh";
 import { useExport } from "@/hooks/use-export";
@@ -41,7 +41,6 @@ import ScheduleMeetingDialog from "@/components/crm/ScheduleMeetingDialog";
 const segmentOptions = ["all", "Expansion", "Renewal", "New Business"] as const;
 
 export default function ClientsPage() {
-  const { data: clients = [], isLoading, error: clientsError, refetch } = useClients();
   const { role } = useTheme();
   const { openQuickCreate, canUseQuickCreate } = useWorkspace();
   const canViewCommercialInsights = role === "admin" || role === "manager";
@@ -53,14 +52,52 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [segment, setSegment] = useState<(typeof segmentOptions)[number]>("all");
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(4);
-  const PAGE_SIZE = 4;
+  const PAGE_SIZE = 8;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { refresh, isRefreshing } = useRefresh();
   const [meetingClient, setMeetingClient] = useState<{ id: number; name: string; email: string } | null>(null);
+  const normalizedSearch = deferredSearch.trim();
+
+  const clientsQuery = useInfiniteQuery({
+    queryKey: [...crmKeys.clients, {
+      search: normalizedSearch.toLowerCase(),
+      status: statusFilter,
+      segment,
+      limit: PAGE_SIZE,
+    }],
+    queryFn: ({ pageParam }) => crmService.getClientsPage({
+      page: Number(pageParam),
+      limit: PAGE_SIZE,
+      search: normalizedSearch || undefined,
+      status: statusFilter !== "all" ? (statusFilter as "active" | "pending" | "completed") : undefined,
+      segment: segment !== "all" ? segment : undefined,
+      sort: "createdAt",
+      order: "desc",
+    }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (
+      lastPage.pagination.page < lastPage.pagination.totalPages
+        ? lastPage.pagination.page + 1
+        : undefined
+    ),
+    staleTime: 60_000,
+  });
+
+  const clients = useMemo(
+    () => clientsQuery.data?.pages.flatMap((page) => page.data) ?? [],
+    [clientsQuery.data?.pages],
+  );
+  const clientsTotal = clientsQuery.data?.pages?.[0]?.pagination.total ?? 0;
+  const isLoading = clientsQuery.isLoading && !clientsQuery.data;
+  const clientsError = clientsQuery.error;
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [normalizedSearch, statusFilter, segment]);
 
   const handleRefresh = async () => {
     await refresh(
-      () => refetch(),
+      () => clientsQuery.refetch(),
       {
         message: getRefreshMessage("clients"),
         successMessage: getRefreshSuccessMessage("clients"),
@@ -93,23 +130,12 @@ export default function ClientsPage() {
     (client) => String(client.id),
   );
 
-  const filtered = useMemo(() => {
-    return preferredClients.filter((client) => {
-      const searchMatch =
-        client.name.toLowerCase().includes(deferredSearch.toLowerCase()) ||
-        client.industry.toLowerCase().includes(deferredSearch.toLowerCase()) ||
-        client.company.toLowerCase().includes(deferredSearch.toLowerCase()) ||
-        (canViewCommercialInsights && client.manager.toLowerCase().includes(deferredSearch.toLowerCase()));
-      const statusMatch = statusFilter === "all" || client.status === statusFilter;
-      const segmentMatch = segment === "all" || client.segment === segment;
-      return searchMatch && statusMatch && segmentMatch;
-    });
-  }, [canViewCommercialInsights, deferredSearch, preferredClients, segment, statusFilter]);
+  const filtered = preferredClients;
 
   const overview = useMemo(() => {
     if (!canViewCommercialInsights) {
       return {
-        total: clients.length,
+        total: clientsTotal || clients.length,
         enterprise: clients.filter((client) => client.status === "active").length,
         avgHealth: clients.filter((client) => client.status === "pending").length,
         expansion: new Set(clients.map((client) => client.location)).size,
@@ -123,12 +149,27 @@ export default function ClientsPage() {
     const expansion = clients.filter((client) => client.segment === "Expansion").length;
 
     return {
-      total: clients.length,
+      total: clientsTotal || clients.length,
       enterprise,
       avgHealth,
       expansion,
     };
-  }, [canViewCommercialInsights, clients]);
+  }, [canViewCommercialInsights, clients, clientsTotal]);
+
+  const displayedClients = filtered.slice(0, visibleCount);
+  const totalForShowMore = clientsTotal || filtered.length;
+  const handleShowMore = async () => {
+    if (visibleCount < filtered.length) {
+      setVisibleCount((value) => Math.min(value + PAGE_SIZE, totalForShowMore));
+      return;
+    }
+
+    if (clientsQuery.hasNextPage && !clientsQuery.isFetchingNextPage) {
+      await clientsQuery.fetchNextPage();
+      setVisibleCount((value) => Math.min(value + PAGE_SIZE, totalForShowMore));
+    }
+  };
+  const handleShowLess = () => setVisibleCount(PAGE_SIZE);
   
   const handleExportCSV = () => {
     if (!clients.length) return;
@@ -164,7 +205,7 @@ export default function ClientsPage() {
         title="Client data failed to load"
         error={clientsError}
         description="The client portfolio could not be loaded. Retry to refresh companies and contacts."
-        onRetry={() => refetch()}
+        onRetry={() => clientsQuery.refetch()}
         retryLabel="Retry clients"
       />
     );
@@ -329,7 +370,7 @@ export default function ClientsPage() {
               <p className="mt-2 text-sm text-muted-foreground">Try a different search term or clear the filters.</p>
             </div>
           ) : (
-            filtered.slice(0, visibleCount).map((client) => (
+            displayedClients.map((client) => (
               <motion.article
                 key={client.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -454,11 +495,11 @@ export default function ClientsPage() {
             ))
           )}
           <ShowMoreButton
-            total={filtered.length}
+            total={totalForShowMore}
             visible={visibleCount}
             pageSize={PAGE_SIZE}
-            onShowMore={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filtered.length))}
-            onShowLess={() => setVisibleCount(PAGE_SIZE)}
+            onShowMore={handleShowMore}
+            onShowLess={handleShowLess}
           />
         </div>
 
@@ -505,7 +546,7 @@ export default function ClientsPage() {
             <div className="space-y-3">
               {filtered.length > 0 ? (
                 <>
-                {filtered.slice(0, visibleCount).map((client) => (
+                {displayedClients.map((client) => (
                   <div key={client.id} className="rounded-xl border border-border/40 bg-secondary/20 p-4 transition-colors hover:bg-secondary/30">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -525,11 +566,11 @@ export default function ClientsPage() {
                   </div>
                 ))}
                 <ShowMoreButton
-                  total={filtered.length}
+                  total={totalForShowMore}
                   visible={visibleCount}
                   pageSize={PAGE_SIZE}
-                  onShowMore={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filtered.length))}
-                  onShowLess={() => setVisibleCount(PAGE_SIZE)}
+                  onShowMore={handleShowMore}
+                  onShowLess={handleShowLess}
                 />
                 </>
               ) : (

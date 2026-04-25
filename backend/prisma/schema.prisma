@@ -234,6 +234,9 @@ model Task {
   @@index([projectId])
   @@index([dueDate])
   @@index([assignee])
+  @@index([deletedAt, column, updatedAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt, projectId, column, updatedAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt, priority, column, updatedAt(sort: Desc), id(sort: Desc)])
 }
 
 model Comment {
@@ -254,6 +257,8 @@ model Comment {
   @@index([taskId])
   @@index([projectId])
   @@index([deletedAt])
+  @@index([taskId, deletedAt, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([projectId, deletedAt, createdAt(sort: Desc), id(sort: Desc)])
 }
 
 model Attachment {
@@ -278,6 +283,8 @@ model Attachment {
   @@index([taskId])
   @@index([projectId])
   @@index([deletedAt])
+  @@index([taskId, deletedAt, createdAt(sort: Desc)])
+  @@index([projectId, deletedAt, createdAt(sort: Desc)])
 }
 
 model TeamMember {
@@ -1101,4 +1108,47 @@ enum CsvImportStatus {
   processing
   completed
   failed
+}
+
+// ─── IMAP Email Inbox ───────────────────────────────────────────────────────
+
+model InboxEmail {
+  id          Int      @id @default(autoincrement())
+  uid         String   // IMAP UID (unique per mailbox)
+  messageId   String?  // Email Message-ID header
+  subject     String
+  fromEmail   String
+  fromName    String   @default("")
+  toEmail     String
+  body        String   @db.Text
+  htmlBody    String?  @db.Text
+  isRead      Boolean  @default(false)
+  isStarred   Boolean  @default(false)
+  folder      String   @default("INBOX")
+  // CRM linkage — matched by email address
+  entityType  String?  // "Lead" | "Client" | "Contact"
+  entityId    Int?
+  receivedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([uid, toEmail])
+  @@index([fromEmail])
+  @@index([entityType, entityId])
+  @@index([receivedAt])
+  @@index([isRead])
+}
+
+model ImapAccount {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  email     String
+  host      String   @default("imap.gmail.com")
+  port      Int      @default(993)
+  password  String   // App password (encrypted at rest)
+  isActive  Boolean  @default(true)
+  lastSync  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

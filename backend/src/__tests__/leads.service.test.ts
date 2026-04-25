@@ -144,8 +144,8 @@ describe("leadsService", () => {
 
     it("returns paginated leads", async () => {
       mockState.leads.push(
-        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "Acme", status: "qualified", source: "referral", score: 70, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
+        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "Acme", status: "qualified", source: "referral", score: 70, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
       );
 
       const { leadsService } = await import("../services/leads.service");
@@ -157,8 +157,8 @@ describe("leadsService", () => {
 
     it("filters leads by status", async () => {
       mockState.leads.push(
-        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "Acme", status: "qualified", source: "referral", score: 70, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
+        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "Acme", status: "qualified", source: "referral", score: 70, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
       );
 
       const { leadsService } = await import("../services/leads.service");
@@ -170,8 +170,8 @@ describe("leadsService", () => {
 
     it("filters leads by search", async () => {
       mockState.leads.push(
-        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "TechCorp", status: "qualified", source: "referral", score: 70, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
+        { id: 1, firstName: "John", lastName: "Doe", email: "john@example.com", company: "Acme", status: "new", source: "website", score: 50, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 2, firstName: "Jane", lastName: "Smith", email: "jane@example.com", company: "TechCorp", status: "qualified", source: "referral", score: 70, jobTitle: null, phone: null, assignedTo: null, createdBy: null, tags: [], deletedAt: null, createdAt: new Date(), updatedAt: new Date() }
       );
 
       const { leadsService } = await import("../services/leads.service");
@@ -208,6 +208,8 @@ describe("leadsService", () => {
         status: "new",
         source: "website",
         score: 50,
+        jobTitle: null,
+        phone: null,
         assignedTo: null,
         createdBy: null,
         tags: [],
@@ -240,6 +242,8 @@ describe("leadsService", () => {
         status: "new",
         source: "website",
         score: 50,
+        jobTitle: null,
+        phone: null,
         assignedTo: null,
         createdBy: null,
         tags: [],
@@ -274,6 +278,8 @@ describe("leadsService", () => {
         status: "new",
         source: "website",
         score: 50,
+        jobTitle: null,
+        phone: null,
         assignedTo: null,
         createdBy: null,
         tags: [],
@@ -301,6 +307,8 @@ describe("leadsService", () => {
         status: "new",
         source: "website",
         score: 50,
+        jobTitle: null,
+        phone: null,
         assignedTo: null,
         createdBy: null,
         tags: [],
