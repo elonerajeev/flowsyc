@@ -21,12 +21,23 @@ export const apiRateLimiter = rateLimit({
 
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 20, // 20 login attempts per 15 min
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === "development" || process.env.SKIP_AUTH_RATE_LIMIT === "true",
   message: { error: "Too many authentication attempts, please try again later." },
 });
+
+export const sensitiveRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 5, // 5 attempts per hour for sensitive operations
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many attempts, please try again later." },
+});
+
+export const uploadRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+
 
 export const sensitiveRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
