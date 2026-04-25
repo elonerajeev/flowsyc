@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { leadsService } from "../services/leads.service";
 import { asyncHandler } from "../utils/async-handler";
 import { validateBody, validateQuery } from "../middleware/validate.middleware";
 import { createLeadSchema, updateLeadSchema, convertLeadSchema, leadQuerySchema } from "../validators/lead.schema";
+import { sendEmailToLead, getLeadEmailHistory } from "../services/lead-email.service";
 
 const router = Router();
 
@@ -180,6 +182,35 @@ router.get(
   asyncHandler(async (req, res) => {
     const meetings = await leadsService.getMeetings(Number(req.params.id));
     res.json(meetings);
+  }),
+);
+
+// ── Lead Email endpoints ──────────────────────────────────────────────────────
+
+const sendEmailSchema = z.object({
+  subject: z.string().min(1).max(200),
+  body:    z.string().min(1).max(10_000),
+  htmlBody: z.string().max(100_000).optional(),
+});
+
+// Send email to a lead
+router.post(
+  "/:id/send-email",
+  requireRole(["admin", "manager", "employee"]),
+  validateBody(sendEmailSchema),
+  asyncHandler(async (req, res) => {
+    await sendEmailToLead(Number(req.params.id), req.body, req.auth!.email);
+    res.json({ message: "Email sent successfully" });
+  }),
+);
+
+// Get email history (sent + received) for a lead
+router.get(
+  "/:id/emails",
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req, res) => {
+    const history = await getLeadEmailHistory(Number(req.params.id));
+    res.json(history);
   }),
 );
 

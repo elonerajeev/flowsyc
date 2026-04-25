@@ -25,9 +25,9 @@ export default function VerifyEmailPage() {
         setTimeout(() => {
           navigate("/login");
         }, 3000);
-      } catch (error: any) {
+      } catch (error) {
         setStatus("error");
-        setMessage(error?.message || "Verification failed. The link may be expired or invalid.");
+        setMessage((error as Error)?.message || "Verification failed. The link may be expired or invalid.");
       }
     };
 

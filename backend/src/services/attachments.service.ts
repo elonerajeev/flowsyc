@@ -44,7 +44,7 @@ export const attachmentsService = {
   },
 
   async list(filters: AttachmentFilters = {}) {
-    const { taskId, projectId, limit = 50, offset = 0 } = filters;
+    const { taskId, projectId, limit = 20, offset = 0 } = filters;
 
     const where: any = { deletedAt: null };
     if (taskId) where.taskId = taskId;

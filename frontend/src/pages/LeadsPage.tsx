@@ -50,6 +50,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import LeadEmailDialog from "@/components/crm/LeadEmailDialog";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
@@ -133,6 +134,7 @@ const LeadsPage = () => {
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   // Form states
@@ -1191,6 +1193,10 @@ const LeadsPage = () => {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setSelectedLead(lead); setEmailDialogOpen(true); }}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Email
+                          </DropdownMenuItem>
                           {canEdit && (
                             <>
                               <DropdownMenuItem onClick={() => openQuickCreate?.("lead", lead)}>
@@ -1689,6 +1695,15 @@ const LeadsPage = () => {
       </Dialog>
 
     </div>
+
+    {/* Lead Email Dialog */}
+    {selectedLead && (
+      <LeadEmailDialog
+        open={emailDialogOpen}
+        onClose={() => { setEmailDialogOpen(false); }}
+        lead={selectedLead}
+      />
+    )}
   );
 };
 

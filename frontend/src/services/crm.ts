@@ -25,6 +25,9 @@ import type {
   ProjectRecord,
   SalesMetrics,
   TaskColumn,
+  TaskBoardStats,
+  TaskPageResponse,
+  TaskPriority,
   TaskRecord,
   TeamRecord,
   TeamMemberRecord,
@@ -65,6 +68,23 @@ export const crmService = {
   getClients: () => fetchCollectionApi<ClientRecord>("/clients"),
   getProjects: () => fetchCollectionApi<ProjectRecord>("/projects"),
   getTasks: (projectId?: number) => fetchApi<Record<TaskColumn, TaskRecord[]>>(`/tasks${projectId ? `?projectId=${projectId}` : ""}`),
+  getTasksPage: (params: { column: TaskColumn; page?: number; limit?: number; projectId?: number; priority?: TaskPriority }) => {
+    const query = buildQuery({
+      column: params.column,
+      page: params.page ?? 1,
+      limit: params.limit ?? 30,
+      projectId: params.projectId,
+      priority: params.priority,
+    });
+    return requestJson<TaskPageResponse>(`/tasks/paginated${query}`);
+  },
+  getTaskStats: (params: { projectId?: number; priority?: TaskPriority } = {}) => {
+    const query = buildQuery({
+      projectId: params.projectId,
+      priority: params.priority,
+    });
+    return requestJson<TaskBoardStats>(`/tasks/stats${query}`);
+  },
   getConversations: () => fetchCollectionApi("/conversations"),
   getMessages: () => fetchCollectionApi("/messages"),
   sendMessage: (data: { conversationId: number; text: string; sender: string; isMe: boolean }) =>
@@ -362,6 +382,18 @@ export const crmService = {
       method: "PATCH",
       body: JSON.stringify({ status, notes }),
     }),
+
+  // Lead email
+  sendLeadEmail: (leadId: number, data: { subject: string; body: string; htmlBody?: string }) =>
+    requestJson<{ message: string }>(`/leads/${leadId}/send-email`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getLeadEmails: (leadId: number) =>
+    requestJson<{
+      sent: Array<{ id: number; subject: string; body: string; status: string; sentAt: string | null; createdAt: string; recipientName: string | null; direction: "outbound" }>;
+      received: Array<{ id: number; subject: string; body: string; fromName: string; fromEmail: string; receivedAt: string; isRead: boolean; direction: "inbound" }>;
+    }>(`/leads/${leadId}/emails`),
 
   // CSV Import
   listCSVImports: () => fetchCollectionApi<CSVImportRecord>("/csv-import"),

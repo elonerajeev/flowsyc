@@ -57,7 +57,7 @@ authRouter.post("/google/callback", asyncHandler(async (req, res) => {
   const { handleGoogleCallback } = await import("../services/google-auth.service.js");
   const { code, state } = req.body;
   if (!code || !state) {
-    return res.status(400).json({ error: "Missing code or state" });
+    res.status(400).json({ error: "Missing code or state" }); return;
   }
   const result = await handleGoogleCallback(state, code);
   res.json(result);

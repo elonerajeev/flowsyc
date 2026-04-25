@@ -1,12 +1,11 @@
 import { useState, useRef } from "react";
 import { format } from "date-fns";
-import { MessageSquare, Send, Trash2, Edit2, Check, X, Paperclip, Upload, File, Download } from "lucide-react";
+import { MessageSquare, Send, Trash2, Edit2, Check, X, Paperclip, Upload, File, Download, Loader2 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
 import { useComments, useCreateComment, useUpdateComment, useDeleteComment } from "@/hooks/use-comments";
 import { useAttachments, useCreateAttachment, useDeleteAttachment } from "@/hooks/use-attachments";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +19,31 @@ interface TaskDetailModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+function formatDateSafe(value?: string | null, fallback = "No due date") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return format(date, "MMM d, yyyy");
+}
+
+function formatDateTimeSafe(value?: string | null, fallback = "Unknown time") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return format(date, "MMM d, h:mm a");
+}
+
+function initialsFromName(name?: string | null) {
+  const source = name?.trim() || "Unknown";
+  return source
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalProps) {
   const { user } = useAuth();
   const [newComment, setNewComment] = useState("");
@@ -27,16 +51,21 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
   const [editContent, setEditContent] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: commentsData, isLoading: commentsLoading } = useComments(task?.id);
+  const commentsQuery = useComments(task?.id, undefined, { pageSize: 20 });
   const createCommentMutation = useCreateComment();
   const updateCommentMutation = useUpdateComment();
   const deleteCommentMutation = useDeleteComment();
 
-  const { data: attachmentsData, isLoading: attachmentsLoading } = useAttachments(task?.id);
+  const attachmentsQuery = useAttachments(task?.id, undefined, { pageSize: 12 });
   const createAttachmentMutation = useCreateAttachment();
   const deleteAttachmentMutation = useDeleteAttachment();
 
-  const comments = commentsData?.data || [];
+  const commentsLoading = commentsQuery.isLoading;
+  const attachmentsLoading = attachmentsQuery.isLoading;
+  const comments = (commentsQuery.data?.pages ?? []).flatMap((page) => page.data ?? []);
+  const commentsTotal = commentsQuery.data?.pages?.[0]?.total ?? comments.length;
+  const attachments = (attachmentsQuery.data?.pages ?? []).flatMap((page) => page.data ?? []);
+  const attachmentsTotal = attachmentsQuery.data?.pages?.[0]?.total ?? attachments.length;
 
   const handleCreateComment = async () => {
     if (!newComment.trim() || !task) return;
@@ -142,7 +171,7 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
     }
   };
 
-  const handleDeleteAttachment = async (id: number, filename: string) => {
+  const handleDeleteAttachment = async (id: number) => {
     try {
       await deleteAttachmentMutation.mutateAsync(id);
       toast.success("Attachment deleted");
@@ -175,7 +204,7 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
             <div>
               <h3 className="font-medium text-foreground mb-2">Description</h3>
               <p className="text-sm text-muted-foreground">
-                {task.valueStream} • Due {format(new Date(task.dueDate), "MMM d, yyyy")}
+                {task.valueStream} • Due {formatDateSafe(task.dueDate)}
               </p>
             </div>
 
@@ -197,16 +226,16 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
           </div>
 
           {/* Comments Section */}
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-xl border border-border/60 bg-card/70 p-4">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <h3 className="font-medium text-foreground">
-                Comments ({comments.length})
+                Comments ({commentsTotal})
               </h3>
             </div>
 
             {/* Add Comment */}
-            <div className="space-y-2">
+            <div className="space-y-2 rounded-lg border border-border/60 bg-background/80 p-3">
               <Textarea
                 placeholder="Add a comment..."
                 value={newComment}
@@ -223,6 +252,7 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
                 <p className="text-xs text-muted-foreground">
                   Press Ctrl+Enter to submit
                 </p>
+                <p className="text-xs text-muted-foreground">{newComment.length}/1000</p>
                 <Button
                   size="sm"
                   onClick={handleCreateComment}
@@ -236,28 +266,28 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
             </div>
 
             {/* Comments List */}
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
               {commentsLoading ? (
                 <div className="text-center py-4 text-muted-foreground">Loading comments...</div>
               ) : comments.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground">No comments yet</div>
               ) : (
                 comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 p-3 rounded-lg border border-border/50 bg-secondary/20">
+                  <div key={comment.id} className="flex gap-3 rounded-lg border border-border/50 bg-secondary/20 p-3">
                     <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarImage src="" alt={comment.author.name} />
+                      <AvatarImage src="" alt={comment.author?.name || "Unknown"} />
                       <AvatarFallback className="text-xs">
-                        {comment.author.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+                        {initialsFromName(comment.author?.name)}
                       </AvatarFallback>
                     </Avatar>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm text-foreground">
-                          {comment.author.name}
+                          {comment.author?.name || "Unknown user"}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {format(new Date(comment.createdAt), "MMM d, h:mm a")}
+                          {formatDateTimeSafe(comment.createdAt)}
                         </span>
                       </div>
 
@@ -326,14 +356,32 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
                 ))
               )}
             </div>
+            {commentsQuery.hasNextPage && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => commentsQuery.fetchNextPage()}
+                disabled={commentsQuery.isFetchingNextPage}
+                className="w-full gap-2"
+              >
+                {commentsQuery.isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading older comments...
+                  </>
+                ) : (
+                  `Load older comments (${Math.max(0, commentsTotal - comments.length)} left)`
+                )}
+              </Button>
+            )}
           </div>
 
           {/* Attachments Section */}
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-xl border border-border/60 bg-card/70 p-4">
             <div className="flex items-center gap-2">
               <Paperclip className="h-4 w-4 text-muted-foreground" />
               <h3 className="font-medium text-foreground">
-                Attachments ({attachmentsData?.data.length || 0})
+                Attachments ({attachmentsTotal})
               </h3>
             </div>
 
@@ -362,10 +410,10 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
             <div className="space-y-2">
               {attachmentsLoading ? (
                 <div className="text-center py-4 text-muted-foreground">Loading attachments...</div>
-              ) : attachmentsData?.data.length === 0 ? (
+              ) : attachments.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground">No attachments yet</div>
               ) : (
-                attachmentsData?.data.map((attachment) => (
+                attachments.map((attachment) => (
                   <div key={attachment.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-secondary/20">
                     <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -373,7 +421,7 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
                         {attachment.originalName}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(attachment.size / 1024).toFixed(1)} KB • {format(new Date(attachment.createdAt), "MMM d, h:mm a")}
+                        {(attachment.size / 1024).toFixed(1)} KB • {formatDateTimeSafe(attachment.createdAt)}
                       </p>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
@@ -389,7 +437,7 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteAttachment(attachment.id, attachment.filename)}
+                          onClick={() => handleDeleteAttachment(attachment.id)}
                           disabled={deleteAttachmentMutation.isPending}
                           className="h-7 px-2 gap-1 text-destructive hover:text-destructive"
                         >
@@ -401,6 +449,24 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
                 ))
               )}
             </div>
+            {attachmentsQuery.hasNextPage && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => attachmentsQuery.fetchNextPage()}
+                disabled={attachmentsQuery.isFetchingNextPage}
+                className="w-full gap-2"
+              >
+                {attachmentsQuery.isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading attachments...
+                  </>
+                ) : (
+                  `Load more attachments (${Math.max(0, attachmentsTotal - attachments.length)} left)`
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

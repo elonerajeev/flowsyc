@@ -1,4 +1,4 @@
-import apiClient from "../lib/api-client";
+import { requestJson, requestVoid, ApiError } from "../lib/api-client";
 
 export interface ImapAccount {
   id: number;
@@ -40,38 +40,41 @@ export interface SyncResult {
 
 const BASE = "/inbox";
 
+function qs(params: Record<string, unknown>): string {
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => v !== undefined && p.set(k, String(v)));
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
 export const inboxApi = {
-  // Account
   getAccount: () =>
-    apiClient.get<ImapAccount | null>(`${BASE}/account`).then((r) => r.data),
+    requestJson<ImapAccount | null>(`${BASE}/account`),
 
   connect: (data: { email: string; password: string; host?: string; port?: number }) =>
-    apiClient.post<ImapAccount>(`${BASE}/account`, data).then((r) => r.data),
+    requestJson<ImapAccount>(`${BASE}/account`, { method: "POST", body: JSON.stringify(data) }),
 
   disconnect: () =>
-    apiClient.delete(`${BASE}/account`).then((r) => r.data),
+    requestVoid(`${BASE}/account`, { method: "DELETE" }),
 
-  // Sync
   syncNow: () =>
-    apiClient.post<SyncResult>(`${BASE}/sync`).then((r) => r.data),
+    requestJson<SyncResult>(`${BASE}/sync`, { method: "POST" }),
 
-  // Inbox
   getInbox: (params?: { page?: number; limit?: number; unreadOnly?: boolean; search?: string }) =>
-    apiClient.get<InboxListResponse>(BASE, { params }).then((r) => r.data),
+    requestJson<InboxListResponse>(`${BASE}${qs(params ?? {})}`),
 
   getEmail: (id: number) =>
-    apiClient.get<InboxEmail>(`${BASE}/${id}`).then((r) => r.data),
+    requestJson<InboxEmail>(`${BASE}/${id}`),
 
   getByEntity: (entityType: string, entityId: number) =>
-    apiClient.get<InboxEmail[]>(`${BASE}/by-entity`, { params: { entityType, entityId } }).then((r) => r.data),
+    requestJson<InboxEmail[]>(`${BASE}/by-entity${qs({ entityType, entityId })}`),
 
   getUnreadCount: () =>
-    apiClient.get<{ count: number }>(`${BASE}/unread-count`).then((r) => r.data),
+    requestJson<{ count: number }>(`${BASE}/unread-count`),
 
-  // Actions
   markRead: (id: number, isRead: boolean) =>
-    apiClient.patch(`${BASE}/${id}/read`, { isRead }).then((r) => r.data),
+    requestJson(`${BASE}/${id}/read`, { method: "PATCH", body: JSON.stringify({ isRead }) }),
 
   toggleStar: (id: number) =>
-    apiClient.patch(`${BASE}/${id}/star`).then((r) => r.data),
+    requestJson(`${BASE}/${id}/star`, { method: "PATCH" }),
 };

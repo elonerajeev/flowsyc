@@ -70,14 +70,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const meeting = await meetingService.getById(Number(req.params.id), req.auth);
     if (!meeting) {
-      return res.status(404).json({ error: "Meeting not found" });
+      res.status(404).json({ error: "Meeting not found" }); return;
     }
 
     const { createCalendarEvent, isGoogleConnected } = await import("../services/google-auth.service.js");
 
     const connected = await isGoogleConnected(req.auth!.email);
     if (!connected) {
-      return res.status(400).json({ error: "Google Calendar not connected. Connect it in Settings first." });
+      res.status(400).json({ error: "Google Calendar not connected. Connect it in Settings first." }); return;
     }
 
     const attendees = [meeting.inviteeEmail, req.auth!.email]

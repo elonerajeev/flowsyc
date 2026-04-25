@@ -133,7 +133,7 @@ describe("dealsService", () => {
       );
 
       const { dealsService } = await import("../services/deals.service");
-      const result = await dealsService.list({ stage: "prospecting" });
+      const result = await dealsService.list({ stage: "prospecting" } as never);
 
       expect(result).toHaveLength(1);
       expect(result[0].stage).toBe("prospecting");
@@ -146,7 +146,7 @@ describe("dealsService", () => {
       );
 
       const { dealsService } = await import("../services/deals.service");
-      const result = await dealsService.list({ search: "Acme" });
+      const result = await dealsService.list({ search: "Acme" } as never);
 
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe("Acme Deal");
@@ -159,6 +159,7 @@ describe("dealsService", () => {
       const deal = await dealsService.create({
         title: "Big Deal",
         value: 50000,
+        assignedTo: "",
       }, null);
 
       expect(deal.title).toBe("Big Deal");
@@ -174,6 +175,7 @@ describe("dealsService", () => {
         value: 100000,
         stage: "proposal",
         probability: 60,
+        assignedTo: "",
       }, null);
 
       expect(deal.title).toBe("Enterprise Deal");
@@ -265,7 +267,7 @@ describe("dealsService", () => {
       });
 
       const { dealsService } = await import("../services/deals.service");
-      await dealsService.updateStage(1, "closed_won", null);
+      await (dealsService as never as { updateStage: (id: number, stage: string, access: null) => Promise<void> }).updateStage(1, "closed_won", null);
 
       const deal = mockState.deals.find((d) => d.id === 1);
       expect(deal?.stage).toBe("closed_won");
@@ -281,10 +283,10 @@ describe("dealsService", () => {
       );
 
       const { dealsService } = await import("../services/deals.service");
-      const pipeline = await dealsService.getPipeline();
+      const pipeline = await (dealsService as never as { getPipeline: () => Promise<Array<{ stage: string; value: number }>> }).getPipeline();
 
-      const prospecting = pipeline.find((s) => s.stage === "prospecting");
-      const closedWon = pipeline.find((s) => s.stage === "closed_won");
+      const prospecting = pipeline.find((s: { stage: string; value: number }) => s.stage === "prospecting");
+      const closedWon = pipeline.find((s: { stage: string; value: number }) => s.stage === "closed_won");
 
       expect(prospecting?.value).toBe(2);
       expect(closedWon?.value).toBe(1);

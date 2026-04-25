@@ -52,7 +52,7 @@ export const commentsService = {
   },
 
   async list(filters: CommentFilters = {}) {
-    const { taskId, projectId, limit = 50, offset = 0 } = filters;
+    const { taskId, projectId, limit = 20, offset = 0 } = filters;
 
     const where: any = { deletedAt: null };
     if (taskId) where.taskId = taskId;
@@ -66,7 +66,7 @@ export const commentsService = {
             select: { id: true, name: true, email: true },
           },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit,
         skip: offset,
       }),

@@ -26,7 +26,7 @@ attachmentsRouter.use(requireAuth);
 attachmentsRouter.get("/", asyncHandler(async (req: Request, res: Response) => {
   const taskId = req.query.taskId ? Number(req.query.taskId) : undefined;
   const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50) || 50));
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20) || 20));
   const offset = Math.max(0, Number(req.query.offset ?? 0) || 0);
 
   const result = await attachmentsService.list({ taskId, projectId, limit, offset });

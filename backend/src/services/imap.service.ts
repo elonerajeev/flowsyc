@@ -1,17 +1,16 @@
 import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import { prisma } from "../config/prisma";
 import { logger } from "../utils/logger";
 
-const FETCH_LIMIT = 50; // emails per sync
-const BODY_TEXT_LIMIT = 10_000; // chars
-const BODY_HTML_LIMIT = 50_000; // chars
+const FETCH_LIMIT = 50;
 
 export interface ImapSyncConfig {
   userId: string;
   email: string;
   host: string;
   port: number;
-  password: string; // Gmail App Password
+  password: string;
 }
 
 export interface SyncResult {
@@ -20,18 +19,14 @@ export interface SyncResult {
   lastSync: Date;
 }
 
-/**
- * Connect to IMAP, fetch recent emails, upsert into DB, link to CRM entities.
- * Safe to call repeatedly — uses uid+toEmail unique constraint to avoid duplicates.
- */
 export async function syncInbox(config: ImapSyncConfig): Promise<SyncResult> {
   const client = new ImapFlow({
     host: config.host,
     port: config.port,
-    secure: true, // TLS — never plain
+    secure: true,
     auth: { user: config.email, pass: config.password },
-    logger: false, // suppress verbose IMAP logs
-    tls: { rejectUnauthorized: true }, // enforce cert validation
+    logger: false,
+    tls: { rejectUnauthorized: true },
   });
 
   let synced = 0;
@@ -43,33 +38,36 @@ export async function syncInbox(config: ImapSyncConfig): Promise<SyncResult> {
 
     try {
       const status = await client.status("INBOX", { messages: true });
-      const totalMessages = status.messages ?? FETCH_LIMIT;
-      const startSeq = Math.max(1, totalMessages - FETCH_LIMIT + 1);
+      const total = status.messages ?? FETCH_LIMIT;
+      const startSeq = Math.max(1, total - FETCH_LIMIT + 1);
 
-      const messages = client.fetch(`${startSeq}:*`, {
-        uid: true,
-        envelope: true,
-        source: true,
-      });
+      const messages = client.fetch(`${startSeq}:*`, { uid: true, source: true });
 
       for await (const msg of messages) {
         try {
-          if (!msg.envelope) continue; // skip messages without envelope
-          const uid = String(msg.uid);
-          const envelope = msg.envelope;
-          const fromEmail = (envelope.from?.[0]?.address ?? "").toLowerCase().trim();
-          const fromName  = envelope.from?.[0]?.name ?? "";
-          const subject   = envelope.subject ?? "(no subject)";
-          const receivedAt = envelope.date ?? new Date();
-          const messageId  = envelope.messageId ?? null;
+          if (!msg.source) continue;
 
-          if (!fromEmail) continue; // skip malformed
+          // mailparser handles all MIME: base64, quoted-printable, multipart, charsets
+          const parsed = await simpleParser(msg.source);
 
-          const rawSource = msg.source ? msg.source.toString() : "";
-          const body     = extractPlainText(rawSource);
-          const htmlBody = extractHtml(rawSource);
+          const uid        = String(msg.uid);
+          const fromEmail  = (parsed.from?.value?.[0]?.address ?? "").toLowerCase().trim();
+          const fromName   = parsed.from?.value?.[0]?.name ?? "";
+          const subject    = parsed.subject ?? "(no subject)";
+          const receivedAt = parsed.date ?? new Date();
+          const messageId  = parsed.messageId ?? null;
 
-          // Match sender to a CRM entity (Lead > Client > Contact priority)
+          if (!fromEmail) continue;
+
+          // Clean plain text — strip excessive whitespace
+          const body = (parsed.text ?? "")
+            .replace(/\r\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim()
+            .slice(0, 10_000);
+
+          const htmlBody = parsed.html ? parsed.html.slice(0, 50_000) : null;
+
           const { entityType, entityId } = await matchEntity(fromEmail);
 
           await prisma.inboxEmail.upsert({
@@ -82,9 +80,19 @@ export async function syncInbox(config: ImapSyncConfig): Promise<SyncResult> {
               entityType, entityId,
               receivedAt,
             },
-            // Re-link if entity was added to CRM after email arrived
-            update: { entityType, entityId },
+            update: { entityType, entityId, body, htmlBody },
           });
+
+          // If this email is from a lead, trigger status auto-advance
+          if (entityType === "Lead" && entityId) {
+            const { processInboxEmailForLead } = await import("./lead-email.service");
+            await processInboxEmailForLead(
+              (await prisma.inboxEmail.findFirst({
+                where: { uid, toEmail: config.email },
+                select: { id: true },
+              }))!.id
+            ).catch((err) => logger.error("[IMAP] Lead tracking failed:", err));
+          }
 
           synced++;
         } catch (msgErr) {
@@ -105,15 +113,10 @@ export async function syncInbox(config: ImapSyncConfig): Promise<SyncResult> {
     logger.info(`[IMAP] Sync complete for ${config.email}: ${synced} synced, ${errors} errors`);
     return { synced, errors, lastSync };
   } finally {
-    // Always close connection — even on error
-    try { await client.logout(); } catch { /* ignore logout errors */ }
+    try { await client.logout(); } catch { /* ignore */ }
   }
 }
 
-/**
- * Test IMAP credentials without syncing any data.
- * Returns true if connection succeeds.
- */
 export async function testImapConnection(config: Omit<ImapSyncConfig, "userId">): Promise<boolean> {
   const client = new ImapFlow({
     host: config.host,
@@ -133,35 +136,14 @@ export async function testImapConnection(config: Omit<ImapSyncConfig, "userId">)
   }
 }
 
-// ─── Entity Matching ────────────────────────────────────────────────────────
-
 async function matchEntity(email: string): Promise<{ entityType: string | null; entityId: number | null }> {
-  // Priority: Lead → Client → Contact
   const [lead, client, contact] = await Promise.all([
     prisma.lead.findFirst({ where: { email }, select: { id: true } }),
     prisma.client.findFirst({ where: { email }, select: { id: true } }),
     prisma.contact.findFirst({ where: { email }, select: { id: true } }),
   ]);
-
   if (lead)    return { entityType: "Lead",    entityId: lead.id };
   if (client)  return { entityType: "Client",  entityId: client.id };
   if (contact) return { entityType: "Contact", entityId: contact.id };
   return { entityType: null, entityId: null };
-}
-
-// ─── Body Parsers ────────────────────────────────────────────────────────────
-
-function extractPlainText(raw: string): string {
-  const bodyStart = raw.indexOf("\r\n\r\n");
-  const body = bodyStart !== -1 ? raw.slice(bodyStart + 4) : raw;
-  return body
-    .replace(/<[^>]*>/g, "")
-    .replace(/\r\n/g, "\n")
-    .trim()
-    .slice(0, BODY_TEXT_LIMIT);
-}
-
-function extractHtml(raw: string): string | null {
-  const match = raw.match(/<html[\s\S]*?<\/html>/i);
-  return match ? match[0].slice(0, BODY_HTML_LIMIT) : null;
 }

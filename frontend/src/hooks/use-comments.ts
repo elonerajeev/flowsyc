@@ -1,41 +1,48 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { crmService } from "@/services/crm";
 import { crmKeys } from "./use-crm-data";
 
-export function useComments(taskId?: number, projectId?: number) {
-  const { user } = useAuth();
+type UseCommentsOptions = {
+  pageSize?: number;
+};
 
-  return useQuery({
-    queryKey: crmKeys.comments(taskId, projectId),
-    queryFn: () => crmService.listComments({ taskId, projectId }),
+export function useComments(taskId?: number, projectId?: number, options: UseCommentsOptions = {}) {
+  const pageSize = options.pageSize ?? 20;
+
+  return useInfiniteQuery({
+    queryKey: [...crmKeys.comments(taskId, projectId), pageSize],
+    queryFn: ({ pageParam }) =>
+      crmService.listComments({ taskId, projectId, limit: pageSize, offset: Number(pageParam) }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset = lastPage.offset + lastPage.data.length;
+      return nextOffset < lastPage.total ? nextOffset : undefined;
+    },
     enabled: Boolean(taskId || projectId),
   });
 }
 
 export function useCreateComment() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   return useMutation({
     mutationFn: (data: { content: string; taskId?: number; projectId?: number }) =>
       crmService.createComment(data),
-    onSuccess: (newComment) => {
-      // Invalidate comments queries
-      queryClient.invalidateQueries({ queryKey: crmKeys.comments() });
+    onSuccess: () => {
+      // Invalidate all comments queries regardless of task/project scope.
+      queryClient.invalidateQueries({ queryKey: ["crm", "comments"] });
     },
   });
 }
 
 export function useUpdateComment() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   return useMutation({
     mutationFn: ({ id, content }: { id: number; content: string }) =>
       crmService.updateComment(id, { content }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: crmKeys.comments() });
+      queryClient.invalidateQueries({ queryKey: ["crm", "comments"] });
     },
   });
 }
@@ -46,7 +53,7 @@ export function useDeleteComment() {
   return useMutation({
     mutationFn: (id: number) => crmService.deleteComment(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: crmKeys.comments() });
+      queryClient.invalidateQueries({ queryKey: ["crm", "comments"] });
     },
   });
 }
