@@ -1,4 +1,4 @@
-name: ✅ CI — Lint, Type-check & Test
+name:  CI — Lint, Type-check & Test
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ concurrency:
 jobs:
   # ────────────────────────────────────────────────────────────
   backend:
-    name: 🔧 Backend — Lint + Typecheck + Test
+    name:  Backend — Lint + Typecheck + Test
     runs-on: ubuntu-latest
 
     services:
@@ -81,7 +81,7 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   frontend:
-    name: 🎨 Frontend — Lint + Typecheck + Test + Build
+    name:  Frontend — Lint + Typecheck + Test + Build
     runs-on: ubuntu-latest
 
     defaults:
@@ -127,7 +127,7 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   summary:
-    name: 📋 CI Summary
+    name:  CI Summary
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     if: always()

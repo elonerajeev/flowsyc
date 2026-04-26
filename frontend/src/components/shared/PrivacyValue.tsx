@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
@@ -7,7 +8,7 @@ interface PrivacyValueProps {
   blur?: boolean; // use blur instead of *** mask
 }
 
-export function PrivacyValue({ value, className, blur = false }: PrivacyValueProps) {
+export const PrivacyValue = memo(function PrivacyValue({ value, className, blur = false }: PrivacyValueProps) {
   const { privacyMode } = useWorkspace();
 
   if (!privacyMode) {
@@ -28,4 +29,4 @@ export function PrivacyValue({ value, className, blur = false }: PrivacyValuePro
     : "•".repeat(Math.min(String(value).length, 8));
 
   return <span className={cn("select-none tracking-widest text-muted-foreground/60", className)}>{masked}</span>;
-}
+});

@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger";
+import { normalizePagination } from "../utils/pagination";
 import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
@@ -254,6 +255,7 @@ export const clientsService = {
   },
 
   async list(filters: ClientFilters, access?: AccessScope) {
+    const { page, limit, skip } = normalizePagination({ page: filters.page, limit: filters.limit });
     const where = await buildWhere(filters, access);
 
     const [total, clients] = await prisma.$transaction([
@@ -261,8 +263,8 @@ export const clientsService = {
       prisma.client.findMany({
         where,
         orderBy: buildOrderBy(filters.sort, filters.order),
-        skip: (filters.page - 1) * filters.limit,
-        take: filters.limit,
+        skip,
+        take: limit,
       }),
     ]);
 

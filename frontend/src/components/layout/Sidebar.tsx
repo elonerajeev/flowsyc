@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { crmKeys } from "@/hooks/use-crm-data";
 import { getSectionMeta, getVisibleSections, type SidebarSectionKey } from "./sidebarConfig";
 
 interface SidebarProps {
@@ -20,6 +22,23 @@ export default function Sidebar({ activeSection, width, onResizeStart }: Sidebar
   const section = visibleSections.find((item) => item.key === activeSection) ?? visibleSections[0] ?? getSectionMeta(activeSection);
   const compact = width < 180;
   const visibleItems = section.items;
+  const queryClient = useQueryClient();
+
+  const prefetchData = (to: string) => {
+    if (to.includes("/sales/clients")) {
+      queryClient.prefetchInfiniteQuery({
+        queryKey: [...crmKeys.clients, { search: "", status: "all", segment: "all", limit: 8 }],
+      });
+    } else if (to.includes("/workspace/projects")) {
+      queryClient.prefetchQuery({ queryKey: crmKeys.projects });
+    } else if (to.includes("/workspace/tasks")) {
+      queryClient.prefetchQuery({ queryKey: crmKeys.tasks });
+    } else if (to.includes("/sales/leads")) {
+      queryClient.prefetchQuery({ queryKey: crmKeys.leads });
+    } else if (to.includes("/overview")) {
+      queryClient.prefetchQuery({ queryKey: ["dashboard-data"] });
+    }
+  };
 
   return (
     <aside
@@ -55,6 +74,7 @@ export default function Sidebar({ activeSection, width, onResizeStart }: Sidebar
               <NavLink
                 key={item.to}
                 to={item.to}
+                onMouseEnter={() => prefetchData(item.to)}
                 className={cn(
                   "group flex items-center rounded-2xl py-2.5 text-sm font-medium transition",
                   compact ? "justify-center px-2" : "gap-3 px-3",

@@ -38,7 +38,7 @@ const container = {
 
 const item = {
   hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" as const } },
 };
 const DASHBOARD_ACTIVITY_PAGE_SIZE = 4;
 const PORTFOLIO_PAGE_SIZE = 4;
@@ -83,8 +83,8 @@ function LazyDashboardChartsSection({
         <Suspense
           fallback={
             <motion.section variants={item} className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-              <div className={cn("h-[420px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
-              <div className={cn("h-[420px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
+              <div className={cn("h-[434px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
+              <div className={cn("h-[434px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
             </motion.section>
           }
         >
@@ -98,8 +98,8 @@ function LazyDashboardChartsSection({
         </Suspense>
       ) : (
         <motion.section variants={item} className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className={cn("h-[420px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
-          <div className={cn("h-[420px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
+          <div className={cn("h-[434px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
+          <div className={cn("h-[434px] border border-border/70 bg-card/80 shadow-card", RADIUS.xl)} />
         </motion.section>
       )}
     </div>

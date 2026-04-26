@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import type { AccessActor } from "../utils/access-control";
+import { QUERY_LIMITS } from "../utils/query-limits";
 
 export type ActivityEntityType = "lead" | "client" | "deal";
 
@@ -39,11 +40,11 @@ export const activityService = {
     return activity;
   },
 
-  async list(entityType: ActivityEntityType, entityId: number, limit = 50) {
+  async list(entityType: ActivityEntityType, entityId: number, limit = 20) {
     const activities = await prisma.activity.findMany({
       where: { entityType, entityId },
       orderBy: { createdAt: "desc" },
-      take: limit,
+      take: Math.min(limit, QUERY_LIMITS.ACTIVITY_FEED),
     });
 
     return activities.map((a) => ({
@@ -63,7 +64,7 @@ export const activityService = {
     const activities = await prisma.activity.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: limit,
+      take: Math.min(limit, QUERY_LIMITS.ACTIVITY_FEED),
     });
 
     return activities.map((a) => ({

@@ -25,11 +25,14 @@ export interface NotificationPreferences {
   batching: boolean;
 }
 
-interface NotificationContextValue {
+interface NotificationStateValue {
   notifications: WorkspaceNotification[];
   unreadCount: number;
   centerOpen: boolean;
   preferences: NotificationPreferences;
+}
+
+interface NotificationActionsValue {
   openCenter: () => void;
   closeCenter: () => void;
   toggleCenter: () => void;
@@ -39,7 +42,8 @@ interface NotificationContextValue {
   pushNotification: (notification: Omit<WorkspaceNotification, "id" | "createdAt" | "unread" | "count"> & { count?: number }) => void;
 }
 
-const NotificationContext = createContext<NotificationContextValue | null>(null);
+const NotificationStateContext = createContext<NotificationStateValue | null>(null);
+const NotificationActionsContext = createContext<NotificationActionsValue | null>(null);
 
 const storageKey = "crm-notifications";
 const preferenceKey = "crm-notification-preferences";
@@ -135,15 +139,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [centerOpen, setCenterOpen] = useState(() => readStoredJSON<boolean>(centerKey, false));
 
   useEffect(() => {
-    writeStoredJSON(storageKey, notifications);
+    const handler = setTimeout(() => {
+      writeStoredJSON(storageKey, notifications);
+    }, 1000);
+    return () => clearTimeout(handler);
   }, [notifications]);
 
   useEffect(() => {
-    writeStoredJSON(preferenceKey, preferences);
+    const handler = setTimeout(() => {
+      writeStoredJSON(preferenceKey, preferences);
+    }, 1000);
+    return () => clearTimeout(handler);
   }, [preferences]);
 
   useEffect(() => {
-    writeStoredJSON(centerKey, centerOpen);
+    const handler = setTimeout(() => {
+      writeStoredJSON(centerKey, centerOpen);
+    }, 1000);
+    return () => clearTimeout(handler);
   }, [centerOpen]);
 
   const pushNotification = useCallback(
@@ -242,12 +255,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const unreadCount = notifications.filter((notification) => notification.unread).length;
 
-  const value = useMemo(
+  const stateValue = useMemo(
     () => ({
       notifications,
       unreadCount,
       centerOpen,
       preferences,
+    }),
+    [notifications, unreadCount, centerOpen, preferences]
+  );
+
+  const actionsValue = useMemo(
+    () => ({
       openCenter: () => setCenterOpen(true),
       closeCenter: () => setCenterOpen(false),
       toggleCenter: () => setCenterOpen((current) => !current),
@@ -256,17 +275,33 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setPreference,
       pushNotification,
     }),
-    [centerOpen, markAllRead, markRead, notifications, preferences, pushNotification, setPreference, unreadCount],
+    [markRead, markAllRead, setPreference, pushNotification]
   );
 
-  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
+  return (
+    <NotificationStateContext.Provider value={stateValue}>
+      <NotificationActionsContext.Provider value={actionsValue}>
+        {children}
+      </NotificationActionsContext.Provider>
+    </NotificationStateContext.Provider>
+  );
 }
 
-export function useNotifications() {
-  const context = useContext(NotificationContext);
-  if (!context) {
-    throw new Error("useNotifications must be used within NotificationProvider");
-  }
-
+export function useNotificationState() {
+  const context = useContext(NotificationStateContext);
+  if (!context) throw new Error("useNotificationState must be used within NotificationProvider");
   return context;
+}
+
+export function useNotificationActions() {
+  const context = useContext(NotificationActionsContext);
+  if (!context) throw new Error("useNotificationActions must be used within NotificationProvider");
+  return context;
+}
+
+/** @deprecated Use useNotificationState or useNotificationActions instead */
+export function useNotifications() {
+  const state = useNotificationState();
+  const actions = useNotificationActions();
+  return { ...state, ...actions };
 }
