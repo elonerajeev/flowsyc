@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { useInfiniteQuery } from '@tanstack/react-query'
 import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
 import ClientsPage from '@/pages/ClientsPage'
 
@@ -26,7 +27,7 @@ vi.mock('@/services/crm', () => ({
 }))
 
 const mockInfiniteData = {
-  pages: [{ data: [] as any[], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } }],
+  pages: [{ data: [] as never[], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } }],
   pageParams: [undefined],
 }
 
@@ -110,7 +111,7 @@ describe('ClientsPage - Real App Logic', () => {
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-    } as any)
+    } as ReturnType<typeof useInfiniteQuery>)
   })
 
   it('renders page with correct title and description', () => {
@@ -188,7 +189,7 @@ describe('ClientsPage - Real App Logic', () => {
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-    } as any)
+    } as ReturnType<typeof useInfiniteQuery>)
     render(<ClientsPage />)
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })
