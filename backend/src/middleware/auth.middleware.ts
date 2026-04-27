@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import { AppError } from "./error.middleware";
 import { verifyAccessToken } from "../utils/jwt";
 import type { UserRole } from "../config/types";
+import { setCurrentUser } from "../utils/request-context";
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   // 1. Try to get token from cookie
@@ -15,11 +16,20 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
 
   try {
     const payload = verifyAccessToken(token);
-    req.auth = {
+    const auth = {
       userId: payload.sub,
       email: payload.email,
       role: payload.role as UserRole,
     };
+
+    req.auth = auth;
+
+    setCurrentUser({
+      userId: auth.userId,
+      email: auth.email,
+      role: auth.role,
+    });
+
     next();
   } catch {
     next(new AppError("Invalid or expired token", 401, "UNAUTHORIZED"));

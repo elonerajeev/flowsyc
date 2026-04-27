@@ -14,37 +14,17 @@ function readNoteId(request: Request) {
 
 export const notesController = {
   list: async (req: Request, res: Response): Promise<void> => {
-    const requestedAuthorId = typeof req.query.authorId === "string" && req.query.authorId.trim()
-      ? req.query.authorId.trim()
-      : undefined;
-    const sessionUserId = req.auth?.userId;
-    if (!sessionUserId) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
-
-    const hasPrivilegedRead = req.auth?.role === "admin" || req.auth?.role === "manager";
-    if (requestedAuthorId && requestedAuthorId !== sessionUserId && !hasPrivilegedRead) {
-      throw new AppError("Forbidden", 403, "FORBIDDEN");
-    }
-
-    const authorId = requestedAuthorId ?? sessionUserId;
-    const notes = await notesService.list(authorId);
+    const notes = await notesService.list(req.auth);
     res.status(200).json(notes);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    if (!req.auth?.userId) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
-    const note = await notesService.getById(readNoteId(req), req.auth.userId);
+    const note = await notesService.getById(readNoteId(req), req.auth);
     res.status(200).json(note);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    if (!req.auth?.userId) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
-    const note = await notesService.create(req.auth.userId, req.body);
+    const note = await notesService.create(req.auth, req.body);
     await logAudit({
-      userId: req.auth.userId,
+      userId: req.auth?.userId ?? "",
       action: "create",
       entity: "Note",
       entityId: note.id,
@@ -53,13 +33,10 @@ export const notesController = {
     res.status(201).json(note);
   },
   update: async (req: Request, res: Response): Promise<void> => {
-    if (!req.auth?.userId) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
     const noteId = readNoteId(req);
-    const updated = await notesService.update(noteId, req.auth.userId, req.body);
+    const updated = await notesService.update(noteId, req.auth, req.body);
     await logAudit({
-      userId: req.auth.userId,
+      userId: req.auth?.userId ?? "",
       action: "update",
       entity: "Note",
       entityId: noteId,
@@ -68,13 +45,10 @@ export const notesController = {
     res.status(200).json(updated);
   },
   remove: async (req: Request, res: Response): Promise<void> => {
-    if (!req.auth?.userId) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
     const noteId = readNoteId(req);
-    await notesService.delete(noteId, req.auth.userId);
+    await notesService.delete(noteId, req.auth);
     await logAudit({
-      userId: req.auth.userId,
+      userId: req.auth?.userId ?? "",
       action: "delete",
       entity: "Note",
       entityId: noteId,

@@ -1370,8 +1370,6 @@ export async function executeScheduledJobs() {
       scheduledFor: { lte: now }
     },
     take: QUERY_LIMITS.SCHEDULED_JOBS,
-    },
-    take: 10
   });
   
   for (const job of jobs) {

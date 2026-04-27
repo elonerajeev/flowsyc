@@ -212,7 +212,7 @@ export default function GTMOpsPage() {
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 Refresh
               </Button>
-              <Button variant="outline" size="sm" onClick={() => recalculateMutation.mutate()} disabled={recalculateMutation.isPending} className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => recalculateMutation.mutate()} disabled={recalculateMutation.isPending || totalLeads === 0} className="gap-2">
                 <Zap className={cn("h-3.5 w-3.5", recalculateMutation.isPending && "animate-pulse")} />
                 {recalculateMutation.isPending ? "Recalculating..." : "Recalculate"}
               </Button>

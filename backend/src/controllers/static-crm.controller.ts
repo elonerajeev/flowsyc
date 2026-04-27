@@ -18,9 +18,4 @@ export const staticCrmController = {
     const actions = await staticCrmService.listCommandActions();
     res.status(200).json(actions);
   },
-
-  listThemePreviews: async (_req: Request, res: Response): Promise<void> => {
-    const previews = await staticCrmService.listThemePreviews();
-    res.status(200).json(previews);
-  },
 };

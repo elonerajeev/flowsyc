@@ -150,7 +150,7 @@ async function buildStaffDashboard(actor?: AccessActor) {
       take: 6,
       select: { id: true, name: true, designation: true, avatar: true, attendance: true, updatedAt: true },
     }),
-    getAuditLogs(12),
+    getAuditLogs({ limit: 12, userId: actor?.userId, role: actor?.role }),
     prisma.teamMember.groupBy({
       by: ["team", "attendance"],
       where: { deletedAt: null },
@@ -352,23 +352,11 @@ async function buildEmployeeDashboard(actor: AccessActor) {
     getEmployeeProjectScope(actor),
   ]);
 
-  const projectWhere =
-    employeeProjectScopes || employeeAssignees
-      ? {
-          deletedAt: null,
-          OR: [
-            ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
-          ],
-        }
-      : {
-          deletedAt: null,
-          id: -1,
-        };
-  const taskWhere = {
-    deletedAt: null,
-    ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : { id: -1 }),
-  };
+  const projectWhere: any = { deletedAt: null };
+  const taskWhere: any = { deletedAt: null };
+  if (employeeAssignees && Array.isArray(employeeAssignees) && employeeAssignees.length > 0) {
+    taskWhere.assignee = { in: employeeAssignees };
+  }
 
   const [projects, tasks, member] = await Promise.all([
     prisma.project.findMany({

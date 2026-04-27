@@ -136,10 +136,12 @@ model JobPosting {
   views       Int?        @default(0)
   deadline    String?
   priority    String?     @default("normal")
+  createdBy   String?     // User email who created this job posting
   Candidate   Candidate[]
 
   @@index([deletedAt])
   @@index([status])
+  @@index([createdBy])
 }
 
 model Message {
@@ -227,6 +229,7 @@ model Task {
   project     Project?     @relation(fields: [projectId], references: [id], onUpdate: NoAction)
   comments    Comment[]
   attachments Attachment[]
+  createdBy   String?       // User email who created this task
 
   @@index([column])
   @@index([deletedAt])
@@ -234,6 +237,7 @@ model Task {
   @@index([projectId])
   @@index([dueDate])
   @@index([assignee])
+  @@index([createdBy])
   @@index([deletedAt, column, updatedAt(sort: Desc), id(sort: Desc)])
   @@index([deletedAt, projectId, column, updatedAt(sort: Desc), id(sort: Desc)])
   @@index([deletedAt, priority, column, updatedAt(sort: Desc), id(sort: Desc)])
@@ -317,6 +321,7 @@ model TeamMember {
   checkIn               String         @default("-")
   location              String         @default("-")
   workload              Int            @default(0)
+  adminId               String?        // Admin who owns this member
   deletedAt             DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime
@@ -325,6 +330,7 @@ model TeamMember {
   @@index([role])
   @@index([status])
   @@index([teamId])
+  @@index([adminId])
 }
 
 model User {
@@ -334,28 +340,29 @@ model User {
   passwordHash   String
   emailVerified  Boolean        @default(false)
   role           UserRole
-  employeeId     String         @unique
+  employeeId    String         @unique
   department     String
   team           String
   designation    String
-  manager        String
-  workingHours   String
+  manager       String
+  workingHours  String
   officeLocation String
-  timeZone       String
-  baseSalary     Int
-  allowances     Int
-  deductions     Int
-  paymentMode    PaymentMode
-  payrollCycle   String
+  timeZone      String
+  baseSalary    Int
+  allowances   Int
+  deductions   Int
+  paymentMode   PaymentMode
+  payrollCycle  String
   payrollDueDate String
-  joinedAt       String
-  location       String
-  deletedAt      DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime
-  signatureUrl   String?
-  RefreshToken   RefreshToken[]
-  comments       Comment[]
+  joinedAt      String
+  location      String
+  adminId       String?        // Admin ID who owns this user (for org isolation)
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime
+  signatureUrl String?
+  RefreshToken RefreshToken[]
+  comments      Comment[]
   attachments    Attachment[]
 }
 
@@ -423,6 +430,7 @@ model Contact {
   seniority    String?
   clientId     Int?
   leadId       Int?      // Link to original lead (optional, for tracking)
+  createdBy    String?   // User who created this contact (for data isolation)
   client       Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   meetings     Meeting[]
   deletedAt    DateTime?
@@ -433,6 +441,7 @@ model Contact {
   @@index([clientId])
   @@index([email])
   @@index([leadId])
+  @@index([createdBy])
 }
 
 model Deal {
@@ -1151,4 +1160,63 @@ model ImapAccount {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────
+
+enum NotificationType {
+  task
+  lead
+  deal
+  client
+  project
+  invoice
+  system
+  collaboration
+}
+
+enum NotificationPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model Notification {
+  id          Int                @id @default(autoincrement())
+  userId      String             // Recipient user ID
+  type       NotificationType
+  priority   NotificationPriority @default(medium)
+  title      String
+  message    String
+  linkUrl    String?            // Optional link to navigate to
+  linkLabel String?            // Label for the link
+  
+  // Related entity (optional)
+  entityType String?
+  entityId   Int?
+  
+  // Grouping for batching similar notifications
+  batchKey   String?
+  batchCount Int            @default(1)
+  
+  // Read state
+  isRead    Boolean         @default(false)
+  readAt    DateTime?
+  
+  // Delivery preferences
+  emailSent Boolean         @default(false)
+  smsSent   Boolean         @default(false)
+  
+  // Metadata
+  metadata  Json             @default("{}")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([batchKey])
+  @@index([entityType, entityId])
 }

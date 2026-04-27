@@ -113,7 +113,7 @@ export const projectsService = {
           id: projectId,
           OR: [
             ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees as any } } } }] : []),
           ],
         },
       });
@@ -148,7 +148,7 @@ export const projectsService = {
           ? {
               OR: [
                 ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-                ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+                ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees as any } } } }] : []),
               ],
             }
           : {}

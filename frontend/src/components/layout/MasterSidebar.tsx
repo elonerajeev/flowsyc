@@ -30,7 +30,7 @@ export default function MasterSidebar({ activeSection, onSectionChange }: Master
   const workspaceLabel = `${role.charAt(0).toUpperCase()}${role.slice(1)} workspace`;
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[72px] flex-col border-r border-sidebar-border bg-[hsl(var(--sidebar-bg))] shadow-[4px_0_16px_hsl(var(--sidebar-border)/0.5)]">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[72px] flex-col border-r border-sidebar-border bg-sidebar shadow-[4px_0_16px_hsl(var(--sidebar-border)/0.5)]">
       <div className="relative flex h-16 items-center justify-center border-b border-sidebar-border">
         <div className={cn("flex h-10 w-10 items-center justify-center bg-gradient-to-br from-primary via-accent to-info shadow-lg shadow-black/20", RADIUS.lg)}>
           <Zap className="h-5 w-5 text-primary-foreground" />
@@ -89,7 +89,7 @@ export default function MasterSidebar({ activeSection, onSectionChange }: Master
             </div>
           </button>
 
-          <div className={cn("pointer-events-none absolute left-full bottom-0 z-50 ml-3 w-72 translate-x-2 border border-sidebar-border bg-[linear-gradient(180deg,hsl(var(--sidebar-bg)_/_0.99),hsl(220_40%_13%_/_0.99))] p-4 opacity-0 shadow-[0_24px_64px_hsl(222_58%_5%_/_0.32)] transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100", RADIUS.lg)}>
+          <div className={cn("pointer-events-none absolute left-full bottom-0 z-50 ml-3 w-72 translate-x-2 border border-sidebar-border bg-sidebar p-4 opacity-0 shadow-[0_24px_64px_hsl(var(--sidebar-border)/0.5)] transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100", RADIUS.lg)}>
             <div className="flex items-start gap-3">
               <div className={cn("relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden border border-sidebar-active/30 bg-[linear-gradient(135deg,hsl(var(--sidebar-active)_/_0.28),hsl(var(--sidebar-primary)_/_0.16))] shadow-[0_12px_28px_hsl(222_58%_5%_/_0.22)]", RADIUS.xl)}>
                 <span className={cn("font-display text-sm font-semibold tracking-[0.08em] text-sidebar-active", TEXT.meta)}>{initials}</span>

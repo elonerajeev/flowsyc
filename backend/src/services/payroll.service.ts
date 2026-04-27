@@ -5,6 +5,7 @@ import { getEmployeeMemberRecord, type AccessActor } from "../utils/access-contr
 import { fromDbPaymentMode } from "../utils/payment-mode";
 import { sendSalaryPaidEmail } from "../utils/email-templates";
 import { logAudit } from "../utils/audit";
+import { ensureOrgTeamMembers, resolveOrgAdminId } from "./team-members.service";
 
 function derivePayrollDueDate(period: string) {
   const match = /^(\d{4})-(\d{2})$/.exec(period);
@@ -21,6 +22,11 @@ function derivePayrollDueDate(period: string) {
   });
 }
 
+function getCurrentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export const payrollService = {
   async list(access: AccessActor, period?: string) {
     const where: any = { deletedAt: null };
@@ -32,12 +38,69 @@ export const payrollService = {
           payrollDueDate: string;
         }
       | null = null;
+    let orgAdminId: string | null = null;
 
     if (period) {
       where.period = period;
     }
 
-    if (access?.role === "employee") {
+    // Admin/Manager: organization-scoped visibility based on owner adminId.
+    if (access?.role === "admin" || access?.role === "manager") {
+      orgAdminId = await ensureOrgTeamMembers(access);
+      const teamMembers = await prisma.teamMember.findMany({
+        where: {
+          deletedAt: null,
+          adminId: orgAdminId ?? "__none__",
+        },
+        select: {
+          id: true,
+          name: true,
+          department: true,
+          baseSalary: true,
+          allowances: true,
+          deductions: true,
+          paymentMode: true,
+        },
+      });
+      const memberIds = teamMembers.map((member) => String(member.id));
+
+      if (memberIds.length === 0) {
+        // No visible team members -> no payroll rows should be visible.
+        where.memberId = "__none__";
+      } else {
+        where.memberId = { in: memberIds };
+
+        // Ensure payroll exists for the requested period (or current month when period is not passed).
+        const targetPeriod = period ?? getCurrentPeriod();
+        const existing = await prisma.payroll.findMany({
+          where: {
+            deletedAt: null,
+            period: targetPeriod,
+            memberId: { in: memberIds },
+          },
+          select: { memberId: true },
+        });
+        const existingIds = new Set(existing.map((record) => String(record.memberId)));
+        const missingMembers = teamMembers.filter((member) => !existingIds.has(String(member.id)));
+
+        if (missingMembers.length > 0) {
+          await prisma.payroll.createMany({
+            data: missingMembers.map((member) => ({
+              memberId: String(member.id),
+              memberName: member.name,
+              department: member.department,
+              period: targetPeriod,
+              baseSalary: member.baseSalary,
+              allowances: member.allowances,
+              deductions: member.deductions,
+              netPay: member.baseSalary + member.allowances - member.deductions,
+              status: "pending",
+              paymentMode: member.paymentMode,
+            })),
+          });
+        }
+      }
+    } else if (access?.role === "employee") {
       const member = await getEmployeeMemberRecord(access);
       if (member) {
         where.memberId = String(member.id);
@@ -70,6 +133,7 @@ export const payrollService = {
           where: { id: { in: memberIds }, deletedAt: null },
           select: {
             id: true,
+            name: true,
             designation: true,
             team: true,
             avatar: true,
@@ -90,7 +154,7 @@ export const payrollService = {
       return {
         id: record.id,
         memberId: String(record.memberId),
-        memberName: record.memberName,
+        memberName: member?.name ?? record.memberName,
         period: record.period,
         baseSalary: record.baseSalary,
         allowances: record.allowances,
@@ -118,8 +182,13 @@ export const payrollService = {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
+    const orgAdminId = await ensureOrgTeamMembers(access);
     const members = await prisma.teamMember.findMany({
-      where: { deletedAt: null, status: "active" },
+      where: {
+        deletedAt: null,
+        status: "active",
+        adminId: orgAdminId ?? "__none__",
+      },
     });
 
     const results = [];
@@ -138,12 +207,14 @@ export const payrollService = {
           data: {
             memberId: String(member.id),
             memberName: member.name,
+            department: member.department,
             period,
             baseSalary: member.baseSalary,
             allowances: member.allowances,
             deductions: member.deductions,
             netPay,
             status: "pending" as PayrollStatus,
+            paymentMode: member.paymentMode,
           },
         });
         results.push(created);
@@ -160,6 +231,7 @@ export const payrollService = {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
+    const orgAdminId = await resolveOrgAdminId(access);
     const payroll = await prisma.payroll.findUnique({ where: { id } });
     if (!payroll) {
       throw new AppError("Payroll record not found", 404, "NOT_FOUND");
@@ -167,10 +239,13 @@ export const payrollService = {
 
     const teamMember = await prisma.teamMember.findUnique({
       where: { id: Number(payroll.memberId) },
-      select: { name: true, email: true },
+      select: { name: true, email: true, adminId: true },
     });
     if (!teamMember) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
+    }
+    if (!orgAdminId || teamMember.adminId !== orgAdminId) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
     const updated = await prisma.payroll.update({
@@ -206,6 +281,19 @@ export const payrollService = {
 
   async updateStatus(id: number, status: string, access: AccessActor) {
     if (access?.role !== "admin" && access?.role !== "manager") {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
+    }
+
+    const orgAdminId = await resolveOrgAdminId(access);
+    const payroll = await prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) {
+      throw new AppError("Payroll record not found", 404, "NOT_FOUND");
+    }
+    const teamMember = await prisma.teamMember.findUnique({
+      where: { id: Number(payroll.memberId) },
+      select: { adminId: true },
+    });
+    if (!teamMember || !orgAdminId || teamMember.adminId !== orgAdminId) {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 

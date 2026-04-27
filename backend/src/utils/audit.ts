@@ -122,7 +122,7 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
   params.push(retentionCutoff().toISOString());
   conditions.push(`"createdAt" >= $${params.length}::timestamptz`);
 
-  if (options.role === "employee" && options.userId) {
+  if (options.userId) {
     params.push(options.userId);
     conditions.push(`"userId" = $${params.length}`);
   }

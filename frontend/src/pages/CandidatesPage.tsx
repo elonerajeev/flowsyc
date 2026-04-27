@@ -369,7 +369,7 @@ export default function CandidatesPage() {
                   className="inline-flex items-center gap-2 rounded-2xl border-border/70 bg-background/50 font-semibold text-foreground backdrop-blur-sm transition h-11 px-4"
                 >
                   <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                  "Refresh List"
+                  Refresh List
                 </Button>
               </motion.div>
             </div>

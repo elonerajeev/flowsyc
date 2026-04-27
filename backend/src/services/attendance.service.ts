@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { AccessActor } from "../utils/access-control";
+import { ensureOrgTeamMembers } from "./team-members.service";
 
 type AttendanceRecord = {
   id: number;
@@ -15,14 +16,20 @@ type AttendanceRecord = {
 
 export const attendanceService = {
   async list(actor?: AccessActor) {
+    const orgAdminId =
+      actor?.role === "admin" || actor?.role === "manager"
+        ? await ensureOrgTeamMembers(actor)
+        : null;
+
     const members = await prisma.teamMember.findMany({
       where: {
         deletedAt: null,
-        ...(actor?.role === "employee"
-          ? {
-              email: { equals: actor.email, mode: "insensitive" },
-            }
-          : {}),
+        // Admin: global visibility. Manager: only owned members. Employee: self only.
+        ...(actor?.role === "admin" || actor?.role === "manager"
+          ? { adminId: orgAdminId ?? "__none__" }
+          : actor?.role === "employee"
+            ? { email: { equals: actor.email, mode: "insensitive" } }
+            : {}),
       },
       orderBy: { createdAt: "desc" },
     });
@@ -49,20 +56,28 @@ export const attendanceService = {
   },
 
   async update(memberId: number, data: { status: AttendanceRecord["status"]; checkIn: string; location: string }, userId: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const member = await prisma.teamMember.findUnique({ where: { id: memberId } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, role: true, adminId: true } });
+    const member = await prisma.teamMember.findUnique({ where: { id: memberId }, select: { id: true, name: true, role: true, department: true, attendance: true, checkIn: true, location: true, email: true, adminId: true } });
     
     if (!member) {
       throw new AppError("Member not found", 404, "NOT_FOUND");
     }
 
-    // Allow only if user is admin/manager or updating their own record
-    if (user?.role !== "admin" && user?.role !== "manager" && member.email !== user?.email) {
-      throw new AppError("Unauthorized", 403, "FORBIDDEN");
-    }
+    const actorOrgAdminId =
+      user?.role === "admin"
+        ? user.id
+        : user?.role === "manager"
+          ? user.adminId ?? user.id
+          : null;
 
-    // Allow only if user is admin/manager or updating their own record
-    if (user?.role !== "admin" && user?.role !== "manager" && member.email !== user?.email) {
+    const isAllowedManagerOrAdmin =
+      (user?.role === "admin" || user?.role === "manager") &&
+      Boolean(actorOrgAdminId) &&
+      member.adminId === actorOrgAdminId;
+
+    const isAllowedSelf = user?.role === "employee" && member.email === user.email;
+
+    if (!isAllowedManagerOrAdmin && !isAllowedSelf) {
       throw new AppError("Unauthorized", 403, "FORBIDDEN");
     }
 

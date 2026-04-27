@@ -135,7 +135,7 @@ export default function ClientsPage() {
   const filtered = preferredClients;
 
   const handleRecalculateHealth = (id: number) => recalculateHealthMutation.mutate(id);
-  const handleEdit = (client: any) => openQuickCreate("client", client);
+  const handleEdit = (client: Client) => openQuickCreate("client", client);
   const handleDelete = (id: number, name: string) => {
     if (window.confirm(`Are you sure you want to remove ${name}?`)) {
       deleteMutation.mutate(id);

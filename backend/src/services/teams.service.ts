@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import type { AccessScope } from "../utils/access-control";
 
 type TeamMemberInfo = {
   id: number;
@@ -17,7 +18,7 @@ type TeamRecord = {
   id: number;
   name: string;
   description: string | null;
-  permissions: Record<string, boolean>; // e.g. { clients: true, tasks: false }
+  permissions: Record<string, boolean>;
   members: TeamMemberInfo[];
   createdAt: string;
   updatedAt: string;
@@ -38,6 +39,8 @@ type StoredTeam = {
   permissions: Record<string, boolean>;
   createdAt: string;
   updatedAt: string;
+  ownerId: string;
+  ownerEmail: string;
 };
 
 const SYSTEM_TEAMS_USER_ID = "system:teams";
@@ -80,152 +83,175 @@ function readStoredTeams(data: Prisma.JsonValue | undefined): StoredTeam[] {
     return [];
   }
 
-  return value
-    .filter((entry): entry is StoredTeam => Boolean(entry && typeof entry === "object"))
-    .map((entry) => {
-      const record = entry as Record<string, unknown>;
-      return {
-        id: Number(record.id),
-        name: typeof record.name === "string" ? record.name : "",
-        description: typeof record.description === "string" ? record.description : null,
-        permissions:
-          record.permissions && typeof record.permissions === "object" && !Array.isArray(record.permissions)
-            ? (record.permissions as Record<string, boolean>)
-            : {},
-        createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
-        updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString(),
-      };
-    })
-    .filter((team) => team.id > 0 && team.name.trim().length > 0);
+  return value.map((item): StoredTeam => {
+    const obj = item as Record<string, unknown>;
+    return {
+      id: Number(obj.id) || 0,
+      name: String(obj.name || ""),
+      description: obj.description as string | null,
+      permissions: (obj.permissions as Record<string, boolean>) || {},
+      createdAt: String(obj.createdAt || new Date().toISOString()),
+      updatedAt: String(obj.updatedAt || new Date().toISOString()),
+      ownerId: String(obj.ownerId || "system"),
+      ownerEmail: String(obj.ownerEmail || "system"),
+    };
+  });
 }
 
 async function readTeamStore() {
-  const existing = await prisma.userPreference.findUnique({
+  const record = await prisma.userPreference.findUnique({
     where: { userId: SYSTEM_TEAMS_USER_ID },
   });
 
-  if (existing) {
-    return existing;
-  }
-
-  return prisma.userPreference.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId: SYSTEM_TEAMS_USER_ID,
-      data: {},
-      updatedAt: new Date(),
-    },
-  });
+  return {
+    data: record?.data as Record<string, unknown> | undefined,
+  };
 }
 
 async function persistTeams(teams: StoredTeam[]) {
-  const store = await readTeamStore();
-  const currentData =
-    store.data && typeof store.data === "object" && !Array.isArray(store.data)
-      ? (store.data as Record<string, unknown>)
-      : {};
-
-  await prisma.userPreference.update({
+  await prisma.userPreference.upsert({
     where: { userId: SYSTEM_TEAMS_USER_ID },
-    data: {
+    update: {
       data: {
-        ...currentData,
-        [SYSTEM_TEAMS_KEY]: teams,
-      } as Prisma.InputJsonValue,
+        [SYSTEM_TEAMS_KEY]: teams as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    },
+    create: {
+      id: SYSTEM_TEAMS_USER_ID,
+      userId: SYSTEM_TEAMS_USER_ID,
+      data: { [SYSTEM_TEAMS_KEY]: teams } as any,
       updatedAt: new Date(),
     },
   });
 }
 
 async function loadTeamsWithMembers() {
-  const [store, members] = await Promise.all([
-    readTeamStore(),
-    prisma.teamMember.findMany({
-      where: { deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        attendance: true,
-        workload: true,
-        team: true,
-      },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const store = await readTeamStore();
+  const teams = readStoredTeams(store.data as any);
 
-  const storedTeams = readStoredTeams(store.data);
-  const memberMap = new Map<string, TeamMemberInfo[]>();
+  const membersByTeam = await prisma.teamMember.findMany({
+    where: { deletedAt: null },
+    select: { id: true, name: true, email: true, team: true, role: true, attendance: true, workload: true },
+  });
 
-  for (const member of members) {
-    const teamName = member.team.trim() || "General";
-    const bucket = memberMap.get(teamName) ?? [];
-    bucket.push({
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      role: member.role as "Admin" | "Manager" | "Employee",
-      attendance: (member.attendance || "absent") as "present" | "late" | "remote" | "absent",
-      workload: member.workload || 0,
-    });
-    memberMap.set(teamName, bucket);
+  const memberMap = new Map<string, typeof membersByTeam>();
+  for (const m of membersByTeam) {
+    const list = memberMap.get(m.team) || [];
+    list.push(m);
+    memberMap.set(m.team, list);
   }
 
-  const knownNames = new Set(storedTeams.map((team) => team.name));
-  const now = new Date().toISOString();
-  const derivedTeams = [...memberMap.keys()]
-    .filter((name) => !knownNames.has(name) && name !== "General")
-    .sort((a, b) => a.localeCompare(b))
-    .map((name, index) => ({
-      id: storedTeams.length + index + 1,
-      name,
-      description: null,
-      permissions: {},
-      createdAt: now,
-      updatedAt: now,
-    }));
+  return teams.map(t => ({
+    ...t,
+    members: memberMap.get(t.name) || [],
+  }));
+}
 
-  const allTeams = [...storedTeams, ...derivedTeams]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((team) => ({
-      ...team,
-      members: memberMap.get(team.name) ?? [],
-    }));
-
-  return allTeams;
+// Convert AccessScope to actor object for teams service
+function toActor(access?: AccessScope) {
+  return access ? { userId: access.userId ?? "", email: access.email ?? "", role: access.role ?? "employee" } : undefined;
 }
 
 export const teamsService = {
   async getById(teamId: number) {
-    const team = (await loadTeamsWithMembers()).find((entry) => entry.id === teamId);
+    const team = (await loadTeamsWithMembers()).find(t => t.id === teamId);
     if (!team) {
       throw new AppError("Team not found", 404, "NOT_FOUND");
     }
     return mapTeam(team);
   },
 
-  async list() {
-    const teams = await loadTeamsWithMembers();
-    return teams.map(mapTeam);
+  async list(access?: AccessScope) {
+    const allTeams = await loadTeamsWithMembers();
+    
+    if (!access) {
+      return [];
+    }
+
+    // Admin sees only their own teams
+    if (access.role === "admin") {
+      return allTeams.filter(t => 
+        t.ownerId === access.userId || 
+        t.ownerEmail === access.email
+      ).map(mapTeam);
+    }
+    
+    // Manager/Employee sees teams from their organization (same admin)
+    // Get the adminId for this user
+    const user = await prisma.user.findUnique({
+      where: { id: access.userId },
+      select: { adminId: true }
+    });
+
+    if (user?.adminId) {
+      // Filter teams by the admin who owns this user
+      const admin = await prisma.user.findUnique({
+        where: { id: user.adminId },
+        select: { email: true }
+      });
+      if (admin?.email) {
+        return allTeams.filter(t => 
+          t.ownerEmail === admin.email
+        ).map(mapTeam);
+      }
+    }
+    
+    // Fallback: see teams where ownerId matches or empty (system/legacy teams)
+    return allTeams.filter(t => 
+      t.ownerId === access.userId || 
+      t.ownerEmail === access.email ||
+      t.ownerId === "system" ||
+      t.ownerId === ""
+    ).map(mapTeam);
   },
 
-  async create(input: TeamCreateInput) {
+  async create(input: TeamCreateInput, access?: AccessScope) {
     const name = normalizeTeamName(input.name);
     const store = await readTeamStore();
-    const teams = readStoredTeams(store.data);
+    const teams = readStoredTeams(store.data as any);
+    
+    if (!access) {
+      throw new AppError("Authentication required", 401, "UNAUTHORIZED");
+    }
+    
+    // Determine the owner of this team
+    let ownerId = access.userId ?? "unknown";
+    let ownerEmail = access.email ?? "unknown";
+    
+    // If manager/employee creates team, attribute it to their admin
+    if (access.role !== "admin") {
+      const user = await prisma.user.findUnique({
+        where: { id: access.userId },
+        select: { adminId: true }
+      });
+      if (user?.adminId) {
+        const admin = await prisma.user.findUnique({
+          where: { id: user.adminId },
+          select: { id: true, email: true }
+        });
+        if (admin) {
+          ownerId = admin.id;
+          ownerEmail = admin.email;
+        }
+      }
+    }
+    
+    // Check conflict within all teams (to prevent name collisions)
     if (teams.some((team) => team.name.toLowerCase() === name.toLowerCase())) {
       throw new AppError("Team name already exists", 409, "CONFLICT");
     }
 
     const createdAt = new Date().toISOString();
     const team: StoredTeam = {
-      id: teams.reduce((max, entry) => Math.max(max, entry.id), 0) + 1,
+      id: Math.max(0, ...teams.map(t => t.id)) + 1,
       name,
       description: input.description?.trim() || null,
       permissions: input.permissions || {},
       createdAt,
       updatedAt: createdAt,
+      ownerId,
+      ownerEmail,
     };
 
     await persistTeams([...teams, team]);
@@ -235,15 +261,24 @@ export const teamsService = {
     });
   },
 
-  async update(teamId: number, patch: TeamUpdateInput) {
+  async update(teamId: number, patch: TeamUpdateInput, access?: AccessScope) {
     const store = await readTeamStore();
-    const teams = readStoredTeams(store.data);
+    const teams = readStoredTeams(store.data as any);
     const index = teams.findIndex((team) => team.id === teamId);
     if (index === -1) {
       throw new AppError("Team not found", 404, "NOT_FOUND");
     }
 
     const existing = teams[index];
+    
+    // Admin can only update their own teams
+    if (access?.role === "admin") {
+      const isOwner = existing.ownerId === access.userId || existing.ownerEmail === access.email;
+      if (!isOwner) {
+        throw new AppError("You can only update your own teams", 403, "FORBIDDEN");
+      }
+    }
+    
     const nextName = patch.name !== undefined ? normalizeTeamName(patch.name) : existing.name;
 
     const conflict = teams.find((team) => team.id !== teamId && team.name.toLowerCase() === nextName.toLowerCase());
@@ -263,15 +298,19 @@ export const teamsService = {
     nextTeams[index] = updated;
 
     await prisma.$transaction(async (tx) => {
+      const dataObj = (store.data && typeof store.data === "object" && !Array.isArray(store.data))
+        ? (store.data as Record<string, unknown>)
+        : {};
+      
       await tx.userPreference.update({
         where: { userId: SYSTEM_TEAMS_USER_ID },
         data: {
           data: {
-            ...((store.data && typeof store.data === "object" && !Array.isArray(store.data)
+            ...((store.data && typeof store.data === "object" && !Array.isArray(store.data))
               ? (store.data as Record<string, unknown>)
-              : {}) as Record<string, unknown>),
+              : {}),
             [SYSTEM_TEAMS_KEY]: nextTeams,
-          } as Prisma.InputJsonValue,
+          } as any,
           updatedAt: new Date(),
         },
       });
@@ -296,28 +335,34 @@ export const teamsService = {
     });
   },
 
-  async delete(teamId: number) {
+  async delete(teamId: number, access?: AccessScope) {
     const store = await readTeamStore();
-    const teams = readStoredTeams(store.data);
+    const teams = readStoredTeams(store.data as any);
     const existing = teams.find((team) => team.id === teamId);
     if (!existing) {
       throw new AppError("Team not found", 404, "NOT_FOUND");
+    }
+    
+    // Admin can only delete their own teams
+    if (access?.role === "admin") {
+      const isOwner = existing.ownerId === access.userId || existing.ownerEmail === access.email;
+      if (!isOwner) {
+        throw new AppError("You can only delete your own teams", 403, "FORBIDDEN");
+      }
     }
 
     const nextTeams = teams.filter((team) => team.id !== teamId);
 
     await prisma.$transaction(async (tx) => {
-      await tx.userPreference.update({
+      await tx.userPreference.upsert({
         where: { userId: SYSTEM_TEAMS_USER_ID },
-        data: {
-          data: {
-            ...((store.data && typeof store.data === "object" && !Array.isArray(store.data)
-              ? (store.data as Record<string, unknown>)
-              : {}) as Record<string, unknown>),
-            [SYSTEM_TEAMS_KEY]: nextTeams,
-          } as Prisma.InputJsonValue,
-          updatedAt: new Date(),
+        update: {
+          data: { [SYSTEM_TEAMS_KEY]: nextTeams as Prisma.InputJsonValue, updatedAt: new Date() },
         },
+        create: {
+          userId: SYSTEM_TEAMS_USER_ID,
+          data: { [SYSTEM_TEAMS_KEY]: nextTeams } as any,
+        } as any,
       });
 
       await tx.teamMember.updateMany({
@@ -328,53 +373,26 @@ export const teamsService = {
   },
 
   async assignMember(teamId: number, memberId: number) {
-    const team = (await loadTeamsWithMembers()).find((entry) => entry.id === teamId);
+    const team = (await loadTeamsWithMembers()).find(entry => entry.id === teamId);
     if (!team) {
       throw new AppError("Team not found", 404, "NOT_FOUND");
     }
 
-    const member = await prisma.teamMember.findUnique({
-      where: { id: memberId },
-      select: {
-        id: true,
-        deletedAt: true,
-      },
-    });
-    if (!member || member.deletedAt) {
-      throw new AppError("Team member not found", 404, "NOT_FOUND");
-    }
-
     await prisma.teamMember.update({
       where: { id: memberId },
-      data: {
-        team: team.name,
-      },
+      data: { team: team.name, teamId: teamId },
     });
   },
 
   async removeMember(teamId: number, memberId: number) {
-    const team = (await loadTeamsWithMembers()).find((entry) => entry.id === teamId);
+    const team = (await loadTeamsWithMembers()).find(entry => entry.id === teamId);
     if (!team) {
       throw new AppError("Team not found", 404, "NOT_FOUND");
     }
 
-    const member = await prisma.teamMember.findUnique({
-      where: { id: memberId },
-      select: {
-        id: true,
-        deletedAt: true,
-        team: true,
-      },
-    });
-    if (!member || member.deletedAt || member.team !== team.name) {
-      throw new AppError("Member not in this team", 404, "NOT_FOUND");
-    }
-
     await prisma.teamMember.update({
       where: { id: memberId },
-      data: {
-        team: "General",
-      },
+      data: { team: "General", teamId: null },
     });
   },
 };

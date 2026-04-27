@@ -124,8 +124,7 @@ export const sidebarSections: SidebarSection[] = [
       { to: "/hr/hiring", icon: Briefcase, label: "Hiring", roles: ["admin", "manager"] },
       { to: "/hr/candidates", icon: CirclePlus, label: "Candidates", roles: ["admin", "manager"], badge: "New" },
       { to: "/hr/employees", icon: UsersRound, label: "Employees", roles: ["admin", "manager"] },
-      { to: "/hr/payroll", icon: ReceiptText, label: "Payroll", roles: ["admin", "manager", "employee"] },
-    ],
+      { to: "/hr/payroll", icon: ReceiptText, label: "Payroll", roles: ["admin", "manager", "employee"] },    ],
   },
   {
     key: "insights",

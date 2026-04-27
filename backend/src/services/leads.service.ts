@@ -8,6 +8,7 @@ import { gtmLifecycleService } from "./gtm-lifecycle.service";
 import { logger } from "../utils/logger";
 import { cache, TTL } from "../utils/cache";
 import { normalizePagination } from "../utils/pagination";
+import { createNotification } from "./notifications.service";
 
 type LeadRecord = {
   id: number;
@@ -278,6 +279,23 @@ export const leadsService = {
       score: lead.score,
       createdBy: access?.email,
     }).catch((err) => logger.error("Automation trigger failed:", err));
+
+    // Notify assigned user if there's an assignee
+    if (lead.assignedTo) {
+      createNotification({
+        userId: lead.assignedTo,
+        type: "lead",
+        title: "New lead assigned",
+        message: `You have been assigned to lead: ${lead.firstName} ${lead.lastName}`,
+        priority: lead.score > 70 ? "high" : "medium",
+        linkUrl: `/leads?leadId=${lead.id}`,
+        linkLabel: "View lead",
+        entityType: "Lead",
+        entityId: lead.id,
+        batchKey: `lead-assigned-${lead.assignedTo}`,
+        metadata: { leadId: lead.id, score: lead.score },
+      }).catch((err) => logger.error("Failed to create notification:", err));
+    }
 
     await cache.invalidatePrefix("leads:list");
     return mapLead(lead);

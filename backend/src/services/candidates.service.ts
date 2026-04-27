@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { sendMail } from "../utils/mailer";
 import { sendHireEmail, sendRejectionEmail, sendInterviewInvitationEmail } from "../utils/email-templates";
+import { cache, TTL } from "../utils/cache";
 
 type CandidateRecord = {
   id: number;
@@ -160,6 +161,10 @@ export const candidatesService = {
       where.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
     }
 
+    const cacheKey = `candidates:list:${access?.userId ?? access?.email ?? "anon"}:${page}:${limit}:${query?.stage ?? ""}:${query?.jobId ?? ""}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
     const [candidates, total] = await Promise.all([
       prisma.candidate.findMany({
         where,
@@ -170,10 +175,12 @@ export const candidatesService = {
       }),
       prisma.candidate.count({ where }),
     ]);
-    return {
+    const result = {
       data: candidates.map(mapCandidate),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     };
+    await cache.set(cacheKey, result, TTL.LEADS_LIST);
+    return result;
   },
 
   async getById(candidateId: number, access?: CandidateAccessScope) {

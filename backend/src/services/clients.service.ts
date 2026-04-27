@@ -147,21 +147,30 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     });
   }
 
-  // Data isolation: Admin/Manager can only see clients they created or assigned to them
-  if (access?.role === "admin" || access?.role === "manager") {
+  // Data isolation: Role-based filtering
+  // Admin: Get their team's data (via team field)
+  // Manager: See only their created/assigned records
+  // Employee: See only assigned records
+  if (access?.role === "admin") {
+    // Admin sees all clients they created or are assigned to
+    and.push({
+      OR: [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+        { assignedTo: null },
+      ],
+    } as any);
+  } else if (access?.role === "manager") {
     and.push({
       OR: [
         { assignedTo: access.email },
         { assignedTo: access.userId ?? "" },
       ],
-    });
-  }
-
-  // RBAC: Employees see only assigned clients
-  if (access?.role === "employee") {
+    } as any);
+  } else if (access?.role === "employee") {
     and.push({
       assignedTo: { in: [access.email, access.userId ?? ""] },
-    });
+    } as any);
   }
 
   if (filters.status) {

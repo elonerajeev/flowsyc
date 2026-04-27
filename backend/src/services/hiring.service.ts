@@ -2,6 +2,7 @@ import { type JobStatus } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import type { AccessScope } from "../utils/access-control";
 
 type JobRecord = {
   id: number;
@@ -19,6 +20,7 @@ type JobRecord = {
   candidateCount?: number;
   createdAt: string;
   updatedAt: string;
+  createdBy?: string | null;
 };
 
 type JobInput = {
@@ -50,6 +52,7 @@ function mapJob(job: {
   deadline: string | null;
   createdAt: Date;
   updatedAt: Date;
+  createdBy: string | null;
 } & { _count?: { Candidate: number } }): JobRecord {
   return {
     id: job.id,
@@ -67,28 +70,48 @@ function mapJob(job: {
     candidateCount: job._count?.Candidate,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
+    createdBy: job.createdBy,
   };
 }
 
 const includeCount = { _count: { select: { Candidate: true } } } as const;
 
 export const hiringService = {
-  async list() {
+  async list(access?: AccessScope) {
+    const where: Record<string, unknown> = { deletedAt: null };
+
+    // Admin/Manager: see only jobs they created
+    if (access?.role === "admin" || access?.role === "manager") {
+      where.createdBy = access?.email;
+    } else if (access?.role === "employee") {
+      where.createdBy = access?.email;
+    }
+
     const jobs = await prisma.jobPosting.findMany({
-      where: { deletedAt: null },
+      where,
       orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
       include: includeCount,
     });
     return { data: jobs.map(mapJob) };
   },
 
-  async getById(jobId: number) {
-    const job = await prisma.jobPosting.findUnique({ where: { id: jobId }, include: includeCount });
+  async getById(jobId: number, access?: AccessScope) {
+    const job = await prisma.jobPosting.findUnique({
+      where: { id: jobId },
+      include: includeCount,
+    });
     if (!job || job.deletedAt) throw new AppError("Job posting not found", 404, "NOT_FOUND");
+
+    if (access?.role !== "admin" && access?.role !== "manager") {
+      if (job.createdBy !== access?.email) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     return mapJob(job);
   },
 
-  async create(input: JobInput) {
+  async create(input: JobInput, access?: AccessScope) {
     const job = await prisma.jobPosting.create({
       data: {
         title: input.title,
@@ -103,15 +126,22 @@ export const hiringService = {
         priority: input.priority ?? "normal",
         deadline: input.deadline ?? null,
         updatedAt: new Date(),
+        createdBy: access?.email,
       },
       include: includeCount,
     });
     return mapJob(job);
   },
 
-  async update(jobId: number, patch: Partial<JobInput>) {
+  async update(jobId: number, patch: Partial<JobInput>, access?: AccessScope) {
     const existing = await prisma.jobPosting.findUnique({ where: { id: jobId } });
     if (!existing || existing.deletedAt) throw new AppError("Job posting not found", 404, "NOT_FOUND");
+
+    if (access?.role !== "admin" && access?.role !== "manager") {
+      if (existing.createdBy !== access?.email) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
 
     const job = await prisma.jobPosting.update({
       where: { id: jobId },
@@ -133,10 +163,16 @@ export const hiringService = {
     return mapJob(job);
   },
 
-  // Toggle status: open → closed → open
-  async toggleStatus(jobId: number) {
+  async toggleStatus(jobId: number, access?: AccessScope) {
     const existing = await prisma.jobPosting.findUnique({ where: { id: jobId } });
     if (!existing || existing.deletedAt) throw new AppError("Job posting not found", 404, "NOT_FOUND");
+
+    if (access?.role !== "admin" && access?.role !== "manager") {
+      if (existing.createdBy !== access?.email) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     const nextStatus: Record<string, JobStatus> = { open: "closed", closed: "open", draft: "open" };
     const job = await prisma.jobPosting.update({
       where: { id: jobId },
@@ -146,10 +182,10 @@ export const hiringService = {
     return mapJob(job);
   },
 
-  // Clone a job posting
-  async clone(jobId: number) {
+  async clone(jobId: number, access?: AccessScope) {
     const existing = await prisma.jobPosting.findUnique({ where: { id: jobId } });
     if (!existing || existing.deletedAt) throw new AppError("Job posting not found", 404, "NOT_FOUND");
+
     const job = await prisma.jobPosting.create({
       data: {
         title: `${existing.title} (Copy)`,
@@ -164,15 +200,23 @@ export const hiringService = {
         priority: existing.priority,
         deadline: null,
         updatedAt: new Date(),
+        createdBy: access?.email,
       },
       include: includeCount,
     });
     return mapJob(job);
   },
 
-  async delete(jobId: number) {
+  async delete(jobId: number, access?: AccessScope) {
     const existing = await prisma.jobPosting.findUnique({ where: { id: jobId } });
     if (!existing || existing.deletedAt) throw new AppError("Job posting not found", 404, "NOT_FOUND");
+
+    if (access?.role !== "admin" && access?.role !== "manager") {
+      if (existing.createdBy !== access?.email) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     await prisma.jobPosting.update({ where: { id: jobId }, data: { deletedAt: new Date() } });
   },
 };

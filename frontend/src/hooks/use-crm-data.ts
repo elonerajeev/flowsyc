@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { crmService } from "@/services/crm";
+import { useAuth } from "@/contexts/AuthContext";
 
 type QueryToggle = {
   enabled?: boolean;
@@ -120,8 +121,10 @@ export function useReports() {
 }
 
 export function useTeams(options?: QueryToggle) {
+  const { user } = useAuth();
+  const userId = user?.id || "anonymous";
   return useQuery({
-    queryKey: crmKeys.teams,
+    queryKey: [...crmKeys.teams, userId],
     queryFn: crmService.getTeams,
     staleTime: 1000 * 60 * 5,
     enabled: options?.enabled,
@@ -129,8 +132,10 @@ export function useTeams(options?: QueryToggle) {
 }
 
 export function useTeamMembers(options?: QueryToggle) {
+  const { user } = useAuth();
+  const userId = user?.id || "anonymous";
   return useQuery({
-    queryKey: crmKeys.teamMembers,
+    queryKey: [...crmKeys.teamMembers, userId],
     queryFn: crmService.getTeamMembers,
     staleTime: 1000 * 60 * 5,
     enabled: options?.enabled,
@@ -138,8 +143,10 @@ export function useTeamMembers(options?: QueryToggle) {
 }
 
 export function useAttendance(options?: QueryToggle) {
+  const { user } = useAuth();
+  const userId = user?.id || "anonymous";
   return useQuery({
-    queryKey: crmKeys.attendance,
+    queryKey: [...crmKeys.attendance, userId],
     queryFn: crmService.getAttendance,
     staleTime: 1000 * 60 * 5,
     enabled: options?.enabled,
@@ -195,8 +202,10 @@ export function useCalendarEvents() {
 }
 
 export function usePayroll(period?: string) {
+  const { user } = useAuth();
+  const userId = user?.id || "anonymous";
   return useQuery({
-    queryKey: [...crmKeys.payroll, period],
+    queryKey: [...crmKeys.payroll, period, userId],
     queryFn: () => crmService.getPayroll(period),
     staleTime: 1000 * 60 * 5,
   });

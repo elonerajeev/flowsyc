@@ -306,7 +306,7 @@ export default function Dashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => navigate("/projects")}
+                onClick={() => navigate("/workspace/projects")}
                 className={cn("premium-hover inline-flex items-center gap-1 font-semibold text-primary", TEXT.meta)}
               >
                 Open Projects

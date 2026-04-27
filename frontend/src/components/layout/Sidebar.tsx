@@ -42,7 +42,7 @@ export default function Sidebar({ activeSection, width, onResizeStart }: Sidebar
 
   return (
     <aside
-      className="fixed left-[72px] top-0 z-30 flex h-screen flex-col border-r border-sidebar-border bg-[hsl(var(--sidebar-bg))] shadow-[4px_0_12px_hsl(var(--sidebar-border)/0.4)]"
+      className="fixed left-[72px] top-0 z-30 flex h-screen flex-col border-r border-sidebar-border bg-sidebar shadow-[4px_0_12px_hsl(var(--sidebar-border)/0.4)]"
       style={{ width }}
     >
       <div

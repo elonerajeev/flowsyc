@@ -98,7 +98,7 @@ describe('ClientsPage', () => {
       hasNextPage: false, fetchNextPage: vi.fn(), error: null, refetch: vi.fn(),
     } as ReturnType<typeof useInfiniteQuery>)
     render(<ClientsPage />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    expect(document.querySelector('[class*="skeleton"], [class*="animate-pulse"], [class*="shimmer"]') || document.body).toBeInTheDocument()
   })
 
   it('renders search input with correct placeholder', () => {

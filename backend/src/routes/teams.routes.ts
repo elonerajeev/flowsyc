@@ -1,11 +1,8 @@
 import { Router } from "express";
-
 import { AppError } from "../middleware/error.middleware";
-import { validateBody } from "../middleware/validate.middleware";
-import { asyncHandler } from "../utils/async-handler";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
+import { asyncHandler } from "../utils/async-handler";
 import { teamsService } from "../services/teams.service";
-import { createTeamSchema, updateTeamSchema } from "../validators/team.schema";
 
 const teamsRouter = Router();
 
@@ -21,14 +18,22 @@ function readId(value: string | string[] | undefined, label: string) {
   return parsed;
 }
 
+function getAccess(req: { auth?: { userId: string; email: string; role: string } }) {
+  return {
+    userId: req.auth?.userId,
+    email: req.auth?.email ?? "",
+    role: req.auth?.role as "admin" | "manager" | "employee",
+  } as any;
+}
+
 teamsRouter
   .route("/")
   .get(requireAuth, requireRole(["admin", "manager"]), asyncHandler(async (req, res) => {
-    const teams = await teamsService.list();
+    const teams = await teamsService.list(getAccess(req));
     res.json(teams);
   }))
-  .post(requireAuth, requireRole(["admin", "manager"]), validateBody(createTeamSchema), asyncHandler(async (req, res) => {
-    const team = await teamsService.create(req.body);
+  .post(requireAuth, requireRole(["admin"]), asyncHandler(async (req, res) => {
+    const team = await teamsService.create(req.body, getAccess(req));
     res.status(201).json(team);
   }));
 
@@ -38,12 +43,12 @@ teamsRouter
     const team = await teamsService.getById(readId(req.params.id, "team id"));
     res.json(team);
   }))
-  .patch(requireAuth, requireRole(["admin", "manager"]), validateBody(updateTeamSchema), asyncHandler(async (req, res) => {
-    const team = await teamsService.update(readId(req.params.id, "team id"), req.body);
+  .patch(requireAuth, requireRole(["admin"]), asyncHandler(async (req, res) => {
+    const team = await teamsService.update(readId(req.params.id, "team id"), req.body, getAccess(req));
     res.json(team);
   }))
-  .delete(requireAuth, requireRole(["admin", "manager"]), asyncHandler(async (req, res) => {
-    await teamsService.delete(readId(req.params.id, "team id"));
+  .delete(requireAuth, requireRole(["admin"]), asyncHandler(async (req, res) => {
+    await teamsService.delete(readId(req.params.id, "team id"), getAccess(req));
     res.status(204).send();
   }));
 

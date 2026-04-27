@@ -60,6 +60,7 @@ import { activityRouter } from "./routes/activity.routes";
 import googleAuthRoutes from "./routes/google-auth.routes";
 import { csvImportRouter } from "./routes/csv-import.routes";
 import inboxRouter from "./routes/inbox.routes";
+import { notificationsRouter } from "./routes/notifications.routes";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { logger } from "./utils/logger";
 
@@ -152,6 +153,7 @@ export function createApp() {
   app.use("/api/activities", activityRouter);
   app.use("/api/csv-import", csvImportRouter);
   app.use("/api/inbox", inboxRouter);
+  app.use("/api/notifications", notificationsRouter);
 
   app.use(notFound);
   app.use(errorHandler);

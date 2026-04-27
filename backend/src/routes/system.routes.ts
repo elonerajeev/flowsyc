@@ -131,7 +131,7 @@ systemRouter.get("/search", requireAuth, asyncHandler(async (req: Request, res: 
   const category = req.query.category ? String(req.query.category).trim() : undefined;
   const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20) || 20));
   const { searchService } = await import("../services/search.service");
-  const results = await searchService.global(query, limit, category);
+  const results = await searchService.global(query, req.auth, limit, category);
   res.status(200).json({ data: results });
 }));
 
