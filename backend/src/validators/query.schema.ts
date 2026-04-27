@@ -15,6 +15,17 @@ export const taskQuerySchema = paginationQuerySchema.extend({
   projectId: z.coerce.number().int().positive().optional(),
 });
 
+export const taskPaginatedQuerySchema = paginationQuerySchema.extend({
+  column: z.enum(["todo", "in-progress", "done"]),
+  priority: z.enum(["high", "medium", "low"]).optional(),
+  projectId: z.coerce.number().int().positive().optional(),
+});
+
+export const taskStatsQuerySchema = z.object({
+  priority: z.enum(["high", "medium", "low"]).optional(),
+  projectId: z.coerce.number().int().positive().optional(),
+});
+
 export const teamMemberQuerySchema = paginationQuerySchema.extend({
   role: z.enum(["Admin", "Manager", "Employee"]).optional(),
   status: z.enum(["active", "pending", "completed"]).optional(),

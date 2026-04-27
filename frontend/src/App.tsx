@@ -20,6 +20,8 @@ import { useMonitoring } from "@/hooks/use-monitoring";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const SignupPage = lazy(() => import("@/pages/SignupPage"));
+const VerifyEmailPage = lazy(() => import("@/pages/VerifyEmailPage"));
+const GoogleCallback = lazy(() => import("@/pages/GoogleCallbackPage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
@@ -54,6 +56,7 @@ const AutomationScheduledPage = lazy(() => import("@/pages/AutomationScheduledPa
 const AutomationLogsPage = lazy(() => import("@/pages/AutomationLogsPage"));
 const GTMOpsPage = lazy(() => import("@/pages/GTMOpsPage"));
 const GTMFlowPage = lazy(() => import("@/pages/GTMFlowPage"));
+const InboxPage = lazy(() => import("@/pages/InboxPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +104,22 @@ const App = () => {
                     }
                   />
                   <Route
+                    path="/verify-email"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <VerifyEmailPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/auth/google/callback"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <GoogleCallback />
+                      </Suspense>
+                    }
+                  />
+                  <Route
                     path="/*"
                     element={
                       <>
@@ -115,6 +134,7 @@ const App = () => {
                               <Route path="/overview" element={<RouteAccessGuard><Dashboard /></RouteAccessGuard>} />
                               <Route path="/overview/activity" element={<RouteAccessGuard><ActivityPage /></RouteAccessGuard>} />
                               <Route path="/overview/messages" element={<RouteAccessGuard><MessagesPage /></RouteAccessGuard>} />
+                              <Route path="/overview/inbox" element={<RouteAccessGuard><InboxPage /></RouteAccessGuard>} />
 
                               <Route path="/people/team" element={<Navigate to="/people/teams" replace />} />
                               <Route path="/people/teams" element={<RouteAccessGuard><TeamsPage /></RouteAccessGuard>} />

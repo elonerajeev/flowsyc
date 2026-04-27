@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma";
-import { Prisma } from "@prisma/client";
+import { AutomationTrigger as PrismaAutomationTrigger, Prisma } from "@prisma/client";
 import { sendMail } from "../utils/mailer";
 import { logger } from "../utils/logger";
 import cron, { ScheduledTask } from "node-cron";
@@ -17,24 +17,7 @@ function buildTaskAvatar(title: string): string {
 }
 
 // Types for automation
-type TriggerType = 
-  | "lead_created" 
-  | "lead_updated" 
-  | "lead_scored" 
-  | "lead_assigned"
-  | "deal_created" 
-  | "deal_stage_changed" 
-  | "deal_closed"
-  | "task_created" 
-  | "task_completed" 
-  | "task_overdue"
-  | "client_created" 
-  | "client_health_changed"
-  | "invoice_created" 
-  | "invoice_overdue"
-  | "payroll_due" 
-  | "project_stalled"
-  | "custom_schedule";
+type TriggerType = PrismaAutomationTrigger;
 
 type ActionType = 
   | "send_email"
@@ -150,7 +133,9 @@ function checkConditions(conditions: Condition[], event: TriggerEvent): boolean 
       case "not_equals":
         return fieldValue !== value;
       case "contains":
-        return String(fieldValue).includes(String(value));
+        return Array.isArray(fieldValue)
+          ? fieldValue.includes(value)
+          : String(fieldValue ?? "").includes(String(value ?? ""));
       case "greater_than":
         return Number(fieldValue) > Number(value);
       case "less_than":
@@ -161,10 +146,26 @@ function checkConditions(conditions: Condition[], event: TriggerEvent): boolean 
       case "<=":
       case "lte":
         return Number(fieldValue) <= Number(value);
+      case "in":
+        return Array.isArray(value)
+          ? value.includes(fieldValue)
+          : String(value ?? "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .includes(String(fieldValue ?? ""));
+      case "not_in":
+        return Array.isArray(value)
+          ? !value.includes(fieldValue)
+          : !String(value ?? "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .includes(String(fieldValue ?? ""));
       case "is_empty":
-        return !fieldValue || fieldValue === "";
+        return fieldValue === undefined || fieldValue === null || fieldValue === "";
       case "is_not_empty":
-        return fieldValue && fieldValue !== "";
+        return fieldValue !== undefined && fieldValue !== null && fieldValue !== "";
       default:
         return true;
     }
@@ -309,13 +310,41 @@ async function executeSendEmail(config: Record<string, unknown>, event: TriggerE
   if (!toEmail) {
     return { success: false, error: "Could not resolve email address" };
   }
+
+  // Build merge data from entity - FIX: Pull actual lead/client data for email templates
+  const mergeData: Record<string, unknown> = { ...templateData };
   
-  // Build email content
-  const htmlBody = buildEmailFromTemplate(template || "", templateData || {}, event);
+  if (event.entityType === "Lead" && event.entityId) {
+    const lead = await prisma.lead.findUnique({ where: { id: event.entityId } });
+    if (lead) {
+      mergeData.name = `${lead.firstName} ${lead.lastName}`.trim() || lead.email.split('@')[0];
+      mergeData.company = lead.company || "";
+      mergeData.email = lead.email;
+      mergeData.phone = lead.phone || "";
+      mergeData.jobTitle = lead.jobTitle || "";
+    }
+  } else if (event.entityType === "Client" && event.entityId) {
+    const client = await prisma.client.findUnique({ where: { id: event.entityId } });
+    if (client) {
+      mergeData.name = client.name;
+      mergeData.company = client.company || "";
+      mergeData.email = client.email;
+    }
+  }
+  
+  // Build email content with actual data
+  const htmlBody = buildEmailFromTemplate(template || "", mergeData, event);
+  
+  // Resolve subject line with actual data too
+  let resolvedSubject = subject || "Welcome";
+  Object.entries(mergeData).forEach(([key, value]) => {
+    resolvedSubject = resolvedSubject.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value));
+  });
+  resolvedSubject = resolveTemplateString(resolvedSubject, event);
   
   await sendMail({
     to: toEmail,
-    subject: resolveTemplateString(subject || "", event),
+    subject: resolvedSubject,
     text: htmlBody.replace(/<[^>]*>/g, ""),
     html: htmlBody
   });
@@ -326,12 +355,12 @@ async function executeSendEmail(config: Record<string, unknown>, event: TriggerE
       subject: resolveTemplateString(subject || "", event),
       body: htmlBody,
       template: template || null,
-      templateData: templateData as Prisma.InputJsonValue | undefined,
+      templateData: mergeData as Prisma.InputJsonValue | undefined,
       status: "sent",
       sentAt: new Date(),
       entityType: event.entityType || "",
       entityId: event.entityId || 0,
-      recipientName: String(templateData?.name || "")
+      recipientName: String(mergeData.name || "")
     }
   });
   
@@ -1032,34 +1061,205 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
   // Default templates
   const templates: Record<string, string> = {
     "lead_welcome": `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">Welcome, {{name}}!</h2>
-        <p>Thank you for your interest. Our team will be in touch soon.</p>
-        <p>Best regards,<br/>The Team</p>
-      </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 36px 24px; text-align: center;">
+              <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                <span style="font-size: 36px;">🎉</span>
+              </div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.5px;">Welcome to Focal Point Compass!</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 24px;">
+              <p style="color: #111827; font-size: 17px; line-height: 1.6; margin: 0 0 16px;">Hello <strong style="color: #667eea;">{{name}}</strong>,</p>
+              <p style="color: #4b5563; font-size: 15px; line-height: 1.7; margin: 0 0 16px;">Thank you for connecting with <strong>{{company}}</strong>. We're thrilled to have you here and can't wait to show you what we have to offer!</p>
+              <p style="color: #4b5563; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">Our team will be reaching out to you shortly. In the meantime, feel free to reach out if you have any questions.</p>
+              
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="margin: 0 0 12px; color: #374151; font-size: 14px; font-weight: 600;">What happens next?</p>
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 6px 0; color: #4b5563; font-size: 14px;">📞 Our team will contact you within 24 hours</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #4b5563; font-size: 14px;">📅 We'll schedule a convenient time to discuss your needs</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #4b5563; font-size: 14px;">✨ Get a customized solution tailored to your requirements</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color: #9ca3af; font-size: 13px; margin: 0;">Best regards,<br/><strong style="color: #4b5563;">The Focal Point Compass Team</strong></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #f9fafb; padding: 16px 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; color: #9ca3af; font-size: 12px;">This is an automated message. Please do not reply directly.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `,
     "lead_assigned": `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">New Lead Assigned</h2>
-        <p>A new lead has been assigned to you.</p>
-        <p><strong>Name:</strong> {{name}}</p>
-        <p><strong>Email:</strong> {{email}}</p>
-        <p><strong>Company:</strong> {{company}}</p>
-      </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Lead Assigned</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 36px 24px; text-align: center;">
+              <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                <span style="font-size: 36px;">👤</span>
+              </div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">New Lead Assigned</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 24px;">
+              <p style="color: #111827; font-size: 15px; margin: 0 0 20px;">A new lead has been assigned to you:</p>
+              
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 12px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color: #6b7280; font-size: 13px; width: 80px;">Name</td>
+                        <td style="color: #111827; font-size: 14px; font-weight: 500;">{{name}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color: #6b7280; font-size: 13px; width: 80px;">Email</td>
+                        <td style="color: #111827; font-size: 14px;">{{email}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color: #6b7280; font-size: 13px; width: 80px;">Company</td>
+                        <td style="color: #111827; font-size: 14px; font-weight: 500;">{{company}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `,
     "followup_reminder": `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #f59e0b;">Follow-up Reminder</h2>
-        <p>Don't forget to follow up with {{name}}!</p>
-        <p>This is an automated reminder.</p>
-      </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Follow-up Reminder</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 36px 24px; text-align: center;">
+              <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                <span style="font-size: 36px;">⏰</span>
+              </div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Follow-up Reminder</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 24px; text-align: center;">
+              <p style="color: #111827; font-size: 17px; margin: 0 0 16px;">Don't forget to follow up with <strong style="color: #f59e0b;">{{name}}</strong>!</p>
+              <p style="color: #4b5563; font-size: 15px; margin: 0;">This is an automated reminder from your CRM.</p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `,
     "deal_won": `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #10b981;">🎉 Congratulations!</h2>
-        <p>Deal "{{dealName}}" has been won!</p>
-        <p>Amount: {{amount}}</p>
-      </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deal Won!</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 36px 24px; text-align: center;">
+              <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                <span style="font-size: 36px;">🎉</span>
+              </div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Congratulations!</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 24px; text-align: center;">
+              <p style="color: #111827; font-size: 17px; margin: 0 0 16px;">Deal "<strong>{{dealName}}</strong>" has been won!</p>
+              <div style="display: inline-block; background: #d1fae5; padding: 12px 24px; border-radius: 8px; margin: 8px 0 0;">
+                <span style="color: #059669; font-size: 18px; font-weight: 600;">Amount: {{amount}}</span>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `
   };
   

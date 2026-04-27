@@ -45,7 +45,11 @@ export const clientsController = {
   },
 
   create: async (req: Request, res: Response): Promise<void> => {
-    const client = await clientsService.create(req.body);
+    // Auto-assign to creator if assignedTo not explicitly set
+    const body = req.auth && !req.body.assignedTo
+      ? { ...req.body, assignedTo: req.auth.email }
+      : req.body;
+    const client = await clientsService.create(body);
     if (req.auth) {
       await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "create", entity: "Client", entityId: client.id, detail: `Created: ${client.name}` });
 
@@ -75,7 +79,7 @@ export const clientsController = {
 
   update: async (req: Request, res: Response): Promise<void> => {
     const clientId = readClientId(req);
-    const client = await clientsService.update(clientId, req.body);
+    const client = await clientsService.update(clientId, req.body, req.auth);
     if (req.auth) {
       await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "update", entity: "Client", entityId: clientId, detail: `Updated: ${client.name}` });
     }
@@ -84,7 +88,7 @@ export const clientsController = {
 
   remove: async (req: Request, res: Response): Promise<void> => {
     const clientId = readClientId(req);
-    await clientsService.delete(clientId);
+    await clientsService.delete(clientId, req.auth);
     if (req.auth) {
       await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "delete", entity: "Client", entityId: clientId, detail: `Deleted client #${clientId}` });
     }

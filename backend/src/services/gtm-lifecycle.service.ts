@@ -2,6 +2,7 @@ import { prisma } from "../config/prisma";
 import { GTMAutomationService } from "./gtm-automation.service";
 import { cache, TTL } from "../utils/cache";
 import { logger } from "../utils/logger";
+import type { AccessScope } from "../utils/access-control";
 
 type LifecycleSummary = {
   leadId: number;
@@ -190,6 +191,7 @@ async function ensureContactFromLead(lead: {
         phone: lead.phone,
         jobTitle: lead.jobTitle,
         clientId: lead.convertedToClientId ?? existing.clientId,
+        leadId: lead.id, // Track the original lead
         deletedAt: null,
       },
     });
@@ -205,6 +207,7 @@ async function ensureContactFromLead(lead: {
       jobTitle: lead.jobTitle,
       department: "Sales",
       clientId: lead.convertedToClientId ?? undefined,
+      leadId: lead.id, // Track the original lead
     },
   });
 }
@@ -575,7 +578,7 @@ export const gtmLifecycleService = {
     await logLifecycleToAutomationLog(leadId, summary, performedBy);
 
     // Invalidate GTM overview cache so next request reflects changes
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return summary;
   },
 
@@ -641,21 +644,98 @@ export const gtmLifecycleService = {
     return summary;
   },
 
-  async getOverview() {
-    const CACHE_KEY = "gtm:overview";
+  async getOverview(access?: AccessScope) {
+    const CACHE_KEY = `gtm:overview:${access?.email || "public"}`;
     // Use object to avoid circular ReturnType<typeof this.getOverview> reference
     const cached = cache.get<object>(CACHE_KEY);
     if (cached) return cached;
 
+    // Build user-specific filters
+    const leadWhere = { deletedAt: null };
+    const dealWhere = { deletedAt: null };
+    const clientWhere = { deletedAt: null };
+    const contactWhere = { deletedAt: null };
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      // Filter leads: user's created or assigned
+      (leadWhere as any).OR = [
+        { createdBy: access.email },
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+
+      // Filter deals: user's assigned
+      (dealWhere as any).OR = [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+
+      // Filter clients: user's assigned
+      (clientWhere as any).OR = [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+
+      // Filter contacts: from user's leads or assigned clients
+      const userLeads = await prisma.lead.findMany({
+        where: (leadWhere as any),
+        select: { email: true },
+      });
+      const leadEmails = userLeads.map(l => l.email);
+      const assignedClients = await prisma.client.findMany({
+        where: (clientWhere as any),
+        select: { id: true },
+      });
+      const assignedClientIds = assignedClients.map(c => c.id);
+      (contactWhere as any).OR = [
+        { email: { in: leadEmails } },
+        { clientId: { in: assignedClientIds } },
+      ];
+    }
+
+    if (access?.role === "employee") {
+      // Filter leads: user's assigned
+      (leadWhere as any).assignedTo = { in: [access.email, access.userId ?? ""] };
+
+      // Filter deals: user's assigned
+      (dealWhere as any).assignedTo = { in: [access.email, access.userId ?? ""] };
+
+      // Filter clients: user's assigned
+      (clientWhere as any).assignedTo = { in: [access.email, access.userId ?? ""] };
+
+      // Filter contacts: from user's assigned clients
+      const assignedClients = await prisma.client.findMany({
+        where: (clientWhere as any),
+        select: { id: true },
+      });
+      const assignedClientIds = assignedClients.map(c => c.id);
+      (contactWhere as any).OR = [
+        { clientId: { in: assignedClientIds } },
+        { clientId: null },
+      ];
+    }
+
     const [leads, deals, clients, contacts, pendingTasks, pendingJobs, recentLogs, recentActivities, alerts] = await Promise.all([
-      prisma.lead.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 500 }),
-      prisma.deal.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
-      prisma.client.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
-      prisma.contact.findMany({ where: { deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 200 }),
+      prisma.lead.findMany({ where: leadWhere, orderBy: { updatedAt: "desc" }, take: 500 }),
+      prisma.deal.findMany({ where: dealWhere, orderBy: { updatedAt: "desc" }, take: 200 }),
+      prisma.client.findMany({ where: clientWhere, orderBy: { updatedAt: "desc" }, take: 200 }),
+      prisma.contact.findMany({ where: contactWhere, orderBy: { updatedAt: "desc" }, take: 200 }),
       prisma.task.findMany({
         where: {
           column: { not: "done" },
-          OR: [{ tags: { has: FOLLOWUP_TAG } }, { valueStream: "sales" }],
+          ...(access?.role === "admin" || access?.role === "manager" ? {
+            OR: [
+              { tags: { has: FOLLOWUP_TAG }, assignee: access.email },
+              { tags: { has: FOLLOWUP_TAG }, assignee: access.userId ?? "" },
+              { valueStream: "sales", assignee: access.email },
+              { valueStream: "sales", assignee: access.userId ?? "" },
+            ],
+          } : access?.role === "employee" ? {
+            OR: [
+              { tags: { has: FOLLOWUP_TAG }, assignee: { in: [access.email, access.userId ?? ""] } },
+              { valueStream: "sales", assignee: { in: [access.email, access.userId ?? ""] } },
+            ],
+          } : {}),
         },
         orderBy: { updatedAt: "desc" },
         take: 12,
@@ -676,7 +756,11 @@ export const gtmLifecycleService = {
         take: 12,
       }),
       prisma.alert.findMany({
-        where: { isResolved: false, entityType: { in: ["Lead", "Deal", "Client"] } },
+        where: { 
+          isResolved: false, 
+          entityType: { in: ["Lead", "Deal", "Client"] },
+          ...(access?.role === "employee" ? {} : {}),
+        },
         orderBy: { createdAt: "desc" },
         take: 12,
       }),

@@ -25,6 +25,9 @@ import type {
   ProjectRecord,
   SalesMetrics,
   TaskColumn,
+  TaskBoardStats,
+  TaskPageResponse,
+  TaskPriority,
   TaskRecord,
   TeamRecord,
   TeamMemberRecord,
@@ -62,9 +65,49 @@ function buildQuery(params: Record<string, string | number | undefined>) {
 
 export const crmService = {
   getDashboard: () => fetchApi<DashboardSnapshot>("/dashboard"),
-  getClients: () => fetchCollectionApi<ClientRecord>("/clients"),
+  getClients: () => fetchCollectionApi<ClientRecord>("/clients?limit=50"),
+  getClientsPage: (params: {
+    page?: number;
+    limit?: number;
+    status?: "active" | "pending" | "completed";
+    segment?: "Expansion" | "Renewal" | "New Business";
+    search?: string;
+    sort?: "name" | "revenue" | "createdAt" | "healthScore";
+    order?: "asc" | "desc";
+  } = {}) => {
+    const query = buildQuery({
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+      status: params.status,
+      segment: params.segment,
+      search: params.search,
+      sort: params.sort ?? "createdAt",
+      order: params.order ?? "desc",
+    });
+    return requestJson<{
+      data: ClientRecord[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/clients${query}`);
+  },
   getProjects: () => fetchCollectionApi<ProjectRecord>("/projects"),
   getTasks: (projectId?: number) => fetchApi<Record<TaskColumn, TaskRecord[]>>(`/tasks${projectId ? `?projectId=${projectId}` : ""}`),
+  getTasksPage: (params: { column: TaskColumn; page?: number; limit?: number; projectId?: number; priority?: TaskPriority }) => {
+    const query = buildQuery({
+      column: params.column,
+      page: params.page ?? 1,
+      limit: params.limit ?? 30,
+      projectId: params.projectId,
+      priority: params.priority,
+    });
+    return requestJson<TaskPageResponse>(`/tasks/paginated${query}`);
+  },
+  getTaskStats: (params: { projectId?: number; priority?: TaskPriority } = {}) => {
+    const query = buildQuery({
+      projectId: params.projectId,
+      priority: params.priority,
+    });
+    return requestJson<TaskBoardStats>(`/tasks/stats${query}`);
+  },
   getConversations: () => fetchCollectionApi("/conversations"),
   getMessages: () => fetchCollectionApi("/messages"),
   sendMessage: (data: { conversationId: number; text: string; sender: string; isMe: boolean }) =>
@@ -87,6 +130,8 @@ export const crmService = {
       search: params.search,
       action: params.action,
       entity: params.entity,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
     });
     return requestJson<AuditLogListResponse>(`/system/audit${query}`);
   },
@@ -120,6 +165,12 @@ export const crmService = {
   updateCalendarEvent: (eventId: number, patch: Partial<CalendarEventRecord>) =>
     requestJson<CalendarEventRecord>(`/calendar/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteCalendarEvent: (eventId: number) => requestVoid(`/calendar/${eventId}`, { method: "DELETE" }),
+
+  getGoogleCalendarStatus: () => requestJson<{ connected: boolean }>("/calendar/google/status"),
+  connectGoogleCalendar: () => requestJson<{ authUrl: string }>("/calendar/google/connect"),
+  disconnectGoogleCalendar: () => requestJson<{ success: boolean }>("/calendar/google/disconnect", { method: "POST" }),
+  createMeetingGoogleMeet: (meetingId: number) =>
+    requestJson<{ meetLink: string | null; eventId: string | null; htmlLink: string | null }>(`/meetings/${meetingId}/google-meet`, { method: "POST" }),
 
   getNotes: () => fetchCollectionApi<NoteRecord>("/notes"),
   createNote: (note: { title: string; content: string; color?: string }) =>
@@ -163,13 +214,30 @@ export const crmService = {
     requestJson<Record<string, unknown>>(`/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteContact: (contactId: number) => requestJson<void>(`/contacts/${contactId}`, { method: "DELETE" }),
 
-  getLeads: () => fetchCollectionApi<Lead>(`/leads?limit=1000`),
-  getLeadsPage: (params: { limit?: number; page?: number; status?: string; search?: string } = {}) => {
+  getLeads: () => fetchCollectionApi<Lead>(`/leads?limit=100`),
+  getLeadsPage: (params: {
+    limit?: number;
+    page?: number;
+    status?: string;
+    source?: string;
+    assignedState?: "assigned" | "unassigned";
+    minScore?: number;
+    maxScore?: number;
+    search?: string;
+    sortBy?: "firstName" | "lastName" | "email" | "score" | "createdAt" | "updatedAt";
+    sortOrder?: "asc" | "desc";
+  } = {}) => {
     const q = new URLSearchParams();
     if (params.limit) q.set("limit", String(params.limit));
     if (params.page) q.set("page", String(params.page));
     if (params.status) q.set("status", params.status);
+    if (params.source) q.set("source", params.source);
+    if (params.assignedState) q.set("assignedState", params.assignedState);
+    if (params.minScore !== undefined) q.set("minScore", String(params.minScore));
+    if (params.maxScore !== undefined) q.set("maxScore", String(params.maxScore));
     if (params.search) q.set("search", params.search);
+    if (params.sortBy) q.set("sortBy", params.sortBy);
+    if (params.sortOrder) q.set("sortOrder", params.sortOrder);
     return requestJson<{ data: Lead[]; total: number; page: number; limit: number }>(`/leads?${q}`);
   },
   createLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) =>
@@ -356,6 +424,18 @@ export const crmService = {
       method: "PATCH",
       body: JSON.stringify({ status, notes }),
     }),
+
+  // Lead email
+  sendLeadEmail: (leadId: number, data: { subject: string; body: string; htmlBody?: string }) =>
+    requestJson<{ message: string }>(`/leads/${leadId}/send-email`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getLeadEmails: (leadId: number) =>
+    requestJson<{
+      sent: Array<{ id: number; subject: string; body: string; status: string; sentAt: string | null; createdAt: string; recipientName: string | null; direction: "outbound" }>;
+      received: Array<{ id: number; subject: string; body: string; fromName: string; fromEmail: string; receivedAt: string; isRead: boolean; direction: "inbound" }>;
+    }>(`/leads/${leadId}/emails`),
 
   // CSV Import
   listCSVImports: () => fetchCollectionApi<CSVImportRecord>("/csv-import"),

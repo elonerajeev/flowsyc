@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
+import { AppError } from "../middleware/error.middleware";
 
 export type AccessActor =
   | {
@@ -9,6 +10,9 @@ export type AccessActor =
     }
   | null
   | undefined;
+
+// Alias used by older service files
+export type AccessScope = AccessActor;
 
 function deriveInitials(value: string) {
   return value
@@ -118,6 +122,27 @@ export async function getClientAccessEmail(actor: AccessActor) {
   return actor.email.trim().toLowerCase();
 }
 
+/**
+ * Throws 403 if the actor doesn't own the resource.
+ * A resource is "owned" when its createdBy OR assignedTo matches the actor's email/userId.
+ */
+export function assertResourceOwnership(
+  actor: AccessActor,
+  resource: { createdBy?: string | null; assignedTo?: string | null },
+  label = "resource",
+) {
+  if (!actor) return;
+  if (actor.role === "admin") return;    // admins have full access
+  if (actor.role === "employee") return; // employees handled by their own scope
+
+  // managers must own the resource
+  const ids = [actor.email, actor.userId].filter(Boolean) as string[];
+  const owners = [resource.createdBy, resource.assignedTo].filter(Boolean) as string[];
+  if (owners.length > 0 && !owners.some(o => ids.includes(o))) {
+    throw new AppError(`Access denied: you do not own this ${label}`, 403, "FORBIDDEN");
+  }
+}
+
 export async function getInvoiceClientLabels(actor: AccessActor) {
   if (!actor || actor.role !== "client") {
     return null;
@@ -142,4 +167,13 @@ export async function getInvoiceClientLabels(actor: AccessActor) {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+}
+
+/**
+ * Returns a deduplicated array of identifiers (email + userId) for an actor.
+ * Used in WHERE clauses to match records owned by or assigned to this actor.
+ */
+export function actorIds(actor: AccessActor): string[] {
+  if (!actor) return [];
+  return [...new Set([actor.email, actor.userId].filter((v): v is string => Boolean(v)))];
 }

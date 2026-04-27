@@ -211,10 +211,11 @@ export const convertLeadSchema = z.object({
 // Lead query schema
 export const leadQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(1000).default(50),
+  limit: z.coerce.number().int().positive().max(100).default(50),
   status: leadStatusEnum.optional(),
   source: leadSourceEnum.optional(),
   assignedTo: z.string().optional(),
+  assignedState: z.enum(["assigned", "unassigned"]).optional(),
   minScore: z.coerce.number().int().min(0).max(100).optional(),
   maxScore: z.coerce.number().int().min(0).max(100).optional(),
   search: z.string().optional(),

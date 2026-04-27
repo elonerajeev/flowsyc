@@ -71,7 +71,16 @@ export const dealsService = {
   async list(access?: AccessScope) {
     const where: Prisma.DealWhereInput = { deletedAt: null };
 
-    // RBAC: Admins/Managers see all; Employees see assigned deals
+    // Data isolation: Admin/Manager can only see deals they created or assigned to them
+    if (access?.role === "admin" || access?.role === "manager") {
+      where.OR = [
+        { createdBy: access.email },
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+    }
+
+    // RBAC: Employees see only assigned deals
     if (access?.role === "employee") {
       where.assignedTo = { in: [access.email, access.userId ?? ""] };
     }
@@ -98,6 +107,14 @@ export const dealsService = {
       throw new AppError("Deal not found", 404, "NOT_FOUND");
     }
 
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isCreator = deal.createdBy === access.email;
+      const isAssignee = deal.assignedTo === access.email || deal.assignedTo === access.userId;
+      if (!isCreator && !isAssignee) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
+    }
+
     if (access?.role === "employee" && deal.assignedTo !== access.email && deal.assignedTo !== access.userId) {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
@@ -105,7 +122,7 @@ export const dealsService = {
     return mapDeal(deal);
   },
 
-  async create(input: DealInput) {
+  async create(input: DealInput, access?: AccessScope) {
     const deal = await prisma.deal.create({
       data: {
         title: input.title,
@@ -117,6 +134,7 @@ export const dealsService = {
         actualClose: input.actualCloseDate ? new Date(input.actualCloseDate) : null,
         description: input.description,
         assignedTo: input.assignedTo,
+        createdBy: access?.email ?? null,
         tags: input.tags ?? [],
       },
     });
@@ -136,7 +154,7 @@ export const dealsService = {
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
     gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => logger.error("Deal lifecycle sync failed:", err));
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return mapDeal(deal);
   },
 
@@ -183,7 +201,7 @@ export const dealsService = {
     }
 
     gtmLifecycleService.syncDealLifecycle(deal.id, access?.email).catch((err) => logger.error("Deal lifecycle sync failed:", err));
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return mapDeal(deal);
   },
 
@@ -198,6 +216,6 @@ export const dealsService = {
       where: { id },
       data: { deletedAt: new Date() },
     });
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
   },
 };

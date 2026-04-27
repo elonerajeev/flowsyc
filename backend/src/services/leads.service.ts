@@ -26,6 +26,7 @@ type LeadRecord = {
   convertedToClientId?: number | null;
   createdAt: string;
   updatedAt: string;
+  createdBy?: string | null; // User who created this lead
 };
 
 type LeadInput = {
@@ -60,6 +61,7 @@ type QueryParams = {
   status?: string;
   source?: string;
   assignedTo?: string;
+  assignedState?: "assigned" | "unassigned";
   minScore?: number;
   maxScore?: number;
   search?: string;
@@ -97,6 +99,7 @@ function mapLead(lead: any): LeadRecord {
     convertedToClientId: lead.convertedToClientId,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
+    createdBy: lead.createdBy ?? null,
   };
 }
 
@@ -104,37 +107,68 @@ export const leadsService = {
   async list(access?: AccessScope, params: QueryParams = {}) {
     const where: Prisma.LeadWhereInput = { deletedAt: null };
 
+    // Build filter conditions
+    const filterConditions: Prisma.LeadWhereInput[] = [];
+    
+    // Search filter
+    if (params.search) {
+      filterConditions.push({
+        OR: [
+          { firstName: { contains: params.search, mode: "insensitive" } },
+          { lastName: { contains: params.search, mode: "insensitive" } },
+          { email: { contains: params.search, mode: "insensitive" } },
+          { company: { contains: params.search, mode: "insensitive" } },
+        ],
+      });
+    }
+
     // Filters
     if (params.status) {
-      where.status = params.status as any;
+      filterConditions.push({ status: params.status as any });
     }
-    if (params.source) where.source = params.source as any;
-    if (params.assignedTo) where.assignedTo = params.assignedTo;
-    if (params.minScore) where.score = { ...where.score as object, gte: params.minScore };
-    if (params.maxScore) where.score = { ...where.score as object, lte: params.maxScore };
-    if (params.search) {
-      where.OR = [
-        { firstName: { contains: params.search, mode: "insensitive" } },
-        { lastName: { contains: params.search, mode: "insensitive" } },
-        { email: { contains: params.search, mode: "insensitive" } },
-        { company: { contains: params.search, mode: "insensitive" } },
-      ];
+    if (params.source) filterConditions.push({ source: params.source as any });
+    if (params.assignedTo) filterConditions.push({ assignedTo: params.assignedTo });
+    if (params.assignedState === "assigned") {
+      filterConditions.push({ assignedTo: { not: null } });
+    }
+    if (params.assignedState === "unassigned") {
+      filterConditions.push({ OR: [{ assignedTo: null }, { assignedTo: "" }] });
+    }
+    if (params.minScore !== undefined) filterConditions.push({ score: { gte: params.minScore } });
+    if (params.maxScore !== undefined) filterConditions.push({ score: { lte: params.maxScore } });
+
+    // Data isolation: Admin/Manager can only see leads they created or assigned to them
+    if (access?.role === "admin" || access?.role === "manager") {
+      filterConditions.push({
+        OR: [
+          { createdBy: access.email },
+          { assignedTo: access.email },
+          { assignedTo: access.userId ?? "" },
+        ],
+      });
     }
 
     // RBAC
     if (access?.role === "employee") {
-      where.assignedTo = { in: [access.email, access.userId ?? ""] };
+      filterConditions.push({
+        assignedTo: { in: [access.email, access.userId ?? ""] },
+      });
+    }
+
+    // Apply all filters
+    if (filterConditions.length > 0) {
+      where.AND = filterConditions;
     }
 
     const sortBy = params.sortBy || "createdAt";
     const sortOrder = params.sortOrder === "asc" ? "asc" : "desc";
 
-    // Cache full unfiltered admin/manager list (most common case)
+    // Cache full unfiltered admin/manager list (most common case) — keyed per user to prevent cross-user leaks
     const isUnfiltered = !params.status && !params.source && !params.search &&
-      !params.assignedTo && !params.minScore && !params.maxScore &&
-      access?.role !== "employee" && (params.limit || 50) >= 500;
+      !params.assignedTo && !params.assignedState && params.minScore === undefined && params.maxScore === undefined &&
+      access?.role !== "employee" && (params.limit || 50) >= 100;
 
-    const cacheKey = `leads:list:${params.limit || 50}`;
+    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.page || 1}:${params.limit || 50}`;
     if (isUnfiltered) {
       const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
       if (cached) return cached;
@@ -163,7 +197,8 @@ export const leadsService = {
         convertedToClientId: true,
         createdAt: true,
         updatedAt: true,
-      },
+        createdBy: true,
+      } as any,
     });
 
     const total = await prisma.lead.count({ where });
@@ -177,6 +212,15 @@ export const leadsService = {
     const lead = await prisma.lead.findUnique({ where: { id } });
     if (!lead || lead.deletedAt) {
       throw new AppError("Lead not found", 404, "NOT_FOUND");
+    }
+
+    // Data isolation: Admin/Manager can only access leads they created or assigned to them
+    if ((access?.role === "admin" || access?.role === "manager")) {
+      if (lead.createdBy !== access.email && 
+          lead.assignedTo !== access.email && 
+          lead.assignedTo !== access.userId) {
+        throw new AppError("Access denied", 403, "FORBIDDEN");
+      }
     }
 
     if (access?.role === "employee" && lead.assignedTo !== access.email && lead.assignedTo !== access.userId) {
@@ -216,6 +260,7 @@ export const leadsService = {
         companySize: input.companySize as any,
         budget: input.budget as any,
         timeline: input.timeline as any,
+        createdBy: access?.email, // Track who created this lead
       },
     });
 
@@ -269,18 +314,56 @@ export const leadsService = {
     }
 
     cache.invalidatePrefix("leads:list");
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
     return mapLead(lead);
   },
 
   async delete(id: number, access?: AccessScope) {
-    await this.getById(id, access);
+    const lead = await this.getById(id, access);
+    
+    // Get related data before deletion for logging
+    const relatedContact = await prisma.contact.findFirst({ where: { leadId: id } });
+    const relatedMeetings = await prisma.meeting.findMany({ where: { leadId: id } });
+    const relatedClientId = lead.convertedToClientId;
+    
+    // Soft delete the lead
     await prisma.lead.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+    
+    // Keep related data but disassociate from the deleted lead:
+    // 1. Contact - keep it but remove leadId reference (it becomes a standalone contact)
+    if (relatedContact) {
+      await prisma.contact.update({
+        where: { id: relatedContact.id },
+        data: { leadId: null },
+      });
+    }
+    
+    // 2. Meetings - keep them but remove leadId reference
+    if (relatedMeetings.length > 0) {
+      await prisma.meeting.updateMany({
+        where: { leadId: id },
+        data: { leadId: null },
+      });
+    }
+    
+    // 3. Log the deletion activity
+    await prisma.activityLog.create({
+      data: {
+        action: "deleted",
+        entityType: "Lead",
+        entityId: id,
+        description: `Lead deleted: ${lead.firstName} ${lead.lastName} (${lead.email})`,
+        performedBy: access?.email || "system",
+        isVisible: true,
+      },
+    });
+    
+    // Invalidate caches
     cache.invalidatePrefix("leads:list");
-    cache.invalidate("gtm:overview");
+    cache.invalidatePattern("gtm:overview:");
   },
 
   // ============================================
@@ -428,26 +511,30 @@ export const leadsService = {
     return { total: leads.length, hotLeads, warmLeads, mediumLeads, coldLeads, message: "All lead scores recalculated" };
   },
 
-  async getHotLeads(minScore: number = 80) {
+  async getHotLeads(minScore: number = 80, access?: AccessScope) {
+    const ownerFilter: Prisma.LeadWhereInput =
+      access?.role === "admin" || access?.role === "manager"
+        ? { OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }] }
+        : access?.role === "employee"
+          ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
+          : {};
     const leads = await prisma.lead.findMany({
-      where: {
-        score: { gte: minScore },
-        status: { notIn: ["closed_won", "closed_lost"] },
-        deletedAt: null,
-      },
+      where: { score: { gte: minScore }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
       orderBy: { score: "desc" },
     });
     return leads.map(mapLead);
   },
 
-  async getColdLeads(days: number = 14) {
+  async getColdLeads(days: number = 14, access?: AccessScope) {
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const ownerFilter: Prisma.LeadWhereInput =
+      access?.role === "admin" || access?.role === "manager"
+        ? { OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }] }
+        : access?.role === "employee"
+          ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
+          : {};
     const leads = await prisma.lead.findMany({
-      where: {
-        updatedAt: { lt: cutoffDate },
-        status: { notIn: ["closed_won", "closed_lost"] },
-        deletedAt: null,
-      },
+      where: { updatedAt: { lt: cutoffDate }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
       orderBy: { updatedAt: "asc" },
     });
     return leads.map(mapLead);

@@ -31,6 +31,7 @@ const upload = multer({
 
 // List all imports
 csvImportRouter.get("/", requireAuth, asyncHandler(async (req, res) => {
+  const userEmail = (req as any).auth?.email as string | undefined;
   const imports = await csvImportService.listImports();
   res.json({ data: imports });
 }));
@@ -38,13 +39,14 @@ csvImportRouter.get("/", requireAuth, asyncHandler(async (req, res) => {
 // Get single import with details
 csvImportRouter.get("/:id", requireAuth, asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id as string);
+  const userEmail = (req as any).auth?.email as string | undefined;
   const importRecord = await csvImportService.getImport(id);
-  
+
   if (!importRecord) {
     res.status(404).json({ error: "Import not found" });
     return;
   }
-  
+
   const leads = await csvImportService.getImportLeads(id);
   res.json({ data: { ...importRecord, leads } });
 }));
@@ -109,6 +111,7 @@ csvImportRouter.post("/", requireAuth, uploadRateLimiter, upload.single("file"),
 // Delete import and its leads
 csvImportRouter.delete("/:id", requireAuth, asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id as string);
+  const userEmail = (req as any).auth?.email as string | undefined;
   await csvImportService.deleteImport(id);
   res.json({ success: true, message: "Import deleted successfully" });
 }));

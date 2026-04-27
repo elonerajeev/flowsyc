@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
-import { useClients } from '@/hooks/use-crm-data'
 import ClientsPage from '@/pages/ClientsPage'
 
-// Mock the hooks
-vi.mock('@/hooks/use-crm-data', () => ({
-  useClients: vi.fn(),
-}))
+vi.mock('@/hooks/use-crm-data', async (importActual) => {
+  const actual = await importActual<typeof import('@/hooks/use-crm-data')>()
+  return { ...actual }
+})
 
 vi.mock('@/hooks/use-list-preferences', () => ({
   useListPreferences: vi.fn(() => ({
@@ -16,6 +15,11 @@ vi.mock('@/hooks/use-list-preferences', () => ({
     move: vi.fn(),
   })),
 }))
+
+vi.mock('@tanstack/react-query', async (importActual) => {
+  const actual = await importActual<typeof import('@tanstack/react-query')>()
+  return { ...actual, useInfiniteQuery: vi.fn() }
+})
 
 // Mock localStorage
 const localStorageMock = {
@@ -68,12 +72,13 @@ const mockClients = [
 ]
 
 describe('ClientsPage', () => {
-  beforeEach(() => {
-    vi.mocked(useClients).mockReturnValue({
-      data: mockClients,
-      isLoading: false,
-      error: null,
-    } as ReturnType<typeof useClients>)
+  beforeEach(async () => {
+    const { useInfiniteQuery } = await import('@tanstack/react-query')
+    vi.mocked(useInfiniteQuery).mockReturnValue({
+      data: { pages: [{ data: mockClients, pagination: { total: mockClients.length, page: 1, limit: 50, totalPages: 1 } }], pageParams: [undefined] },
+      isLoading: false, isFetchingNextPage: false, hasNextPage: false,
+      fetchNextPage: vi.fn(), error: null, refetch: vi.fn(),
+    } as any)
   })
 
   it('renders clients page title', async () => {
@@ -85,13 +90,12 @@ describe('ClientsPage', () => {
     expect(h1?.textContent).toContain('Accounts');
   })
 
-  it('shows loading state', () => {
-    vi.mocked(useClients).mockReturnValue({
-      data: [],
-      isLoading: true,
-      error: null,
-    } as unknown as ReturnType<typeof useClients>)
-    
+  it('shows loading state', async () => {
+    const { useInfiniteQuery } = await import('@tanstack/react-query')
+    vi.mocked(useInfiniteQuery).mockReturnValue({
+      data: undefined, isLoading: true, isFetchingNextPage: false,
+      hasNextPage: false, fetchNextPage: vi.fn(), error: null, refetch: vi.fn(),
+    } as any)
     render(<ClientsPage />)
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })

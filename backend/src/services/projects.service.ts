@@ -95,19 +95,32 @@ export const projectsService = {
       getEmployeeProjectScope(access),
       getEmployeeAssigneeScope(access),
     ]);
-    const project = employeeProjectScopes || employeeAssignees
-      ? await prisma.project.findFirst({
-          where: {
-            deletedAt: null,
-            id: projectId,
-            OR: [
-              ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-              ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
-            ],
-          },
-        })
-      : await prisma.project.findUnique({ where: { id: projectId } });
-    
+
+    let project;
+    if (access?.role === "admin" || access?.role === "manager") {
+      // Admin/Manager: can only see projects they created
+      project = await prisma.project.findFirst({
+        where: {
+          deletedAt: null,
+          id: projectId,
+          createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) },
+        },
+      });
+    } else if (employeeProjectScopes || employeeAssignees) {
+      project = await prisma.project.findFirst({
+        where: {
+          deletedAt: null,
+          id: projectId,
+          OR: [
+            ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+          ],
+        },
+      });
+    } else {
+      project = await prisma.project.findUnique({ where: { id: projectId } });
+    }
+
     if (!project || project.deletedAt) {
       throw new AppError("Project not found", 404, "NOT_FOUND");
     }
@@ -119,11 +132,19 @@ export const projectsService = {
       getEmployeeProjectScope(access),
       getEmployeeAssigneeScope(access),
     ]);
+
+    // Build ownership filter for admin/manager
+    const adminManagerFilter: Prisma.ProjectWhereInput | null =
+      access?.role === "admin" || access?.role === "manager"
+        ? { createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) } }
+        : null;
+
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       ...(query.status ? { status: toDbStatus(query.status) } : {}),
-      ...(
-        employeeProjectScopes || employeeAssignees
+      ...(adminManagerFilter
+        ? adminManagerFilter
+        : employeeProjectScopes || employeeAssignees
           ? {
               OR: [
                 ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
@@ -155,7 +176,7 @@ export const projectsService = {
     };
   },
 
-  async create(input: ProjectInput) {
+  async create(input: ProjectInput, access?: AccessScope) {
     const project = await prisma.project.create({
       data: {
         name: input.name,
@@ -168,16 +189,24 @@ export const projectsService = {
         budget: input.budget ?? "$0",
         tasksDone: input.tasksDone ?? 0,
         tasksTotal: input.tasksTotal ?? 0,
+        createdBy: access?.email ?? null,
         updatedAt: new Date(),
       },
     });
     return mapProject(project);
   },
 
-  async update(projectId: number, patch: Partial<ProjectInput>) {
+  async update(projectId: number, patch: Partial<ProjectInput>, access?: AccessScope) {
     const existing = await prisma.project.findUnique({ where: { id: projectId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Project not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied: you can only update projects you created", 403, "FORBIDDEN");
+      }
     }
 
     const project = await prisma.project.update({
@@ -217,10 +246,17 @@ export const projectsService = {
     return mapProject(project);
   },
 
-  async delete(projectId: number) {
+  async delete(projectId: number, access?: AccessScope) {
     const existing = await prisma.project.findUnique({ where: { id: projectId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Project not found", 404, "NOT_FOUND");
+    }
+
+    if (access?.role === "admin" || access?.role === "manager") {
+      const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
+      if (!isOwner) {
+        throw new AppError("Access denied: you can only delete projects you created", 403, "FORBIDDEN");
+      }
     }
 
     await prisma.project.update({

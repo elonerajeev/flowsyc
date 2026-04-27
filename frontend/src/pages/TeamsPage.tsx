@@ -387,70 +387,47 @@ export default function TeamsPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
-      {/* Hero Section */}
-      <motion.section variants={item} className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card">
-        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-primary via-info to-success" />
-        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/5 to-info/5 blur-3xl" />
-        <div className="absolute -left-20 -bottom-20 h-60 w-60 rounded-full bg-gradient-to-tr from-success/5 to-primary/5 blur-3xl" />
-
-        <div className={cn("relative", SPACING.card)}>
-          <div className="mb-6 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Users className="h-3.5 w-3.5 text-primary" />
-                People Management
-              </div>
-              <h1 className="font-display text-4xl font-semibold text-foreground">
-                Team <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">Organization</span>
-              </h1>
-              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
-                Organise members into teams, track performance metrics, and manage assignments in one unified workspace.
-              </p>
+      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">People · Teams</span>
             </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={teamsFetching || membersLoading}
-                className={cn("gap-2 font-semibold", RADIUS.lg)}
-              >
+            <h1 className="font-display text-3xl font-semibold text-foreground">Team Organization</h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Organise members into teams, track performance, and manage assignments.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
+              <UsersRound className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-medium">{stats.totalTeams} teams</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
+              <span className="text-sm font-medium text-success">{stats.activeTeams} active</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-info/30 bg-info/10 px-4 py-2">
+              <Users className="h-4 w-4 text-info flex-shrink-0" />
+              <span className="text-sm font-medium text-info">{stats.totalMembers} members</span>
+            </div>
+            {stats.unassigned > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2">
+                <span className="text-sm font-medium text-warning">{stats.unassigned} unassigned</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 ml-1">
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={teamsFetching || membersLoading} className="gap-2">
                 <RefreshCw className={cn("h-4 w-4", (teamsFetching || membersLoading) && "animate-spin")} />
-                {teamsFetching || membersLoading ? "Refreshing..." : "Refresh"}
+                Refresh
               </Button>
               {canEdit && (
-                <Button onClick={() => setCreateDialogOpen(true)} className={cn("gap-2 font-semibold", RADIUS.lg)}>
-                  <Plus className="h-4 w-4" />
-                  New Team
+                <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="gap-2">
+                  <Plus className="h-4 w-4" /> New Team
                 </Button>
               )}
             </div>
           </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {[
-              { label: "Total Teams", value: stats.totalTeams, icon: UsersRound, gradient: "from-primary to-primary/60" },
-              { label: "Active Teams", value: stats.activeTeams, icon: TrendingUp, gradient: "from-success to-success/60" },
-              { label: "Total Members", value: stats.totalMembers, icon: Users, gradient: "from-info to-info/60" },
-              { label: "Unassigned", value: stats.unassigned, icon: ShieldCheck, gradient: "from-warning to-warning/60" },
-            ].map((stat, i) => (
-              <div key={stat.label} className="relative overflow-hidden rounded-2xl border border-border/60 bg-secondary/20 p-5 group hover:bg-secondary/30 transition-colors">
-                <div className={cn("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", stat.gradient)} />
-                <div className="flex items-center gap-4">
-                  <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br border", stat.gradient, "text-white border-transparent")}>
-                    <stat.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-                    <p className={cn("text-muted-foreground", TEXT.eyebrow)}>{stat.label}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* Filters */}
       <motion.section variants={item} className={cn("border border-border/60 bg-card/80 backdrop-blur-sm shadow-card", RADIUS.xl, SPACING.card)}>

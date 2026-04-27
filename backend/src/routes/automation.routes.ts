@@ -1,11 +1,19 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
+import { validateBody } from "../middleware/validate.middleware";
 import { asyncHandler } from "../utils/async-handler";
 import { prisma } from "../config/prisma";
 import { automationService } from "../services/automation.service";
 import { GTMAutomationService } from "../services/gtm-automation.service";
 import { triggerAutomation, createScheduledJob, cancelScheduledJob } from "../services/automation-engine";
 import { gtmLifecycleService } from "../services/gtm-lifecycle.service";
+import {
+  automationTriggerValues,
+  createScheduledJobSchema,
+  createAutomationRuleSchema,
+  updateAutomationRuleSchema,
+} from "../validators/automation.schema";
 
 const router = Router();
 
@@ -16,12 +24,15 @@ router.use(requireAuth);
 // ALERTS
 // ============================================
 
-// Get all alerts
+// Get all alerts - filtered by user's entities
 router.get(
   "/alerts",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const alerts = await automationService.checkAllAlerts();
+    const userEmail = req.auth?.email;
+    const userRole = req.auth?.role;
+    
+    const alerts = await automationService.checkAllAlerts(userEmail, userRole);
     res.json(alerts);
   })
 );
@@ -31,7 +42,9 @@ router.get(
   "/alerts/summary",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const summary = await automationService.getAlertsSummary();
+    const userEmail = req.auth?.email;
+    const userRole = req.auth?.role;
+    const summary = await automationService.getAlertsSummary(userEmail, userRole);
     res.json(summary);
   })
 );
@@ -83,19 +96,33 @@ router.get(
 router.post(
   "/rules",
   requireRole(["admin", "manager"]),
+  validateBody(createAutomationRuleSchema),
   asyncHandler(async (req, res) => {
-    const { name, description, trigger, conditions, actions, cronExpression, isActive, priority } = req.body;
+    const {
+      name,
+      description,
+      trigger,
+      conditions,
+      actions,
+      cronExpression,
+      isActive,
+      priority,
+      status,
+      maxRunsPerDay,
+    } = req.body;
     
     const rule = await prisma.automationRule.create({
       data: {
         name,
         description,
         trigger,
-        conditions: conditions || [],
-        actions: actions || [],
+        conditions,
+        actions,
         cronExpression,
-        isActive: isActive ?? true,
-        priority: priority ?? 0,
+        isActive,
+        status,
+        priority,
+        maxRunsPerDay,
         createdBy: req.auth?.email
       }
     });
@@ -108,20 +135,34 @@ router.post(
 router.patch(
   "/rules/:id",
   requireRole(["admin", "manager"]),
+  validateBody(updateAutomationRuleSchema),
   asyncHandler(async (req, res) => {
-    const { name, description, conditions, actions, cronExpression, isActive, priority, status } = req.body;
+    const {
+      name,
+      description,
+      trigger,
+      conditions,
+      actions,
+      cronExpression,
+      isActive,
+      priority,
+      status,
+      maxRunsPerDay,
+    } = req.body;
     
     const rule = await prisma.automationRule.update({
       where: { id: Number(req.params.id) },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
+        ...(trigger !== undefined && { trigger }),
         ...(conditions !== undefined && { conditions }),
         ...(actions !== undefined && { actions }),
         ...(cronExpression !== undefined && { cronExpression }),
         ...(isActive !== undefined && { isActive }),
         ...(priority !== undefined && { priority }),
-        ...(status !== undefined && { status })
+        ...(status !== undefined && { status }),
+        ...(maxRunsPerDay !== undefined && { maxRunsPerDay }),
       }
     });
     
@@ -180,24 +221,36 @@ router.get(
     const entityType = req.query.entityType as string | undefined;
     
     const validStatuses = ["pending", "running", "completed", "failed", "cancelled"];
-    const where: any = {};
-    if (status && validStatuses.includes(status)) where.status = status;
+    const where: Prisma.AutomationLogWhereInput = {};
+    if (status && validStatuses.includes(status)) where.status = status as Prisma.AutomationLogWhereInput["status"];
     if (ruleId && !isNaN(ruleId)) where.ruleId = ruleId;
     if (entityType) where.entityType = entityType;
-    
-    const [logs, total] = await Promise.all([
+
+    // Restrict logs to user/system at DB level; legacy logs without createdBy are treated as shared.
+    const userEmail = req.auth?.email;
+    where.AND = [
+      {
+        OR: [
+          ...(userEmail
+            ? [{ triggerData: { path: ["data", "createdBy"], equals: userEmail } as Prisma.JsonFilter }]
+            : []),
+          { triggerData: { path: ["data", "createdBy"], equals: "system" } as Prisma.JsonFilter },
+          { triggerData: { path: ["data", "createdBy"], equals: Prisma.AnyNull } as Prisma.JsonFilter },
+        ],
+      },
+    ];
+
+    const [logs, total] = await prisma.$transaction([
       prisma.automationLog.findMany({
         where,
-        orderBy: { startedAt: "desc" },
+        orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+        include: {
+          rule: { select: { name: true } },
+        },
         take: limit,
         skip: offset,
-        include: {
-          rule: {
-            select: { name: true }
-          }
-        }
       }),
-      prisma.automationLog.count({ where })
+      prisma.automationLog.count({ where }),
     ]);
     
     res.json({ logs, total, limit, offset });
@@ -250,6 +303,7 @@ router.get(
 router.post(
   "/scheduled",
   requireRole(["admin", "manager"]),
+  validateBody(createScheduledJobSchema),
   asyncHandler(async (req, res) => {
     const { jobType, name, description, scheduledFor, cronExpression, payload, isRecurring, entityType, entityId } = req.body;
     
@@ -290,11 +344,20 @@ router.post(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const { trigger, entityType, entityId, data } = req.body;
+    if (
+      typeof trigger !== "string" ||
+      !automationTriggerValues.includes(trigger as (typeof automationTriggerValues)[number])
+    ) {
+      res.status(400).json({ error: "Invalid trigger type" });
+      return;
+    }
+    const normalizedTrigger = trigger as (typeof automationTriggerValues)[number];
     
-    const result = await triggerAutomation(trigger, {
+    const result = await triggerAutomation(normalizedTrigger, {
+      trigger: normalizedTrigger,
       entityType,
       entityId,
-      ...data
+      data: data && typeof data === "object" ? data : {}
     });
     
     res.json({
@@ -327,24 +390,29 @@ router.get(
 // ACTIVITY LOG
 // ============================================
 
-// Get recent activities
+// Get recent activities — scoped to the requesting user
 router.get(
   "/activities",
+  requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 100);
     const entityType = req.query.entityType as string | undefined;
     const entityId = req.query.entityId ? Number(req.query.entityId) : undefined;
-    
-    const where: any = { isVisible: true };
+
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const where: any = {
+      isVisible: true,
+      ...(actorIds.length > 0 ? { performedBy: { in: actorIds } } : {}),
+    };
     if (entityType) where.entityType = entityType;
     if (entityId && !isNaN(entityId)) where.entityId = entityId;
-    
+
     const activities = await prisma.activityLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: limit
+      take: limit,
     });
-    
+
     res.json(activities);
   })
 );
@@ -411,8 +479,8 @@ router.get(
 router.get(
   "/gtm/overview",
   requireRole(["admin", "manager", "employee"]),
-  asyncHandler(async (_req, res) => {
-    const overview = await gtmLifecycleService.getOverview();
+  asyncHandler(async (req, res) => {
+    const overview = await gtmLifecycleService.getOverview(req.auth);
     res.json(overview);
   }),
 );
@@ -422,15 +490,20 @@ router.get(
   "/gtm/lead-score/:leadId",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
-    const lead = await prisma.lead.findUnique({
-      where: { id: Number(req.params.leadId) }
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id: Number(req.params.leadId),
+        deletedAt: null,
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
+      }
     });
-    
+
     if (!lead) {
       res.status(404).json({ error: "Lead not found" });
       return;
     }
-    
+
     const score = await GTMAutomationService.calculateLeadScore(lead.id);
     res.json({ leadId: lead.id, leadName: `${lead.firstName} ${lead.lastName}`, score });
   })
@@ -441,16 +514,40 @@ router.post(
   "/gtm/recalculate-lead-scores",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const leads = await prisma.lead.findMany();
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 100), 200);
+    const afterId = Number(req.query.afterId);
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const leads = await prisma.lead.findMany({
+      where: actorIds.length > 0
+        ? {
+            assignedTo: { in: actorIds },
+            deletedAt: null,
+            ...(Number.isFinite(afterId) && afterId > 0 ? { id: { gt: afterId } } : {}),
+          }
+        : {
+            deletedAt: null,
+            ...(Number.isFinite(afterId) && afterId > 0 ? { id: { gt: afterId } } : {}),
+          },
+      orderBy: { id: "asc" },
+      take: limit,
+    });
     
-    const results = [];
+    const results: Array<{ leadId: number; leadName: string; score: { score: number; breakdown: Record<string, number> } }> = [];
     for (const lead of leads) {
       const score = await GTMAutomationService.calculateLeadScore(lead.id);
       await GTMAutomationService.autoTagLead(lead.id);
       results.push({ leadId: lead.id, leadName: `${lead.firstName} ${lead.lastName}`, score });
     }
+
+    const nextAfterId = leads.length === limit ? leads[leads.length - 1]?.id ?? null : null;
     
-    res.json({ message: "Lead scores recalculated", count: results.length, results });
+    res.json({
+      message: "Lead scores recalculated",
+      count: results.length,
+      hasMore: nextAfterId !== null,
+      nextAfterId,
+      results,
+    });
   })
 );
 
@@ -478,15 +575,39 @@ router.post(
   "/gtm/recalculate-client-health",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const clients = await prisma.client.findMany();
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 100), 200);
+    const afterId = Number(req.query.afterId);
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
+    const clients = await prisma.client.findMany({
+      where: actorIds.length > 0
+        ? {
+            assignedTo: { in: actorIds },
+            deletedAt: null,
+            ...(Number.isFinite(afterId) && afterId > 0 ? { id: { gt: afterId } } : {}),
+          }
+        : {
+            deletedAt: null,
+            ...(Number.isFinite(afterId) && afterId > 0 ? { id: { gt: afterId } } : {}),
+          },
+      orderBy: { id: "asc" },
+      take: limit,
+    });
     
-    const results = [];
+    const results: Array<{ clientId: number; clientName: string; health: { score: number; grade: string; breakdown: Record<string, number> } }> = [];
     for (const client of clients) {
       const health = await GTMAutomationService.calculateClientHealthScore(client.id);
       results.push({ clientId: client.id, clientName: client.name, health });
     }
+
+    const nextAfterId = clients.length === limit ? clients[clients.length - 1]?.id ?? null : null;
     
-    res.json({ message: "Client health scores recalculated", count: results.length, results });
+    res.json({
+      message: "Client health scores recalculated",
+      count: results.length,
+      hasMore: nextAfterId !== null,
+      nextAfterId,
+      results,
+    });
   })
 );
 
@@ -496,10 +617,12 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const days = Math.max(1, Math.min(90, Number(req.query.days) || 14));
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const coldLeads = await prisma.lead.findMany({
       where: {
         updatedAt: { lt: new Date(Date.now() - days * 24 * 60 * 60 * 1000) },
-        tags: { has: "cold-lead" }
+        tags: { has: "cold-lead" },
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
       }
     });
     res.json({ days, count: coldLeads.length, leads: coldLeads.map(l => ({ id: l.id, name: `${l.firstName} ${l.lastName}`, company: l.company })) });
@@ -513,10 +636,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const days = Math.max(1, Math.min(90, Number(req.query.days) || 7));
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const staleDeals = await prisma.deal.findMany({
       where: {
         updatedAt: { lt: cutoffDate },
-        stage: { notIn: ["closed_won", "closed_lost"] }
+        stage: { notIn: ["closed_won", "closed_lost"] },
+        ...(actorIds.length > 0 ? { createdBy: { in: actorIds } } : {}),
       }
     });
     res.json({ days, count: staleDeals.length, deals: staleDeals });
@@ -529,13 +654,15 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const threshold = Math.max(0, Math.min(100, Number(req.query.threshold) || 50));
+    const actorIds = [req.auth?.email, req.auth?.userId].filter(Boolean) as string[];
     const clients = await prisma.client.findMany({
       where: {
         healthScore: { lt: threshold },
-        status: "active"
+        status: "active",
+        ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {}),
       }
     });
-    
+
     res.json({ threshold, count: clients.length, clients: clients.map(c => ({ id: c.id, name: c.name, healthScore: c.healthScore, healthGrade: c.healthGrade })) });
   })
 );
@@ -616,7 +743,7 @@ router.get(
       orderBy: { createdAt: "desc" },
       take: 50
     });
-    
+
     res.json(alerts);
   })
 );

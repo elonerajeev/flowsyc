@@ -1,734 +1,712 @@
-# 🎯 Focal Point Compass - Complete Project Overview
+# 🎯 Focal Point Compass — Complete Project Overview
 
-**Last Updated:** April 1, 2026  
-**Status:** ✅ Fully Operational - Backend & Frontend Running  
-**Environment:** Development
+**Last Updated:** 2026-04-22  
+**Status:** ✅ Fully Operational — Production Ready  
+**Version:** 1.0.0  
+**Environment:** Development / Docker-Compose Production
+
+> **For AI agents:** Read `codebase-snapshot.xml` for the full technical index.
+> This file is a human-readable project overview and quick-start guide.
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Project Summary](#project-summary)
-2. [Architecture Overview](#architecture-overview)
-3. [Current Database State](#current-database-state)
-4. [Technology Stack](#technology-stack)
-5. [Project Structure](#project-structure)
-6. [API Endpoints](#api-endpoints)
-7. [Authentication & Authorization](#authentication--authorization)
-8. [Development Workflow](#development-workflow)
-9. [Key Features](#key-features)
-10. [Next Steps](#next-steps)
+1. [Project Summary](#-project-summary)
+2. [Architecture Overview](#-architecture-overview)
+3. [Technology Stack](#-technology-stack)
+4. [Project Structure](#-project-structure)
+5. [All Implemented Features](#-all-implemented-features)
+6. [API Modules](#-api-modules)
+7. [Authentication & Authorization](#-authentication--authorization)
+8. [Environment Variables](#-environment-variables)
+9. [Development Workflow](#-development-workflow)
+10. [Database Management](#-database-management)
+11. [Deployment](#-deployment)
+12. [Monitoring](#-monitoring)
+13. [Testing](#-testing)
+14. [Troubleshooting](#-troubleshooting)
+15. [Change History](#-change-history)
 
 ---
 
 ## 🎯 Project Summary
 
-**Focal Point Compass** is a comprehensive internal CRM system designed for managing clients, projects, tasks, team members, invoices, hiring, and more. It's a full-stack TypeScript application with a React frontend and Express.js backend, using PostgreSQL as the database.
+**Focal Point Compass** is a comprehensive, enterprise-grade internal CRM platform managing the full business lifecycle:  
+clients → leads → deals → projects → tasks → invoices → HR → analytics — all in one place.
 
-### Current Status
-- ✅ **Backend:** Fully implemented with 40+ API endpoints
-- ✅ **Frontend:** 85% complete with all major pages
-- ✅ **Database:** PostgreSQL with 13 models, seeded with sample data
-- ✅ **Authentication:** JWT-based auth with refresh tokens
-- ✅ **RBAC:** 4 roles (admin, manager, employee, client)
-- ✅ **Running:** Both services operational on ports 3000 (backend) and 8080 (frontend)
+### Current Status (April 2026)
+| Area | Status | Notes |
+|---|---|---|
+| Backend API | ✅ Complete | 40+ endpoints, full CRUD on all modules |
+| Frontend SPA | ✅ Complete | 35+ pages, role-gated, fully responsive |
+| Database | ✅ Complete | 18+ Prisma models, 13 migrations applied |
+| Authentication | ✅ Complete | JWT access+refresh, Google OAuth, email verify |
+| Real-time | ✅ Complete | Socket.IO for live notifications |
+| Email | ✅ Complete | Gmail SMTP via App Password (nodemailer) |
+| File Upload | ✅ Complete | Multer → storage service (local/cloud) |
+| Audit Logs | ✅ Complete | Every mutation logged to AuditLog table |
+| Automation | ✅ Complete | Rule builder + automation engine + logs |
+| CI/CD |    |  Not    | GitHub Actions — CI on PR, CD on merge to main |
+| Monitoring | ✅ Complete | Prometheus + Grafana + Loki + Alertmanager |
+| Comments | ✅ Complete | Per-entity comments (Tasks, Projects, etc.) |
+| Attachments | ✅ Complete | Per-entity file attachments |
 
 ---
 
 ## 🏗️ Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    FRONTEND (React)                         │
-│  Port: 8080 | Vite + TypeScript + Tailwind + shadcn/ui    │
-│  • Dashboard, Clients, Projects, Tasks, Team, etc.         │
-│  • TanStack Query for data fetching                        │
-│  • React Router for navigation                             │
-│  • Framer Motion for animations                            │
-└─────────────────────────────────────────────────────────────┘
-                            ↕ HTTP/REST
-┌─────────────────────────────────────────────────────────────┐
-│                    BACKEND (Express.js)                     │
-│  Port: 3000 | Node.js + TypeScript + Prisma ORM           │
-│  • JWT Authentication with refresh tokens                  │
-│  • Role-based access control (RBAC)                        │
-│  • Zod validation on all endpoints                         │
-│  • Winston logging + Morgan HTTP logs                      │
-│  • Helmet security + CORS + Rate limiting                  │
-└─────────────────────────────────────────────────────────────┘
-                            ↕ Prisma ORM
-┌─────────────────────────────────────────────────────────────┐
-│                DATABASE (PostgreSQL)                        │
-│  • 13 models with soft deletes                             │
-│  • Proper indexing for performance                         │
-│  • Audit trails (createdAt, updatedAt, deletedAt)         │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│              FRONTEND  (React 18 + Vite)                   │
+│  Port: 5173 (dev) / 80 via Nginx (prod)                    │
+│  • 35+ Route Pages (role-gated via RouteAccessGuard)       │
+│  • 5 React Contexts (Auth, Theme, Workspace, Realtime,     │
+│    Notification)                                           │
+│  • shadcn/ui + Tailwind CSS                                │
+│  • Socket.IO client for real-time updates                  │
+└──────────────────────────┬─────────────────────────────────┘
+                           │ HTTP/REST + Socket.IO
+┌──────────────────────────▼─────────────────────────────────┐
+│              BACKEND  (Express.js + TypeScript)             │
+│  Port: 3000                                                 │
+│  • JWT Auth Middleware  → All protected routes             │
+│  • Zod Validation       → All request bodies/queries       │
+│  • asyncHandler()       → All controllers (no try/catch)   │
+│  • Rate Limiting        → 100 req/15min global             │
+│  • Prometheus Metrics   → /metrics endpoint                │
+│  • Socket.IO Server     → Real-time event emitter          │
+│  • Nodemailer           → Gmail SMTP (App Password)        │
+│  • Multer               → File uploads                     │
+│  • AuditLog             → Every mutation tracked           │
+└──────────────────────────┬─────────────────────────────────┘
+                           │ Prisma ORM
+┌──────────────────────────▼─────────────────────────────────┐
+│              DATABASE  (PostgreSQL 15)                      │
+│  Local dev: SQLite (backend/prisma/dev.db)                  │
+│  Production: PostgreSQL via DATABASE_URL                    │
+│  • 18+ Prisma models                                       │
+│  • 13 migrations applied (latest: 2026-04-21)              │
+│  • Indexed for performance                                  │
+└────────────────────────────────────────────────────────────┘
+                           │
+┌──────────────────────────▼─────────────────────────────────┐
+│          MONITORING  (Docker sidecar services)              │
+│  • Prometheus :9090   → metrics scraping                   │
+│  • Grafana    :3001   → dashboards                         │
+│  • Loki       :3100   → log aggregation                    │
+│  • Promtail           → log shipping                       │
+│  • Alertmanager :9093 → alert routing                      │
+└────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## 💾 Current Database State
-
-### Summary
-| Table | Records | Description |
-|-------|---------|-------------|
-| **Users** | 4 | System users with authentication |
-| **Clients** | 8 | Customer/client records |
-| **Projects** | 6 | Active and completed projects |
-| **Tasks** | 12 | Kanban-style tasks (5 todo, 4 in-progress, 3 done) |
-| **Team Members** | 8 | Employee/team member records |
-| **Invoices** | 8 | Billing and invoice records |
-| **Notes** | 6 | Personal notes (2 pinned) |
-| **Job Postings** | 0 | Hiring job postings |
-| **Candidates** | 0 | Job applicants |
-| **Conversations** | 0 | Internal messaging threads |
-| **Messages** | 0 | Individual messages |
-| **Refresh Tokens** | 7 | Active JWT refresh tokens |
-| **User Preferences** | 1 | User-specific settings |
-
-### Sample Data Highlights
-
-#### 👤 Users
-1. **Sarah Johnson** - admin@crmpro.com (Admin)
-2. **Mike Chen** - manager@crmpro.com (Manager)
-3. **Emily Davis** - employee1@crmpro.com (Employee)
-4. **Lisa Park** - employee2@crmpro.com (Employee)
-
-#### 🏢 Top Clients
-1. **MetaVerse Corp** - $120K revenue, 96% health score (Strategic)
-2. **GlobalTech Inc** - $82K revenue, 88% health score (Strategic)
-3. **CloudNine Solutions** - $55K revenue, 76% health score (Enterprise)
-
-#### 📊 Active Projects
-1. **CRM Platform v2.0** - 78% complete, $240K budget
-2. **AI Concierge** - 92% complete, $95K budget
-3. **Mobile App Launch** - 45% complete, $180K budget
 
 ---
 
 ## 🛠️ Technology Stack
 
-### Frontend
-- **Framework:** React 18 with Vite
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS + shadcn/ui components
-- **State Management:** TanStack React Query
-- **Routing:** React Router v6
-- **Animation:** Framer Motion
-- **Charts:** Recharts
-- **Forms:** React Hook Form + Zod validation
-- **UI Components:** Radix UI primitives
-
 ### Backend
-- **Runtime:** Node.js
-- **Framework:** Express.js 5
-- **Language:** TypeScript
-- **ORM:** Prisma
-- **Database:** PostgreSQL
-- **Authentication:** JWT (jsonwebtoken)
-- **Validation:** Zod schemas
-- **Security:** Helmet, CORS, bcryptjs
-- **Logging:** Winston + Morgan
-- **Rate Limiting:** express-rate-limit
+| Category | Technology |
+|---|---|
+| Runtime | Node.js 18+ |
+| Framework | Express.js 5 |
+| Language | TypeScript 5 |
+| ORM | Prisma 6 |
+| Database | PostgreSQL 15 / SQLite (dev) |
+| Auth | JWT (jsonwebtoken) + bcryptjs |
+| Validation | Zod schemas |
+| Real-time | Socket.IO |
+| Email | Nodemailer (Gmail SMTP) |
+| File Upload | Multer |
+| Metrics | prom-client (Prometheus) |
+| Logging | Winston + Morgan |
+| Rate Limiting | express-rate-limit |
+| Security | Helmet, CORS |
+| Testing | Jest + Supertest + ts-jest |
 
-### DevOps & Tools
-- **Package Manager:** npm
-- **Process Manager:** Custom bash script (PM2-style dashboard)
-- **Testing:** Jest (backend), Vitest (frontend), Playwright (e2e)
-- **Code Quality:** ESLint, TypeScript strict mode
+### Frontend
+| Category | Technology |
+|---|---|
+| Framework | React 18 + Vite |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS + shadcn/ui (Radix UI) |
+| Routing | React Router v6 |
+| State | React Context API (5 contexts) |
+| Data Fetching | Custom api-client (Axios-based) |
+| Real-time | Socket.IO client |
+| Testing | Vitest + React Testing Library + Playwright |
+| Build | Vite (SSR + SPA mode) |
+| Served By | Nginx (Docker prod) |
+
+### Infrastructure
+| Category | Technology |
+|---|---|
+| Containers | Docker + Docker Compose |
+| CI/CD | GitHub Actions |
+| Monitoring | Prometheus + Grafana + Loki + Alertmanager |
+| Reverse Proxy | Nginx |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-CRM/
+CRM/                              ← Monorepo root
 ├── backend/
 │   ├── src/
-│   │   ├── config/          # Environment & Prisma config
-│   │   ├── controllers/     # Request handlers (15 controllers)
-│   │   ├── services/        # Business logic (15 services)
-│   │   ├── routes/          # API route definitions (15 routers)
-│   │   ├── middleware/      # Auth, validation, error handling
-│   │   ├── validators/      # Zod schemas for validation
-│   │   ├── utils/           # JWT, password, logging utilities
-│   │   ├── types/           # TypeScript type definitions
-│   │   ├── data/            # Static data/mock data
-│   │   ├── __tests__/       # Unit & integration tests
-│   │   ├── app.ts           # Express app setup
-│   │   └── server.ts        # Server entry point
+│   │   ├── config/               # env.ts, prisma.ts, types.ts
+│   │   ├── controllers/          # 15 controllers (thin HTTP handlers)
+│   │   ├── services/             # 25+ services (all business logic)
+│   │   ├── routes/               # 25+ route files
+│   │   ├── middleware/           # auth, error, validate, rate-limit, metrics
+│   │   ├── validators/           # Zod schemas for every endpoint
+│   │   ├── utils/                # jwt, password, audit, cache, mailer, logger...
+│   │   ├── types/                # express.d.ts (req.user type extension)
+│   │   ├── data/                 # crm-static.ts (lookup data)
+│   │   ├── __tests__/            # Jest unit + integration tests
+│   │   ├── app.ts                # Express app setup, all routes registered
+│   │   ├── server.ts             # Entry point (HTTP listen)
+│   │   └── socket.ts             # Socket.IO server setup
 │   ├── prisma/
-│   │   ├── schema.prisma    # Database schema (13 models)
-│   │   └── migrations/      # Database migrations
-│   ├── scripts/             # Seed scripts & smoke tests
-│   ├── logs/                # Application logs
-│   ├── .env                 # Environment variables
+│   │   ├── schema.prisma         # 18+ models (source of truth)
+│   │   └── migrations/           # 13 migration folders
+│   ├── scripts/                  # seed.ts, seed-real-data.ts, smoke tests
+│   ├── doc/                      # API_CONTRACT.md, dev guides
+│   ├── .env.example
+│   ├── Dockerfile
 │   ├── package.json
 │   └── tsconfig.json
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── layout/      # AppLayout, Navbar, Sidebars
-│   │   │   ├── shared/      # Reusable components
-│   │   │   ├── dashboard/   # Dashboard-specific components
-│   │   │   ├── crm/         # CRM-specific components
-│   │   │   └── ui/          # shadcn/ui components (70+)
-│   │   ├── pages/           # Route pages (25+ pages)
-│   │   ├── contexts/        # React contexts (Auth, Theme, Workspace)
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── services/        # API client & auth service
-│   │   ├── lib/             # Utilities, API client, preferences
-│   │   ├── types/           # TypeScript types
-│   │   ├── data/            # Mock data
-│   │   ├── test/            # Test utilities & setup
-│   │   ├── App.tsx          # Main app component
-│   │   ├── main.tsx         # Entry point
-│   │   └── index.css        # Global styles
-│   ├── public/              # Static assets
-│   ├── .env                 # Environment variables
+│   │   │   ├── layout/           # AppLayout, MasterSidebar, Navbar, Guards
+│   │   │   ├── shared/           # StatCard, StatusBadge, SkeletonLoader, etc.
+│   │   │   ├── crm/              # QuickCreateDialog, TaskDetailModal, etc.
+│   │   │   ├── dashboard/        # DashboardCharts, PersonalizedFocus
+│   │   │   ├── automation/       # RuleBuilder, RuleLogs
+│   │   │   ├── skeletons/        # Loading skeleton components
+│   │   │   └── ui/               # 70+ shadcn/ui components
+│   │   ├── pages/                # 35+ route page components
+│   │   ├── contexts/             # AuthContext, ThemeContext, RealtimeContext...
+│   │   ├── hooks/                # use-crm-data, use-comments, use-attachments...
+│   │   ├── lib/                  # api-client, design-tokens, utils, logger...
+│   │   ├── services/             # crm.ts, auth.ts — typed API call functions
+│   │   ├── types/                # crm.ts, automation.ts — all TS interfaces
+│   │   ├── data/                 # mock-crm.ts (legacy, mostly unused)
+│   │   ├── App.tsx               # Root router + all route definitions
+│   │   └── main.tsx              # App bootstrap, all providers wrapped
+│   ├── public/
+│   ├── .env.example
+│   ├── Dockerfile
+│   ├── nginx.conf
 │   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.ts
-│   └── tsconfig.json
+│   └── vite.config.ts
 │
-├── logs/                    # Runtime logs
-│   ├── backend.log
-│   └── frontend.log
-├── start.sh                 # Development launcher script
-├── stop.sh                  # Stop all services
-└── PROJECT_OVERVIEW.md      # This file
+├── monitoring/
+│   ├── grafana/                  # Dashboards + datasource provisioning
+│   ├── prometheus.yml
+│   ├── loki-config.yml
+│   ├── promtail-config.yml
+│   ├── alertmanager.yml
+│   └── alert-rules.yml
+│
+├── scripts/
+│   ├── deploy.sh                 # Full production deployment
+│   ├── api-test.sh               # API smoke test
+│   └── update-snapshot.js        # Auto-updates codebase-snapshot.xml
+│
+├── codebase-snapshot.xml         # ← AI CONTEXT FILE (read this first!)
+├── context.md                    # Comprehensive technical context
+├── PROJECT_OVERVIEW.md           # This file
+├── docker-compose.yml            # All services
+├── start.sh                      # Dev startup script
+└── prod.sh                       # Production startup
 ```
 
 ---
 
-## 🔌 API Endpoints
+## ✨ All Implemented Features
 
-### Authentication (`/api/auth`)
-- `POST /signup` - Register new user
-- `POST /login` - Login with credentials
-- `GET /me` - Get current user profile
-- `PATCH /me` - Update user profile
-- `POST /logout` - Logout and revoke tokens
-- `POST /refresh` - Refresh access token
-- `POST /switch-role` - Switch user role (admin only)
+### 🏠 Dashboard
+- KPI stat cards (revenue, clients, leads, tasks, deals)
+- Revenue trend charts (6-month)
+- Pipeline breakdown chart
+- Operating cadence radar chart (dynamic from DB)
+- Recent activity feed
+- Personalized daily focus panel
+- Team collaborators list
+- 28-day activity heatmap
 
-### Clients (`/api/clients`)
-- `GET /clients` - List clients (with pagination, filters, search)
-- `GET /clients/:id` - Get single client
-- `POST /clients` - Create client (admin/manager)
-- `PATCH /clients/:id` - Update client (admin/manager)
-- `DELETE /clients/:id` - Delete client (admin only)
-- `GET /clients/pipeline` - Get pipeline breakdown
+### 👥 Client Management
+- Full CRUD with pagination, search, filters
+- Health score tracking (0–100)
+- Client tiers: Enterprise / Growth / Strategic
+- Client segments: Expansion / Renewal / New Business
+- Notes, comments, and attachments per client
 
-### Projects (`/api/projects`)
-- `GET /projects` - List projects
-- `GET /projects/:id` - Get single project
-- `POST /projects` - Create project
-- `PATCH /projects/:id` - Update project
-- `DELETE /projects/:id` - Delete project
+### 🎯 Sales Pipeline
+- Leads: Kanban + table view, stage tracking, conversion
+- Deals: Stage-based pipeline, probability, close date
+- Contacts: Per-client contact management
+- GTM Flow: Go-to-market pipeline visualization
+- GTM Ops: Operational GTM management view
 
-### Tasks (`/api/tasks`)
-- `GET /tasks` - List tasks (grouped by column)
-- `GET /tasks/:id` - Get single task
-- `POST /tasks` - Create task
-- `PATCH /tasks/:id` - Update task
-- `DELETE /tasks/:id` - Delete task
+### 📁 Project & Task Management
+- Projects: Full CRUD, budget tracking, team assignment, client link
+- Tasks: Kanban board (drag-drop), priority, due dates, tags, assignees
+- Task/Project detail modals: comments + attachments
+- Quick-create dialog for any entity type
+- Global ⌘K command palette
 
-### Team Members (`/api/team-members`)
-- `GET /team-members` - List team members
-- `GET /team-members/:id` - Get single member
-- `POST /team-members` - Create member
-- `PATCH /team-members/:id` - Update member
-- `DELETE /team-members/:id` - Delete member
+### 💰 Finance
+- Invoices: Create, track status (draft/sent/paid/overdue), line items
+- Reports: Revenue analytics, filterable by date range
+- Billing: Admin billing management page
+- Payroll: Generate and track employee payroll records
 
-### Invoices (`/api/invoices`)
-- `GET /invoices` - List invoices
-- `GET /invoices/:id` - Get single invoice
-- `POST /invoices` - Create invoice
-- `PATCH /invoices/:id` - Update invoice
-- `DELETE /invoices/:id` - Delete invoice
+### 👷 HR Module
+- Team Members: Employee profiles, department, designation, salary
+- Teams: Create and manage teams with assigned managers
+- Attendance: Check-in/out tracking, status (present/absent/late/halfday)
+- Hiring: Job postings management (open/closed)
+- Candidates: Application pipeline tracking with skills, resume link
+- Create Team Member: Dedicated new-hire onboarding form
 
-### Dashboard (`/api/dashboard`)
-- `GET /dashboard` - Get dashboard metrics and data
+### 🤖 Automation
+- Rule Builder: Visual trigger → condition → action rule creation
+- Automation Engine: Runs rules on schedule / on events
+- Automation Logs: History of rule executions
+- Automation Alerts: Failed/triggered rule alerts
+- Scheduled Automations: Time-based automation viewer
+- GTM Automation: Sales lifecycle automation
 
-### Notes (`/api/notes`)
-- `GET /notes` - List notes
-- `GET /notes/:id` - Get single note
-- `POST /notes` - Create note
-- `PATCH /notes/:id` - Update note
-- `DELETE /notes/:id` - Delete note
+### 💬 Communication
+- Internal messaging system
+- Calendar: Events, meetings, scheduling
+- Meeting scheduler dialog
+- Notes: Personal + entity-linked notes
+- Activity feed: Global activity log per user/entity
+- Comments: Inline comments on any Task, Project, etc.
+- Attachments: File attachment on any entity
 
-### Hiring (`/api/hiring`)
-- `GET /hiring` - List job postings
-- `GET /hiring/:id` - Get single job posting
-- `POST /hiring` - Create job posting
-- `PATCH /hiring/:id` - Update job posting
-- `DELETE /hiring/:id` - Delete job posting
+### 🔔 Real-time
+- Socket.IO server → client push notifications
+- Notification center (bell icon) with unread count
+- Live event dispatch: `task:updated`, `lead:updated`, `deal:updated`, `notification`
 
-### Candidates (`/api/candidates`)
-- `GET /candidates` - List candidates
-- `GET /candidates/:id` - Get single candidate
-- `POST /candidates` - Create candidate
-- `PATCH /candidates/:id` - Update candidate
-- `DELETE /candidates/:id` - Delete candidate
+### 🔐 Security & Auth
+- JWT access token (24h) + refresh token (30d)
+- Google OAuth (sign-in with Google)
+- Email verification on signup
+- Password reset flow (email-based)
+- bcrypt password hashing (cost 10)
+- Role-based access: admin / manager / employee / client
+- Route-level guards (frontend + backend)
+- Helmet security headers
+- Rate limiting (100 req/15min)
+- Full audit trail on all mutations
 
-### Communication (`/api/conversations`, `/api/messages`)
-- `GET /conversations` - List conversations
-- `GET /messages` - List messages
-- `POST /messages` - Send message
+### 📊 Analytics & Monitoring
+- Analytics page with executive-level charts
+- Enhanced reports page with custom date ranges
+- Prometheus metrics on all API endpoints
+- Grafana dashboard pre-configured
+- Loki log aggregation with Promtail
+- Alertmanager for automated alert routing
 
-### Attendance (`/api/attendance`)
-- `GET /attendance` - Get attendance records
-- `PATCH /attendance/:id` - Update attendance
+### ⚙️ System
+- Settings: Admin system configuration
+- Integrations: Third-party integration management
+- Roles & Permissions: RBAC management
+- Audit Log: Full history of admin-visible mutations
+- User Preferences: Per-user theme + notification + dashboard config
+- CSV Import: Bulk data import
 
-### Payroll (`/api/payroll`)
-- `GET /payroll` - Get payroll records
-- `POST /payroll/generate` - Generate payroll
+---
 
-### Reports (`/api/reports`)
-- `GET /reports` - Get reports
-- `GET /reports/analytics` - Get analytics data
+## 🔌 API Modules
 
-### Preferences (`/api/preferences`)
-- `GET /preferences` - Get user preferences
-- `PATCH /preferences` - Update preferences
-
-### System (`/api/system`)
-- `GET /system/theme-previews` - Get theme previews
-- `GET /health` - Health check endpoint
+| Module | Base Route | Auth Required | Admin/Manager Only |
+|---|---|---|---|
+| Auth | `/api/auth` | Some | No |
+| Clients | `/api/clients` | Yes | Write ops |
+| Leads | `/api/leads` | Yes | Write ops |
+| Deals | `/api/deals` | Yes | Write ops |
+| Contacts | `/api/contacts` | Yes | Write ops |
+| Tasks | `/api/tasks` | Yes | No |
+| Projects | `/api/projects` | Yes | Write ops |
+| Invoices | `/api/invoices` | Yes | Yes |
+| Notes | `/api/notes` | Yes | No |
+| Comments | `/api/comments` | Yes | No |
+| Attachments | `/api/attachments` | Yes | No |
+| Team Members | `/api/team-members` | Yes | Yes |
+| Teams | `/api/teams` | Yes | Admin |
+| Attendance | `/api/attendance` | Yes | Manager+ |
+| Payroll | `/api/payroll` | Yes | Admin |
+| Hiring | `/api/hiring` | Yes | Manager+ |
+| Candidates | `/api/candidates` | Yes | Manager+ |
+| Calendar | `/api/calendar` | Yes | No |
+| Meeting | `/api/meeting` | Yes | No |
+| Communication | `/api/communication` | Yes | No |
+| Automation | `/api/automation` | Yes | Admin |
+| Dashboard | `/api/dashboard` | Yes | No |
+| Reports | `/api/reports` | Yes | Manager+ |
+| Activity | `/api/activity` | Yes | No |
+| Search | `/api/search` | Yes | No |
+| Preferences | `/api/preferences` | Yes | No |
+| System | `/api/system` | Yes | Admin |
+| Upload | `/api/upload` | Yes | No |
+| CSV Import | `/api/csv-import` | Yes | Manager+ |
 
 ---
 
 ## 🔐 Authentication & Authorization
 
-### JWT Token System
-- **Access Token:** 24-hour expiry, used for API requests
-- **Refresh Token:** 30-day expiry, stored in database with hash
-- **Token Storage:** localStorage (frontend), database (backend)
-- **Token Rotation:** Refresh tokens are revoked after use
+### Token System
+- **Access Token:** 24h expiry, sent in `Authorization: Bearer {token}` header
+- **Refresh Token:** 30d expiry, stored in DB, rotated on each use
+- **Google OAuth:** `/api/google-auth` + `/api/google-auth/callback` (PKCE flow)
+- **Email Verification:** Token sent via SMTP, verified at `/auth/verify-email`
+- **Password Reset:** Token emailed, consumed at `/auth/reset-password`
 
-### User Roles & Permissions
+### RBAC Summary
+| Role | Typical Access |
+|---|---|
+| `admin` | Full system access, delete records, system settings, audit log |
+| `manager` | Create/update clients, projects, tasks, team, payroll |
+| `employee` | View/update own tasks, view clients/projects, own attendance |
+| `client` | View own data only (invoices, projects assigned to them) |
 
-| Role | Permissions |
-|------|-------------|
-| **Admin** | Full access to all features, can delete records, manage users |
-| **Manager** | Can create/update clients, projects, tasks, team members |
-| **Employee** | Can view and update assigned tasks, limited access |
-| **Client** | External users, limited to their own data |
+---
 
-### Password Security
-- **Hashing:** bcrypt with cost factor 10
-- **Minimum Length:** 8 characters
-- **Validation:** Zod schema validation on signup/login
+## 🔧 Environment Variables
+
+### Backend (`backend/.env`)
+```env
+NODE_ENV=development
+PORT=3000
+FRONTEND_URL=http://localhost:5173
+
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/focal_point_compass
+
+# JWT — generate with: openssl rand -base64 48
+JWT_SECRET=<min-32-char-secret>
+JWT_REFRESH_SECRET=<min-32-char-secret>
+
+# Email (Gmail SMTP — requires App Password, NOT login password)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=youremail@gmail.com
+SMTP_PASS=xxxx xxxx xxxx xxxx   # 16-char Gmail App Password
+FROM_EMAIL=noreply@yourcrm.com
+
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Storage (optional)
+STORAGE_TYPE=local
+```
+
+### Frontend (`frontend/.env`)
+```env
+VITE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+VITE_GOOGLE_CLIENT_ID=   # optional
+VITE_APP_ENV=development
+```
+
+> **Gmail SMTP Note:** Enable 2FA on Gmail, then generate a 16-char App Password at  
+> myaccount.google.com → Security → 2-Step Verification → App Passwords.  
+> Use this as `SMTP_PASS`. Do NOT use your Gmail login password.
 
 ---
 
 ## 🚀 Development Workflow
 
-### Starting the Application
+### Start Development Servers
 
 ```bash
-# Start both backend and frontend with live dashboard
+# Option 1 — Script (starts both)
 ./start.sh
 
-# Or manually:
-# Terminal 1 - Backend
-cd backend
-npm run dev
+# Option 2 — Manual
+# Terminal 1 — Backend
+cd backend && npm run dev
+# Runs at: http://localhost:3000
 
-# Terminal 2 - Frontend
-cd frontend
-npm run dev
+# Terminal 2 — Frontend
+cd frontend && npm run dev
+# Runs at: http://localhost:5173
 ```
 
-### Stopping the Application
+### First-Time Setup
 
 ```bash
-./stop.sh
-# Or press Ctrl+C in the start.sh terminal
-```
+# 1. Install dependencies
+cd backend && npm install
+cd ../frontend && npm install
 
-### Environment Variables
+# 2. Set up environment files
+cd ../backend && cp .env.example .env   # Edit with your values
+cd ../frontend && cp .env.example .env  # Edit with your values
 
-**Backend (.env):**
-```env
-NODE_ENV=development
-PORT=3000
-DATABASE_URL=postgresql://user:pass@localhost:5432/focal_point_compass
-JWT_ACCESS_SECRET=<64-char-hex-string>
-JWT_REFRESH_SECRET=<64-char-hex-string>
-FRONTEND_URL=http://localhost:8080
-```
+# 3. Generate JWT secrets
+openssl rand -base64 48   # Use for JWT_SECRET
+openssl rand -base64 48   # Use for JWT_REFRESH_SECRET
 
-**Frontend (.env):**
-```env
-VITE_API_BASE_URL=http://localhost:3000/api
-VITE_APP_ENV=development
-VITE_USE_REMOTE_API=true
-VITE_ENABLE_ANALYTICS=false
-```
-
-### Database Management
-
-```bash
-# Run migrations
-cd backend
+# 4. Run database migrations
+cd ../backend
 npx prisma migrate dev
 
-# Seed database
+# 5. Seed sample data
 npm run seed
+# or: npx ts-node scripts/seed-real-data.ts
 
-# Open Prisma Studio (GUI)
+# 6. Start!
+npm run dev
+```
+
+### Key Ports
+| Service | Port | URL |
+|---|---|---|
+| Backend API | 3000 | http://localhost:3000 |
+| Frontend Dev | 5173 | http://localhost:5173 |
+| Prisma Studio | 5555 | http://localhost:5555 |
+| Prometheus | 9090 | http://localhost:9090 |
+| Grafana | 3001 | http://localhost:3001 |
+
+### Default Login Credentials (seeded)
+- **Admin:** admin@crmpro.com / password123
+- **Manager:** manager@crmpro.com / password123
+- **Employee:** employee1@crmpro.com / password123
+
+---
+
+## 💾 Database Management
+
+```bash
+cd backend
+
+# Apply pending migrations
+npx prisma migrate dev
+
+# Create a new migration
+npx prisma migrate dev --name add_your_feature
+
+# Open GUI
 npx prisma studio
 
-# Reset database
+# Reset + reseed (WARNING: deletes all data)
 npx prisma migrate reset
-```
-
-### Testing
-
-```bash
-# Backend tests
-cd backend
-npm test
-npm run test:watch
-
-# Frontend tests
-cd frontend
-npm test
-npm run test:watch
-npm run test:coverage
-
-# E2E tests
-npm run test:e2e
-```
-
----
-
-## ✨ Key Features
-
-### 1. Dashboard
-- Real-time metrics (revenue, clients, pipeline, at-risk accounts)
-- Revenue series chart (6-month trend)
-- Pipeline breakdown (pie chart)
-- Operating cadence (radar chart)
-- Activity feed with recent actions
-- Personalized daily focus items
-- Team collaborators list
-- 28-day activity heatmap
-
-### 2. Client Management
-- Full CRUD operations
-- Advanced filtering (status, tier, segment)
-- Search by name, email, company
-- Health score tracking
-- Client tiers (Enterprise, Growth, Strategic)
-- Client segments (Expansion, Renewal, New Business)
-- Next action tracking
-- Revenue tracking
-
-### 3. Project Management
-- Project stages (Discovery, Build, Review, Launch)
-- Progress tracking (0-100%)
-- Budget management
-- Team assignment
-- Task completion tracking
-- Due date management
-
-### 4. Task Management
-- Kanban board (Todo, In Progress, Done)
-- Priority levels (high, medium, low)
-- Assignee tracking
-- Due dates
-- Tags for categorization
-- Value stream tracking (Growth, Product, Support)
-
-### 5. Team Management
-- Employee profiles
-- Role-based access
-- Attendance tracking (present, late, remote, absent)
-- Check-in/check-out times
-- Workload tracking
-- Salary & payroll information
-- Department & team organization
-
-### 6. Invoicing
-- Invoice creation & tracking
-- Status management (active, pending, completed)
-- Due date tracking
-- Client association
-- Amount tracking
-
-### 7. Notes
-- Personal note-taking
-- Color coding
-- Pin important notes
-- Rich text content
-- Author tracking
-
-### 8. Hiring & Recruitment
-- Job posting management
-- Candidate tracking
-- Application stages (applied, screening, interview, offer, hired, rejected)
-- Resume storage
-- Interview notes
-
-### 9. Messaging
-- Internal team conversations
-- Unread message tracking
-- Online status
-- Team-based messaging
-
-### 10. Reports & Analytics
-- Custom report generation
-- Analytics dashboard
-- Payroll reports
-- Performance metrics
-
----
-
-## 🎨 UI/UX Features
-
-### Design System
-- **Color Themes:** Light & Dark mode
-- **Typography:** Inter font family
-- **Spacing:** Consistent 4px grid system
-- **Radius:** Rounded corners (0.5rem default)
-- **Shadows:** Layered shadow system
-- **Animations:** Framer Motion for smooth transitions
-
-### Layout
-- **Master Sidebar:** Icon-only navigation for top-level modules
-- **Detail Sidebar:** Context-specific navigation
-- **Top Navbar:** Search, role switching, theme toggle, notifications
-- **Mobile Support:** Responsive design with mobile bottom nav
-
-### Components
-- 70+ shadcn/ui components
-- Custom stat cards with sparklines
-- Progress rings
-- Status badges
-- Skeleton loaders
-- Error boundaries
-- Network error handling
-
----
-
-## 📊 Performance Optimizations
-
-### Frontend
-- Code splitting with React.lazy()
-- Lazy loading for dashboard charts
-- Vendor chunk splitting in Vite
-- Image optimization
-- Debounced search inputs
-- Virtual scrolling for large lists
-- React Query caching (5-minute stale time)
-
-### Backend
-- Database indexing on frequently queried fields
-- Soft deletes for data recovery
-- Pagination on all list endpoints
-- Query optimization with Prisma
-- Rate limiting (100 requests/15 minutes)
-- Response compression
-
----
-
-## 🔒 Security Features
-
-### Backend Security
-- **Helmet:** Security headers
-- **CORS:** Configured for frontend origin only
-- **Rate Limiting:** Prevents brute force attacks
-- **Input Validation:** Zod schemas on all endpoints
-- **SQL Injection Prevention:** Parameterized queries via Prisma
-- **Password Hashing:** bcrypt with salt rounds
-- **JWT Secrets:** 64+ character random strings
-- **Token Expiry:** Short-lived access tokens
-- **Refresh Token Rotation:** One-time use refresh tokens
-
-### Frontend Security
-- **XSS Prevention:** React's built-in escaping
-- **CSRF Protection:** Token-based authentication
-- **Secure Storage:** localStorage for non-sensitive data only
-- **API Error Handling:** No sensitive data in error messages
-
----
-
-## 🐛 Known Issues & Limitations
-
-### Current Limitations
-1. **No Email Service:** Email notifications not implemented
-2. **No File Upload:** File upload for resumes/documents not implemented
-3. **No Real-time Updates:** WebSocket/SSE not implemented
-4. **No Advanced Search:** Full-text search not implemented
-5. **No Export Features:** CSV/PDF export not implemented
-6. **No Audit Logs:** User action logging not implemented
-7. **No Multi-tenancy:** Single organization only
-
-### Pending Features
-- [ ] Email notifications (signup, invoice reminders, etc.)
-- [ ] File upload for resumes and documents
-- [ ] Real-time updates via WebSockets
-- [ ] Advanced search with filters
-- [ ] Export to CSV/PDF
-- [ ] Audit log for user actions
-- [ ] Multi-tenant support
-- [ ] Two-factor authentication (2FA)
-- [ ] Password reset flow
-- [ ] Email verification
-
----
-
-## 📈 Next Steps
-
-### Immediate (Week 1)
-1. ✅ Complete database seeding with realistic data
-2. ✅ Test all API endpoints with Postman/Thunder Client
-3. ✅ Verify frontend-backend integration
-4. ⏳ Add missing job postings and candidates data
-5. ⏳ Implement conversations and messages
-
-### Short-term (Weeks 2-4)
-1. Add email notification service
-2. Implement file upload for resumes
-3. Add password reset flow
-4. Implement email verification
-5. Add export features (CSV/PDF)
-6. Improve error handling and user feedback
-7. Add more comprehensive tests
-8. Performance optimization and caching
-
-### Medium-term (Months 2-3)
-1. Real-time updates with WebSockets
-2. Advanced search and filtering
-3. Audit log system
-4. Two-factor authentication
-5. Mobile app (React Native)
-6. API documentation (Swagger/OpenAPI)
-7. Admin dashboard for system monitoring
-
-### Long-term (Months 4-6)
-1. Multi-tenant support
-2. Advanced analytics and reporting
-3. Integration with third-party services (Slack, Google Calendar, etc.)
-4. AI-powered insights and recommendations
-5. Custom workflows and automation
-6. White-label support
-
----
-
-## 📚 Documentation
-
-### Available Documentation
-- **Backend:**
-  - `BACKEND_README.md` - Overview and quick start
-  - `BACKEND_DEVELOPMENT_GUIDE.md` - Comprehensive development guide (47 KB)
-  - `BACKEND_QUICK_REFERENCE.md` - Quick reference cheat sheet
-  - `API_CONTRACT.md` - Complete API specification with TypeScript types
-
-- **Frontend:**
-  - `PROJECT_CONTEXT.md` - Frontend architecture and context
-  - Component documentation in code comments
-
-- **Database:**
-  - `prisma/schema.prisma` - Complete database schema with comments
-
----
-
-## 🤝 Contributing
-
-### Code Style
-- **TypeScript:** Strict mode enabled
-- **Linting:** ESLint with recommended rules
-- **Formatting:** Prettier (if configured)
-- **Naming:** camelCase for variables/functions, PascalCase for components/classes
-
-### Git Workflow
-1. Create feature branch from `main`
-2. Make changes with descriptive commits
-3. Test thoroughly
-4. Create pull request
-5. Code review
-6. Merge to `main`
-
-### Commit Message Format
-```
-type(scope): description
-
-Examples:
-feat(auth): add password reset flow
-fix(clients): resolve pagination bug
-docs(api): update endpoint documentation
-refactor(tasks): simplify task service logic
-test(projects): add integration tests
-```
-
----
-
-## 📞 Support & Contact
-
-### Getting Help
-- Check documentation first
-- Review error logs in `logs/` directory
-- Check Prisma Studio for database issues
-- Review API responses in browser DevTools
-
-### Troubleshooting
-
-**Backend won't start:**
-```bash
-# Check if port 3000 is in use
-lsof -ti:3000 | xargs kill -9
-
-# Check database connection
-cd backend
-npx prisma db pull
-```
-
-**Frontend won't start:**
-```bash
-# Check if port 8080 is in use
-lsof -ti:8080 | xargs kill -9
-
-# Clear node_modules and reinstall
-rm -rf node_modules package-lock.json
-npm install
-```
-
-**Database issues:**
-```bash
-# Reset database
-cd backend
-npx prisma migrate reset
-
-# Re-run migrations
-npx prisma migrate dev
 
 # Seed data
 npm run seed
+# OR for realistic data:
+npx ts-node scripts/seed-real-data.ts
+
+# Sync schema without migration (dev only)
+npx prisma db push
+
+# Pull schema from existing DB
+npx prisma db pull
+
+# Regenerate Prisma client
+npx prisma generate
+```
+
+### Current Models (18 total)
+`User` | `Client` | `Lead` | `Deal` | `Contact` | `Task` | `Project` | `Invoice` | `Team` | `TeamMember` | `Attendance` | `Payroll` | `Candidate` | `HiringJob` | `Note` | `Comment` | `Attachment` | `CalendarEvent` | `AutomationRule` | `AuditLog` | `Preferences`
+
+### Migration History
+| Date | Migration | Change |
+|---|---|---|
+| 2026-03-30 | initial_schema | Core models: User, Client, Lead, Deal, Task, Project, Invoice |
+| 2026-04-02 | add_audit_log | AuditLog table |
+| 2026-04-05 | add_teams | Teams + TeamMembers |
+| 2026-04-06 | add_calendar_payroll | CalendarEvent + Payroll |
+| 2026-04-06 | add_task_project_id | Task.projectId FK |
+| 2026-04-06 | add_user_signature_url | User.signatureUrl |
+| 2026-04-07 | add_job_candidate_columns | Candidate extra fields |
+| 2026-04-08 | add_candidate_skill_phone | skills(Json), phone |
+| 2026-04-09 | add_comments | Comment table |
+| 2026-04-09 | add_attachments | Attachment table |
+| 2026-04-21 | add_created_by_to_resources | createdBy on Deal, Project, Invoice, Candidate |
+
+---
+
+## 🐳 Deployment
+
+### Docker Compose (Production)
+
+```bash
+# Start all services
+./prod.sh
+# or:
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Stop all
+docker-compose down
+
+# Full deploy with rebuild
+./scripts/deploy.sh
+```
+
+### Services in docker-compose.yml
+- `backend` → Node.js API on :3000
+- `frontend` → Nginx-served React app on :80
+- `postgres` → PostgreSQL :5432
+- `prometheus` → Metrics :9090
+- `grafana` → Dashboards :3001
+- `loki` → Logs :3100
+- `alertmanager` → Alerts :9093
+
+### CI/CD (GitHub Actions)
+- **CI pipeline** → Runs on PR: lint, typecheck, unit tests, build
+- **CD pipeline** → Runs on merge to `main`: SSH to EC2, pull, build, migrate, restart
+
+---
+
+## 📊 Monitoring
+
+```bash
+# Prometheus metrics
+http://localhost:9090
+
+# Grafana dashboards (admin/admin default)
+http://localhost:3001
+
+# Pre-built CRM dashboard
+monitoring/grafana/dashboards/crm-monitoring.json
+
+# Raw metrics endpoint (backend)
+http://localhost:3000/metrics
 ```
 
 ---
 
-## 📝 License
+## 🧪 Testing
 
-This project is proprietary and confidential. All rights reserved.
+```bash
+# Backend — all tests
+cd backend && npm test
+
+# Backend — watch mode
+npm run test:watch
+
+# Backend — specific file
+npx jest src/__tests__/clients.service.test.ts
+
+# Frontend — all tests
+cd frontend && npm run test
+
+# Frontend — coverage
+npm run test:coverage
+
+# E2E tests (Playwright)
+cd frontend && npm run test:e2e
+
+# API smoke test
+./scripts/api-test.sh
+```
+
+### Test Files
+**Backend:** `src/__tests__/` — auth, clients, invoices, projects, tasks, notes, team-members, error-middleware, query-validation, gtm-automation  
+**Frontend:** `src/pages/__tests__/` — ClientsPage, TeamsPage; `src/components/shared/__tests__/` — StatCard; `src/services/__tests__/` — crm
 
 ---
 
-## 🎉 Acknowledgments
+## 🐛 Troubleshooting
 
-- **shadcn/ui** - Beautiful UI components
-- **Radix UI** - Accessible component primitives
-- **Tailwind CSS** - Utility-first CSS framework
-- **Prisma** - Next-generation ORM
-- **TanStack Query** - Powerful data synchronization
+### Backend won't start
+```bash
+# Port conflict
+lsof -ti:3000 | xargs kill -9
+
+# Prisma client outdated
+cd backend && npx prisma generate && npm run dev
+
+# DB connection error
+npx prisma db pull   # Validate connection
+```
+
+### Frontend won't start
+```bash
+# Port conflict
+lsof -ti:5173 | xargs kill -9
+
+# Dependency issues
+cd frontend && rm -rf node_modules && npm install && npm run dev
+```
+
+### Email not sending
+```bash
+# SMTP_PASS must be 16-char App Password (NOT Gmail login password)
+# Gmail → Security → 2-Step Verification → App Passwords → Generate
+
+# Test SMTP from backend
+cd backend
+node -e "
+const n=require('nodemailer');
+const t=n.createTransport({host:'smtp.gmail.com',port:587,auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}});
+t.verify((e,s)=>console.log(e||'SMTP OK'));
+"
+```
+
+### Database issues
+```bash
+cd backend
+npx prisma migrate status        # Check pending migrations
+npx prisma migrate dev           # Apply pending
+npx prisma migrate reset         # ⚠️ WIPES DATA — reset + reseed
+```
+
+### Snapshot not updating
+```bash
+# Install git hook for automatic updates
+node scripts/update-snapshot.js --install-hook
+
+# Manual update
+node scripts/update-snapshot.js
+```
 
 ---
 
-**Built with ❤️ by the Focal Point Compass Team**
+## 📚 Documentation Reference
 
-*Last updated: April 1, 2026*
+| File | Purpose |
+|---|---|
+| `codebase-snapshot.xml` | **AI context file** — full architecture, API index, dependency graph |
+| `context.md` | Deep technical documentation for developers |
+| `PROJECT_OVERVIEW.md` | This file — quick-start + feature reference |
+| `backend/doc/API_CONTRACT.md` | Full API spec with TypeScript request/response types |
+| `backend/doc/BACKEND_DEVELOPMENT_GUIDE.md` | Backend dev patterns, conventions |
+| `backend/doc/BACKEND_QUICK_REFERENCE.md` | Cheat sheet for backend work |
+| `frontend/PROJECT_CONTEXT.md` | Frontend architecture context |
+
+---
+
+## 📈 Change History
+
+| Date | Change |
+|---|---|
+| 2026-04-22 | Updated codebase-snapshot.xml, context.md, PROJECT_OVERVIEW.md with latest state |
+| 2026-04-21 | Added `createdBy` to Deal, Project, Invoice, Candidate |
+| 2026-04-17 | Gmail SMTP configured via App Password |
+| 2026-04-10 | CI/CD GitHub Actions pipeline added |
+| 2026-04-09 | Comments + Attachments tables + APIs; TeamsPage JSX fixed |
+| 2026-04-05 | Dashboard Operating Cadence widget migrated to live DB data |
+| 2026-04-04 | TaskCard ReferenceError fixed; unified edit mode completed |
+| 2026-03-31 | Full migration from localStorage/mock to PostgreSQL backend |
+| 2026-03-30 | Initial schema + core API |
+
+---
+
+**Built with ❤️ — Focal Point Compass CRM**  
+*For AI agents: Always read `codebase-snapshot.xml` before making changes.*  
+*Last Updated: 2026-04-22*

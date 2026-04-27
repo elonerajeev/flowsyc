@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { BookText, FileText, NotepadText, Sparkles, Trash2, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BookText, FileText, NotepadText, Plus, Search, Sparkles, Trash2, RefreshCw, X } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 import { NotesSkeleton } from "@/components/skeletons";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
-import { useNotes } from "@/hooks/use-crm-data";
+import { crmKeys, useNotes } from "@/hooks/use-crm-data";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { useRefresh } from "@/hooks/use-refresh";
@@ -35,48 +37,54 @@ const colorOptions = [
 ];
 
 export default function NotesPage() {
+  const queryClient = useQueryClient();
   const { data: notes = [], isLoading, error, refetch } = useNotes();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [color, setColor] = useState("default");
-  const [saving, setSaving] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(4);
-  const PAGE_SIZE = 4;
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(8);
+  const PAGE_SIZE = 8;
   const { refresh, isRefreshing } = useRefresh();
 
   const handleRefresh = async () => {
-    await refresh(
-      () => refetch(),
-      {
-        message: getRefreshMessage("notes"),
-        successMessage: getRefreshSuccessMessage("notes"),
-      }
-    );
+    await refresh(() => refetch(), {
+      message: getRefreshMessage("notes"),
+      successMessage: getRefreshSuccessMessage("notes"),
+    });
   };
 
-  const addNote = async () => {
-    const trimTitle = title.trim();
-    const trimContent = content.trim();
-    if (!trimTitle) return;
+  const createMutation = useMutation({
+    mutationFn: ({ title, content, color }: { title: string; content: string; color: string }) =>
+      crmService.createNote({ title, content, color }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.notes });
+      setTitle(""); setContent(""); setColor("default"); setShowForm(false);
+      toast.success("Note saved");
+    },
+    onError: () => toast.error("Failed to save note"),
+  });
 
-    setSaving(true);
-    try {
-      await crmService.createNote({ title: trimTitle, content: trimContent, color });
-      await refetch();
-      setTitle("");
-      setContent("");
-      setColor("default");
-      setShowForm(false);
-    } finally {
-      setSaving(false);
-    }
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => crmService.deleteNote(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: crmKeys.notes });
+      toast.success("Note deleted");
+    },
+    onError: () => toast.error("Failed to delete note"),
+  });
+
+  const addNote = () => {
+    if (!title.trim()) return;
+    createMutation.mutate({ title: title.trim(), content: content.trim(), color });
   };
 
-  const deleteNote = async (noteId: number) => {
-    await crmService.deleteNote(noteId);
-    await refetch();
-  };
+  const filteredNotes = useMemo(() => {
+    if (!search.trim()) return notes;
+    const q = search.toLowerCase();
+    return notes.filter(n => n.title.toLowerCase().includes(q) || n.content?.toLowerCase().includes(q));
+  }, [notes, search]);
 
   if (error) {
     return (
@@ -114,7 +122,7 @@ export default function NotesPage() {
                 className="inline-flex h-11 items-center gap-2 rounded-2xl border-border/70 bg-background/50 px-4 font-semibold text-foreground backdrop-blur-sm transition"
               >
                 <RefreshCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                "Refresh Notes"
+                Refresh
               </Button>
             </motion.div>
           </div>
@@ -123,10 +131,26 @@ export default function NotesPage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-3">
-          {notes.length > 0 ? (
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search notes..."
+              className="h-10 w-full rounded-2xl border border-border/70 bg-card pl-10 pr-10 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/20"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {filteredNotes.length > 0 ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
-              {notes.slice(0, visibleCount).map((note) => {
+              {filteredNotes.slice(0, visibleCount).map((note) => {
                 const cfg = noteColorMap[note.color ?? "default"] ?? noteColorMap.default;
                 return (
                 <article
@@ -144,8 +168,9 @@ export default function NotesPage() {
                       )}
                       <button
                         type="button"
-                        onClick={() => deleteNote(note.id)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full border border-border/50 text-muted-foreground/60 transition hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => deleteMutation.mutate(note.id)}
+                        disabled={deleteMutation.isPending}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-border/50 text-muted-foreground/60 transition hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -162,19 +187,19 @@ export default function NotesPage() {
               })}
               </div>
               <ShowMoreButton
-                total={notes.length}
+                total={filteredNotes.length}
                 visible={visibleCount}
                 pageSize={PAGE_SIZE}
-                onShowMore={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, notes.length))}
+                onShowMore={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filteredNotes.length))}
                 onShowLess={() => setVisibleCount(PAGE_SIZE)}
               />
             </>
           ) : (
             <div className="rounded-[1.5rem] border border-dashed border-border/60 bg-secondary/10 p-10 text-center">
               <NotepadText className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-              <p className="font-semibold text-foreground">No notes yet</p>
+              <p className="font-semibold text-foreground">{search ? "No matching notes" : "No notes yet"}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Add a note to capture client context, decisions, or reminders.
+                {search ? "Try a different search term." : "Add a note to capture client context, decisions, or reminders."}
               </p>
             </div>
           )}
@@ -184,7 +209,9 @@ export default function NotesPage() {
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <BookText className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Notes ({notes.length})</p>
+              <p className="text-sm font-semibold text-foreground">
+                Notes ({search ? `${filteredNotes.length} of ${notes.length}` : notes.length})
+              </p>
             </div>
             <button
               type="button"
@@ -192,7 +219,7 @@ export default function NotesPage() {
               className="flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-secondary/30 text-primary transition hover:border-border"
               aria-label="Add note"
             >
-              +
+              <Plus className="h-4 w-4" />
             </button>
           </div>
           <div className="space-y-3 text-sm leading-6 text-muted-foreground">
@@ -235,11 +262,11 @@ export default function NotesPage() {
               <button
                 type="button"
                 onClick={addNote}
-                disabled={saving || !title.trim()}
+                disabled={createMutation.isPending || !title.trim()}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
               >
                 <FileText className="h-4 w-4" />
-                {saving ? "Saving..." : "Save note"}
+                {createMutation.isPending ? "Saving..." : "Save note"}
               </button>
             </div>
           ) : (

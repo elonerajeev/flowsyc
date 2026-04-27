@@ -6,7 +6,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
-import { apiRateLimiter } from "./middleware/rate-limit.middleware";
+import { apiRateLimiter, writeRateLimiter } from "./middleware/rate-limit.middleware";
 
 interface MetricsModule {
   metricsMiddleware?: express.RequestHandler;
@@ -57,7 +57,9 @@ import { uploadRouter } from "./routes/upload.routes";
 import { automationRouter } from "./routes/automation.routes";
 import { meetingRouter } from "./routes/meeting.routes";
 import { activityRouter } from "./routes/activity.routes";
+import googleAuthRoutes from "./routes/google-auth.routes";
 import { csvImportRouter } from "./routes/csv-import.routes";
+import inboxRouter from "./routes/inbox.routes";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { logger } from "./utils/logger";
 
@@ -65,7 +67,21 @@ export function createApp() {
   const app = express();
 
   app.set("trust proxy", 1);
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }));
   app.use(compression());
   app.use(
     cors({
@@ -95,6 +111,7 @@ export function createApp() {
   }
 
   app.use(apiRateLimiter);
+  app.use(writeRateLimiter);
 
   app.get(["/health", "/api/health"], (_req, res) => {
     res.status(200).json({
@@ -131,8 +148,10 @@ export function createApp() {
   app.use("/api/upload", uploadRouter);
   app.use("/api/automation", automationRouter);
   app.use("/api/meetings", meetingRouter);
+  app.use("/api/auth", googleAuthRoutes);
   app.use("/api/activities", activityRouter);
   app.use("/api/csv-import", csvImportRouter);
+  app.use("/api/inbox", inboxRouter);
 
   app.use(notFound);
   app.use(errorHandler);

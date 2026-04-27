@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   Plus,
@@ -50,6 +50,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import LeadEmailDialog from "@/components/crm/LeadEmailDialog";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
@@ -133,6 +134,7 @@ const LeadsPage = () => {
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   // Form states
@@ -149,6 +151,16 @@ const LeadsPage = () => {
   const [meetingAgenda, setMeetingAgenda] = useState("");
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [selectedImportIds, setSelectedImportIds] = useState<number[]>([]);
+
+  // Clear import filter on mount to show all leads (fix for empty leads issue)
+  useEffect(() => {
+    setSelectedImportIds([]);
+  }, []);
+
+  useEffect(() => {
+    setVisibleCount(LEADS_PAGE_SIZE);
+    setSelectedLeadIds([]);
+  }, [searchTerm, statusFilter, sourceFilter, scoreRange, assignedFilter, sortBy, sortOrder, selectedImportIds.length]);
   
   // Bulk selection for regular leads
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
@@ -275,14 +287,59 @@ const LeadsPage = () => {
     }
   };
 
-  // Fetch leads
-  const { data: leadsResponse, isLoading, error } = useQuery({
-    queryKey: ["leads"],
-    queryFn: () => crmService.getLeadsPage({ limit: 1000 }),
+  const normalizedSortBy = useMemo(() => {
+    if (sortBy === "name") return "firstName";
+    if (sortBy === "score") return "score";
+    if (sortBy === "createdAt") return "createdAt";
+    if (sortBy === "updatedAt") return "updatedAt";
+    return "createdAt";
+  }, [sortBy]);
+
+  // Fetch leads using server-side paging + filtering
+  const leadsQuery = useInfiniteQuery({
+    queryKey: [
+      "leads",
+      "paged",
+      {
+        q: searchTerm.trim().toLowerCase(),
+        status: statusFilter,
+        source: sourceFilter,
+        assigned: assignedFilter,
+        min: scoreRange[0],
+        max: scoreRange[1],
+        sortBy: normalizedSortBy,
+        sortOrder,
+        size: LEADS_PAGE_SIZE,
+      },
+    ],
+    queryFn: ({ pageParam }) =>
+      crmService.getLeadsPage({
+        page: Number(pageParam),
+        limit: LEADS_PAGE_SIZE,
+        search: searchTerm.trim() || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        source: sourceFilter !== "all" ? sourceFilter : undefined,
+        assignedState: assignedFilter !== "all" ? (assignedFilter as "assigned" | "unassigned") : undefined,
+        minScore: scoreRange[0] > 0 ? scoreRange[0] : undefined,
+        maxScore: scoreRange[1] < 100 ? scoreRange[1] : undefined,
+        sortBy: normalizedSortBy,
+        sortOrder,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.limit < lastPage.total ? lastPage.page + 1 : undefined,
     staleTime: 30000,
+    enabled: selectedImportIds.length === 0,
   });
-  const leadsData = useMemo(() => leadsResponse?.data ?? [], [leadsResponse]);
-  const totalLeadsInDB = useMemo(() => leadsResponse?.total ?? 0, [leadsResponse]);
+
+  const leadsData = useMemo(
+    () => (leadsQuery.data?.pages ?? []).flatMap((page) => page.data ?? []),
+    [leadsQuery.data?.pages],
+  );
+  const totalLeadsInDB = useMemo(
+    () => leadsQuery.data?.pages?.[0]?.total ?? 0,
+    [leadsQuery.data?.pages],
+  );
 
   // Fetch import history
   const { data: importHistory = [] } = useQuery({
@@ -332,10 +389,14 @@ const LeadsPage = () => {
     enabled: selectedImportIds.length > 0,
   });
 
+  const error = leadsQuery.error;
+  const isLoading =
+    selectedImportIds.length > 0
+      ? isLoadingImportLeads
+      : leadsQuery.isLoading && !leadsQuery.data;
+
   // Filter and search leads
   const filteredLeads = useMemo(() => {
-    if (!leadsData.length) return [];
-
     // Convert import leads to Lead format for unified filtering
     const importLeadsConverted: Lead[] = importLeads.map((imp: ImportedLead) => ({
       id: imp.id,
@@ -380,77 +441,16 @@ const LeadsPage = () => {
       return filtered;
     }
 
-    const allLeads = leadsData;
+    // For normal lead listing, filtering/sorting/paging is server-side.
+    return leadsData;
+  }, [leadsData, importLeads, selectedImportIds, searchTerm, statusFilter, sourceFilter, scoreRange]);
 
-    const filtered = allLeads.filter((lead: Lead) => {
-      // Search term filter
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const matches =
-          lead.firstName.toLowerCase().includes(term) ||
-          lead.lastName.toLowerCase().includes(term) ||
-          lead.email.toLowerCase().includes(term) ||
-          lead.company?.toLowerCase().includes(term) ||
-          lead.jobTitle?.toLowerCase().includes(term);
-        if (!matches) return false;
-      }
-
-      // Status filter
-      if (statusFilter !== "all" && lead.status !== statusFilter) return false;
-
-      // Source filter
-      if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
-
-      // Score range filter
-      if (lead.score < scoreRange[0] || lead.score > scoreRange[1]) return false;
-
-      // Assigned filter
-      if (assignedFilter !== "all") {
-        if (assignedFilter === "assigned" && !lead.assignedTo) return false;
-        if (assignedFilter === "unassigned" && lead.assignedTo) return false;
-      }
-
-      return true;
-    });
-
-    // Sort
-    filtered.sort((a: Lead, b: Lead) => {
-      let aVal: string | number, bVal: string | number;
-
-      switch (sortBy) {
-        case "name":
-          aVal = `${a.firstName} ${a.lastName}`.toLowerCase();
-          bVal = `${b.firstName} ${b.lastName}`.toLowerCase();
-          break;
-        case "score":
-          aVal = a.score;
-          bVal = b.score;
-          break;
-        case "createdAt":
-          aVal = new Date(a.createdAt).getTime();
-          bVal = new Date(b.createdAt).getTime();
-          break;
-        case "updatedAt":
-          aVal = new Date(a.updatedAt).getTime();
-          bVal = new Date(b.updatedAt).getTime();
-          break;
-        default:
-          aVal = a[sortBy as keyof Lead];
-          bVal = b[sortBy as keyof Lead];
-      }
-
-      if (sortOrder === "asc") {
-        return aVal > bVal ? 1 : -1;
-      } else {
-        return aVal < bVal ? 1 : -1;
-      }
-    });
-
-    return filtered;
-  }, [leadsData, importLeads, selectedImportIds, searchTerm, statusFilter, sourceFilter, scoreRange, assignedFilter, sortBy, sortOrder]);
-
-  const visibleLeads = filteredLeads.slice(0, visibleCount);
-  const hasMore = filteredLeads.length > visibleCount;
+  const visibleLeads =
+    selectedImportIds.length > 0 ? filteredLeads.slice(0, visibleCount) : filteredLeads;
+  const hasMore =
+    selectedImportIds.length > 0
+      ? filteredLeads.length > visibleCount
+      : Boolean(leadsQuery.hasNextPage);
 
   // Statistics
   const stats = useMemo(() => {
@@ -581,6 +581,7 @@ const LeadsPage = () => {
   }
 
   return (
+    <>
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
@@ -631,314 +632,129 @@ const LeadsPage = () => {
       </section>
 
       {/* Filters and Actions */}
-      <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-[1.75rem] border border-border bg-card px-4 py-3 shadow-card">
+        <div className="flex flex-wrap items-center gap-2">
+
           {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search leads by name, email, company..."
+              placeholder="Search leads..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-8 h-8 text-sm"
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {LEAD_STATUSES.map((status) => (
-                  <SelectItem key={status.value} value={status.value}>
-                    {status.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Status filter */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-8 text-sm">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              {LEAD_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                {LEAD_SOURCES.map((source) => (
-                  <SelectItem key={source.value} value={source.value}>
-                    {source.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Source filter */}
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-28 h-8 text-sm">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              {LEAD_SOURCES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={assignedFilter} onValueChange={setAssignedFilter}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Assignment" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Sort */}
+          <Select value={`${sortBy}-${sortOrder}`} onValueChange={(v) => {
+            const [field, order] = v.split("-");
+            setSortBy(field);
+            setSortOrder(order as "asc" | "desc");
+          }}>
+            <SelectTrigger className="w-36 h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="createdAt-desc">Newest First</SelectItem>
+              <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+              <SelectItem value="score-desc">Highest Score</SelectItem>
+              <SelectItem value="score-asc">Lowest Score</SelectItem>
+              <SelectItem value="name-asc">Name A–Z</SelectItem>
+            </SelectContent>
+          </Select>
 
-            {importHistory.length > 0 && (
-              <Select 
-                value={selectedImportIds.length > 0 ? `import-${selectedImportIds.join(",")}` : "all"} 
-                onValueChange={(value) => {
-                  if (value === "all") {
-                    setSelectedImportIds([]);
-                  } else {
-                    const ids = value.replace("import-", "").split(",").map(Number);
-                    setSelectedImportIds(ids);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Import File" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Imports</SelectItem>
-                  {importHistory.map((imp: ImportedFile) => (
-                    <SelectItem key={imp.id} value={`import-${imp.id}`}>
-                      <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-3 w-3 text-green-600" />
-                        <span className="truncate max-w-[150px]">{imp.filename}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
-              const [field, order] = value.split("-");
-              setSortBy(field);
-              setSortOrder(order as "asc" | "desc");
-            }}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="createdAt-desc">Newest First</SelectItem>
-                <SelectItem value="createdAt-asc">Oldest First</SelectItem>
-                <SelectItem value="updatedAt-desc">Recently Updated</SelectItem>
-                <SelectItem value="score-desc">Highest Score</SelectItem>
-                <SelectItem value="score-asc">Lowest Score</SelectItem>
-                <SelectItem value="name-asc">Name A-Z</SelectItem>
-                <SelectItem value="name-desc">Name Z-A</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearchTerm("");
-                setStatusFilter("all");
-                setSourceFilter("all");
-                setScoreRange([0, 100]);
-                setAssignedFilter("all");
-                setSortBy("createdAt");
-                setSortOrder("desc");
-              }}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Score Range Filter */}
-        <div className="mt-4 flex items-center gap-4">
-          <span className="text-sm font-medium text-foreground">Score Range:</span>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              value={scoreRange[0]}
-              onChange={(e) => setScoreRange([parseInt(e.target.value) || 0, scoreRange[1]])}
-              className="w-20"
-            />
-            <span className="text-muted-foreground">-</span>
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              value={scoreRange[1]}
-              onChange={(e) => setScoreRange([scoreRange[0], parseInt(e.target.value) || 100])}
-              className="w-20"
-            />
-          </div>
-          <Badge variant="outline" className="ml-2">
-            {scoreRange[0]} - {scoreRange[1]}
-          </Badge>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-4 flex items-center gap-3">
-          <Link to="/automation/gtm">
-            <Button variant="outline">
-              <Target className="h-4 w-4 mr-2" />
-              GTM Center
-            </Button>
-          </Link>
-          {canEdit && canUseQuickCreate && (
-            <Button onClick={() => openQuickCreate?.("lead")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Lead
+          {/* Reset filters */}
+          {(searchTerm || statusFilter !== "all" || sourceFilter !== "all" || scoreRange[0] !== 0 || scoreRange[1] !== 100) && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => { setSearchTerm(""); setStatusFilter("all"); setSourceFilter("all"); setScoreRange([0, 100]); setAssignedFilter("all"); setSortBy("createdAt"); setSortOrder("desc"); }}>
+              <RefreshCw className="h-3 w-3 mr-1" /> Reset
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            onClick={() => exportMutation.mutate()}
-            disabled={exportMutation.isPending || filteredLeads.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {exportMutation.isPending ? "Exporting..." : "Export CSV"}
-          </Button>
+          {/* Spacer */}
+          <div className="flex-1" />
 
-          {/* View Toggle */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === "table" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("table")}
-            >
-              <TableIcon className="h-4 w-4 mr-2" />
-              Table
+          {/* View toggle */}
+          <div className="flex items-center rounded-md border overflow-hidden">
+            <Button variant={viewMode === "table" ? "default" : "ghost"} size="sm" className="h-8 rounded-none px-2.5" onClick={() => setViewMode("table")}>
+              <TableIcon className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              variant={viewMode === "cards" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("cards")}
-            >
-              <Grid3X3 className="h-4 w-4 mr-2" />
-              Cards
+            <Button variant={viewMode === "cards" ? "default" : "ghost"} size="sm" className="h-8 rounded-none px-2.5" onClick={() => setViewMode("cards")}>
+              <Grid3X3 className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          <AdminOnly>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={importMutation.isPending}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  {importMutation.isPending ? "Importing..." : "Import"}
-                  {importHistory.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">{importHistory.length}</Badge>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <div className="p-3 space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Import Leads</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Upload CSV or Excel files to import leads
-                    </p>
-                  </div>
+          {/* Add Lead */}
+          {canEdit && canUseQuickCreate && (
+            <Button size="sm" className="h-8" onClick={() => openQuickCreate?.("lead")}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Lead
+            </Button>
+          )}
 
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 cursor-pointer hover:bg-muted p-2 rounded-md">
-                      <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                      <span className="text-sm">Excel (.xlsx, .xls)</span>
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={handleImport}
-                        className="hidden"
-                        disabled={importMutation.isPending}
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer hover:bg-muted p-2 rounded-md">
-                      <FileText className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm">CSV (.csv)</span>
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleImport}
-                        className="hidden"
-                        disabled={importMutation.isPending}
-                      />
-                    </label>
-                  </div>
+          {/* More actions dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-2">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending || filteredLeads.length === 0}>
+                <Download className="h-4 w-4 mr-2" />
+                {exportMutation.isPending ? "Exporting..." : "Export CSV"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <AdminOnly>
+                <DropdownMenuItem asChild>
+                  <label className="flex items-center gap-2 cursor-pointer w-full">
+                    <Upload className="h-4 w-4" />
+                    Import CSV / Excel
+                    <input type="file" accept=".csv,.xlsx,.xls" className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) importMutation.mutate(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </DropdownMenuItem>
+              </AdminOnly>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/automation/gtm" className="flex items-center gap-2">
+                  <Target className="h-4 w-4" /> GTM Center
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-                  {importHistory.length > 0 && (
-                    <>
-                      <div className="border-t pt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-muted-foreground">View Imported Files</p>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 text-xs"
-                            onClick={() => setShowImportHistory(!showImportHistory)}
-                          >
-                            {showImportHistory ? "Done" : "Select"}
-                          </Button>
-                        </div>
-                        
-                        {showImportHistory && (
-                          <div className="space-y-1 max-h-48 overflow-y-auto">
-                            {importHistory.map((item: ImportedFile) => (
-                              <div
-                                key={item.id}
-                                className={cn(
-                                  "flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors",
-                                  selectedImportIds.includes(item.id)
-                                    ? "bg-primary/10 hover:bg-primary/20"
-                                    : "hover:bg-muted"
-                                )}
-                                onClick={() => {
-                                  if (selectedImportIds.includes(item.id)) {
-                                    setSelectedImportIds(selectedImportIds.filter(id => id !== item.id));
-                                  } else {
-                                    setSelectedImportIds([...selectedImportIds, item.id]);
-                                  }
-                                }}
-                              >
-                                <Checkbox
-                                  checked={selectedImportIds.includes(item.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedImportIds([...selectedImportIds, item.id]);
-                                    } else {
-                                      setSelectedImportIds(selectedImportIds.filter(id => id !== item.id));
-                                    }
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <FileSpreadsheet className="h-4 w-4 text-green-600 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm truncate">{item.filename}</p>
-                                  <p className="text-xs text-muted-foreground">{item.totalRows} rows • {item.status}</p>
-                                </div>
-                                <button
-                                  className="text-muted-foreground hover:text-destructive transition-colors ml-1"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteImportMutation.mutate(item.id);
-                                    setSelectedImportIds(prev => prev.filter(id => id !== item.id));
-                                  }}
-                                  title="Delete import"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </AdminOnly>
         </div>
       </section>
 
@@ -1045,6 +861,18 @@ const LeadsPage = () => {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const bulkLeads = visibleLeads.filter((l: Lead) => selectedLeadIds.includes(l.id));
+                      setSelectedLead(bulkLeads[0]);
+                      setEmailDialogOpen(true);
+                    }}
+                  >
+                    <Mail className="h-4 w-4 mr-1" />
+                    Send Email ({selectedLeadIds.length})
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="destructive"
                     onClick={() => {
                       if (window.confirm(`Delete ${selectedLeadIds.length} leads?`)) {
@@ -1134,7 +962,6 @@ const LeadsPage = () => {
                         value={lead.status} 
                         onValueChange={async (newStatus) => {
                           if (newStatus !== lead.status) {
-                            console.log("Updating lead status:", lead.id, newStatus);
                             try {
                               await crmService.updateLeadStage(lead.id, newStatus);
                               queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -1186,6 +1013,10 @@ const LeadsPage = () => {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setSelectedLead(lead); setEmailDialogOpen(true); }}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Email
+                          </DropdownMenuItem>
                           {canEdit && (
                             <>
                               <DropdownMenuItem onClick={() => openQuickCreate?.("lead", lead)}>
@@ -1216,8 +1047,14 @@ const LeadsPage = () => {
               <div className="p-4 border-t">
                 <div className="text-center">
                   <ShowMoreButton
-                    onClick={() => setVisibleCount(prev => prev + LEADS_PAGE_SIZE)}
-                    loading={false}
+                    onClick={() => {
+                      if (selectedImportIds.length > 0) {
+                        setVisibleCount((prev) => prev + LEADS_PAGE_SIZE);
+                        return;
+                      }
+                      leadsQuery.fetchNextPage();
+                    }}
+                    loading={selectedImportIds.length === 0 && leadsQuery.isFetchingNextPage}
                   />
                 </div>
               </div>
@@ -1238,7 +1075,6 @@ const LeadsPage = () => {
                           value={lead.status} 
                           onValueChange={async (newStatus) => {
                             if (newStatus !== lead.status) {
-                              console.log("Updating lead status:", lead.id, newStatus);
                               try {
                                 await crmService.updateLeadStage(lead.id, newStatus);
                                 queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -1451,8 +1287,14 @@ const LeadsPage = () => {
             {hasMore && (
               <div className="text-center pt-4">
                 <ShowMoreButton
-                  onClick={() => setVisibleCount(prev => prev + LEADS_PAGE_SIZE)}
-                  loading={false}
+                  onClick={() => {
+                    if (selectedImportIds.length > 0) {
+                      setVisibleCount((prev) => prev + LEADS_PAGE_SIZE);
+                      return;
+                    }
+                    leadsQuery.fetchNextPage();
+                  }}
+                  loading={selectedImportIds.length === 0 && leadsQuery.isFetchingNextPage}
                 />
               </div>
             )}
@@ -1684,6 +1526,19 @@ const LeadsPage = () => {
       </Dialog>
 
     </div>
+
+    {/* Lead Email Dialog — single or bulk */}
+    {emailDialogOpen && (
+      <LeadEmailDialog
+        open={emailDialogOpen}
+        onClose={() => { setEmailDialogOpen(false); setSelectedLeadIds([]); }}
+        leads={selectedLeadIds.length > 1
+          ? visibleLeads.filter((l: Lead) => selectedLeadIds.includes(l.id))
+          : undefined}
+        lead={selectedLeadIds.length <= 1 ? selectedLead ?? undefined : undefined}
+      />
+    )}
+  </>
   );
 };
 

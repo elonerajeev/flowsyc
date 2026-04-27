@@ -29,7 +29,7 @@ router.post(
   "/",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const deal = await dealsService.create(req.body);
+    const deal = await dealsService.create(req.body, req.auth);
     res.status(201).json(deal);
   }),
 );

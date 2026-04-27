@@ -34,6 +34,12 @@ class TTLCache {
       if (key.startsWith(prefix)) this.store.delete(key);
     }
   }
+
+  invalidatePattern(pattern: string): void {
+    for (const key of this.store.keys()) {
+      if (key.includes(pattern)) this.store.delete(key);
+    }
+  }
 }
 
 export const cache = new TTLCache();

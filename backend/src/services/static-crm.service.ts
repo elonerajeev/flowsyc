@@ -1,7 +1,9 @@
 import type { CompanyRecord, CompanySize, ContactRecord, SalesMetrics } from "../data/crm-static";
 import { commandActions, themePreviews } from "../data/crm-static";
 import { prisma } from "../config/prisma";
+import { Prisma } from "@prisma/client";
 import { cache, TTL } from "../utils/cache";
+import type { AccessScope } from "../utils/access-control";
 
 // Sales portfolio views are derived from live CRM records already present in the database.
 
@@ -134,12 +136,37 @@ export const staticCrmService = {
     });
   },
 
-  async getSalesMetrics() {
-    const CACHE_KEY = "sales:metrics";
+  async getSalesMetrics(access?: AccessScope) {
+    const CACHE_KEY = `sales:metrics:${access?.email || "public"}`;
     const cached = cache.get<SalesMetrics>(CACHE_KEY);
     if (cached) return cached;
 
-    const [invoices, clients] = await Promise.all([
+    // Build user-specific filters for data isolation
+    const dealWhere: Prisma.DealWhereInput = { deletedAt: null };
+    
+    // Admin/Manager see only their deals
+    if (access?.role === "admin" || access?.role === "manager") {
+      dealWhere.OR = [
+        { assignedTo: access.email },
+        { assignedTo: access.userId ?? "" },
+      ];
+    }
+    // Employees see only their assigned deals
+    if (access?.role === "employee") {
+      dealWhere.assignedTo = { in: [access.email, access.userId ?? ""] };
+    }
+
+    // Get actual deals data for pipeline metrics
+    const [deals, invoices, clients] = await Promise.all([
+      prisma.deal.findMany({
+        where: dealWhere,
+        select: {
+          value: true,
+          stage: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
       prisma.invoice.findMany({
         where: { deletedAt: null },
         select: {
@@ -162,6 +189,33 @@ export const staticCrmService = {
       }),
     ]);
 
+    // Calculate pipeline metrics from deals
+    const activeDeals = deals.filter(d => !["closed_won", "closed_lost"].includes(d.stage));
+    const wonDeals = deals.filter(d => d.stage === "closed_won");
+    const lostDeals = deals.filter(d => d.stage === "closed_lost");
+
+    const pipelineValue = activeDeals.reduce((sum, deal) => sum + (deal.value || 0), 0);
+    const totalDealsValue = deals.reduce((sum, deal) => sum + (deal.value || 0), 0);
+    const dealsWon = wonDeals.length;
+    const dealsLost = lostDeals.length;
+    const conversionRate = deals.length > 0 ? Math.round(((dealsWon) / deals.length) * 100) : 0;
+
+    // Calculate average deal size from won deals
+    const averageDealSize = wonDeals.length > 0 
+      ? Math.round(wonDeals.reduce((sum, d) => sum + (d.value || 0), 0) / wonDeals.length)
+      : 0;
+
+    // Calculate average sales cycle from deals
+    const wonDealsWithDates = wonDeals.filter(d => d.createdAt && d.updatedAt);
+    const salesCycleSamples = wonDealsWithDates.map(d => {
+      const diff = d.updatedAt.getTime() - d.createdAt.getTime();
+      return Math.round(diff / (1000 * 60 * 60 * 24)); // Convert to days
+    });
+    const salesCycle = salesCycleSamples.length > 0
+      ? Math.round(salesCycleSamples.reduce((sum, days) => sum + days, 0) / salesCycleSamples.length)
+      : 1; // Default to 1 day if no won deals
+
+    // Revenue from invoices
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -187,49 +241,15 @@ export const staticCrmService = {
       .filter((invoice) => invoice.status === "pending")
       .reduce((sum, invoice) => sum + invoice.amount, 0);
 
-    const dealsWon = invoiceEntries.filter((invoice) => invoice.status === "completed").length;
-    const averageDealSize = invoiceEntries.length > 0 ? Math.round(totalRevenue / invoiceEntries.length) : 0;
-
-    const potentialPipeline = clients
-      .filter((client) => client.status === "pending")
-      .reduce((sum, client) => sum + parseCurrencyAmount(client.revenue), 0);
-
-    const convertedClients = clients.filter((client) => client.status !== "pending").length;
-    const conversionRate = clients.length > 0 ? Math.round((convertedClients / clients.length) * 100) : 0;
-
-    const firstInvoiceByClient = new Map<string, Date>();
-    for (const invoice of invoiceEntries) {
-      const existing = firstInvoiceByClient.get(invoice.clientKey);
-      if (!existing || invoice.invoiceDate < existing) {
-        firstInvoiceByClient.set(invoice.clientKey, invoice.invoiceDate);
-      }
-    }
-
-    const salesCycleSamples = clients.flatMap((client) => {
-      const keys = [client.name, client.company].filter(Boolean).map(normalizeKey);
-      const firstInvoiceDate = keys
-        .map((key) => firstInvoiceByClient.get(key))
-        .find((value): value is Date => value instanceof Date);
-      if (!firstInvoiceDate) return [];
-
-      const diff = firstInvoiceDate.getTime() - client.createdAt.getTime();
-      const diffInDays = Math.round(diff / 86_400_000);
-      return diffInDays >= 0 ? [diffInDays] : [];
-    });
-
-    const salesCycle = salesCycleSamples.length > 0
-      ? Math.round(salesCycleSamples.reduce((sum, days) => sum + days, 0) / salesCycleSamples.length)
-      : 0;
-
     const metrics: SalesMetrics = {
       totalRevenue,
       monthlyRevenue,
       dealsWon,
-      dealsLost: 0,
+      dealsLost,
       conversionRate,
       averageDealSize,
       salesCycle,
-      pipelineValue: potentialPipeline,
+      pipelineValue,
       forecastedRevenue: pendingInvoiceRevenue,
     };
 

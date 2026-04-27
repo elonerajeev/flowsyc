@@ -75,13 +75,22 @@ function formatCategoryLabel(value: string) {
 export default function ActivityPage() {
   const { role } = useTheme();
   const canSeeAuditTrail = role === "admin" || role === "manager";
+  const isAdminOrManager = role === "admin" || role === "manager";
   const { data: dashboard, isLoading, error: dashboardError, refetch } = useDashboardData();
   const { data: auditLogs = [] } = useAuditLogs(4, { enabled: canSeeAuditTrail });
-  const { data: upcomingMeetings = [] } = useQuery({
+  const { data: upcomingMeetings = [], refetch: refetchMeetings } = useQuery({
     queryKey: ["upcoming-meetings"],
     queryFn: () => crmService.getUpcomingMeetings(5),
     refetchInterval: 60000,
   });
+  const { data: googleStatus } = useQuery({
+    queryKey: ["google-calendar-status"],
+    queryFn: () => crmService.getGoogleCalendarStatus(),
+    enabled: isAdminOrManager,
+    staleTime: 1000 * 60 * 5,
+  });
+  const googleConnected = googleStatus?.connected ?? false;
+  const [generatingMeetId, setGeneratingMeetId] = useState<number | null>(null);
 
   const { refresh, isRefreshing } = useRefresh();
 
@@ -99,6 +108,21 @@ export default function ActivityPage() {
   const [visibleTeamCount, setVisibleTeamCount] = useState(TEAM_PAGE_SIZE);
   const [visibleFocusCount, setVisibleFocusCount] = useState(3);
   const FOCUS_PAGE_SIZE = 3;
+
+  const generateMeetLink = async (meetingId: number) => {
+    setGeneratingMeetId(meetingId);
+    try {
+      const result = await crmService.createMeetingGoogleMeet(meetingId);
+      if (result.meetLink) {
+        await refetchMeetings();
+        window.open(result.meetLink, "_blank");
+      }
+    } catch {
+      // silently fail — meeting still works without real Meet link
+    } finally {
+      setGeneratingMeetId(null);
+    }
+  };
 
   const heatmap = useMemo(() => {
     const raw = dashboard?.activityHeatmap ?? [];
@@ -549,6 +573,17 @@ export default function ActivityPage() {
                       <ExternalLink className="h-3 w-3" />
                       Join
                     </a>
+                  )}
+                  {isAdminOrManager && googleConnected && !meeting.meetingUrl?.includes("meet.google.com") && (
+                    <button
+                      type="button"
+                      onClick={() => generateMeetLink(meeting.id)}
+                      disabled={generatingMeetId === meeting.id}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                    >
+                      <Video className="h-3 w-3" />
+                      {generatingMeetId === meeting.id ? "Generating..." : "Get Meet Link"}
+                    </button>
                   )}
                 </div>
               ))}

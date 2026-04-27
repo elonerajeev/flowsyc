@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.middleware";
+import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { payrollService } from "../services/payroll.service";
 import { asyncHandler } from "../utils/async-handler";
 
@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.get(
   "/",
+  requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
     const { period } = req.query;
     const records = await payrollService.list(req.auth, period as string);
@@ -18,6 +19,7 @@ router.get(
 
 router.post(
   "/generate",
+  requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const { period } = req.body;
     if (!period) {
@@ -31,6 +33,7 @@ router.post(
 
 router.patch(
   "/:id/status",
+  requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     if (!status) {
@@ -44,6 +47,7 @@ router.patch(
 
 router.patch(
   "/:id/mark-paid",
+  requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const updated = await payrollService.markPaid(Number(req.params.id), req.auth);
     res.json(updated);

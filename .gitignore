@@ -32,3 +32,8 @@ coverage/
 # OS files
 .DS_Store
 Thumbs.db
+
+# AI Context Files
+codebase-snapshot.xml
+context.md
+GIT_BRANCHING_STRATEGY.md

@@ -8,6 +8,7 @@ import { verifyAccessToken, signAccessToken, signPasswordResetToken, verifyPassw
 import { sendVerificationEmail, sendPasswordResetEmail } from "../utils/email-templates";
 import { hashPassword } from "../utils/password";
 import { prisma } from "../config/prisma";
+import { getGoogleUserInfo, getGoogleAuthUrl } from "../services/google-auth.service";
 
 const IS_PROD = env.NODE_ENV === "production";
 
@@ -243,5 +244,92 @@ export const authController = {
     const { targetRole } = req.body;
     const user = await authService.switchRole(req.auth.userId, targetRole);
     res.status(200).json({ user });
+  },
+
+  googleLogin: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: googleUser.email } });
+
+    if (!user) {
+      const { nanoid } = await import("nanoid");
+      user = await prisma.user.create({
+        data: {
+          id: nanoid(),
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email.split("@")[0],
+          passwordHash: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+          role: "employee",
+          employeeId: `EMP-${Date.now()}`,
+          department: "", team: "", designation: "", manager: "",
+          workingHours: "", officeLocation: "", timeZone: "Asia/Kolkata",
+          baseSalary: 0, allowances: 0, deductions: 0,
+          paymentMode: "bank_transfer", payrollCycle: "monthly",
+          payrollDueDate: "", joinedAt: new Date().toISOString().split("T")[0],
+          location: "", updatedAt: new Date(),
+          signatureUrl: googleUser.picture ?? null,
+        },
+      });
+    } else {
+      // No metadata field in schema — just update signatureUrl if missing
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { signatureUrl: user.signatureUrl ?? googleUser.picture ?? null },
+      });
+    }
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "login", entity: "Auth", detail: "Google Login" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(200).json({ user, accessToken });
+  },
+
+  googleSignup: async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError("Authorization code required", 400, "BAD_REQUEST");
+    }
+
+    const googleUser = await getGoogleUserInfo(code);
+    if (!googleUser.email) {
+      throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: googleUser.email } });
+    if (existingUser) {
+      throw new AppError("User already exists. Please login with Google.", 400, "USER_EXISTS");
+    }
+
+    const { nanoid } = await import("nanoid");
+    const user = await prisma.user.create({
+      data: {
+        id: nanoid(),
+        email: googleUser.email,
+        name: googleUser.name || googleUser.email.split("@")[0],
+        passwordHash: await hashPassword(`google_${Date.now()}_${Math.random()}`),
+        role: "employee",
+        employeeId: `EMP-${Date.now()}`,
+        department: "", team: "", designation: "", manager: "",
+        workingHours: "", officeLocation: "", timeZone: "Asia/Kolkata",
+        baseSalary: 0, allowances: 0, deductions: 0,
+        paymentMode: "bank_transfer", payrollCycle: "monthly",
+        payrollDueDate: "", joinedAt: new Date().toISOString().split("T")[0],
+        location: "", updatedAt: new Date(),
+        signatureUrl: googleUser.picture ?? null,
+      },
+    });
+
+    const { accessToken, refreshToken } = await authService.createSession(user.id);
+    await logAudit({ userId: user.id, userName: user.name, action: "create", entity: "User", detail: "Google Signup" });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.status(201).json({ user, accessToken });
   },
 };

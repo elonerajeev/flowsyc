@@ -179,6 +179,15 @@ export const authService = {
     return session;
   },
 
+  async loginWithGoogle(): Promise<AuthSession> {
+    // Get the auth URL and redirect to it
+    const { authUrl } = await requestJson<{ authUrl: string }>("/auth/google/login-url");
+    window.location.href = authUrl;
+    
+    // This won't return - page will redirect
+    return new Promise(() => {});
+  },
+
   async signup(credentials: AuthCredentials): Promise<AuthSession> {
     if (!isRemoteApiEnabled()) {
       const session = createMockSession({ ...credentials, role: credentials.role ?? "employee" });

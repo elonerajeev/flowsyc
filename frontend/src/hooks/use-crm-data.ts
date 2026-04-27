@@ -42,8 +42,16 @@ export function useDashboardData() {
 
 export function useClients(options?: QueryToggle) {
   return useQuery({
-    queryKey: crmKeys.clients,
-    queryFn: crmService.getClients,
+    queryKey: [...crmKeys.clients, "snapshot", 50],
+    queryFn: async () => {
+      const page = await crmService.getClientsPage({
+        page: 1,
+        limit: 50,
+        sort: "createdAt",
+        order: "desc",
+      });
+      return page.data;
+    },
     staleTime: 1000 * 60 * 5,
     enabled: options?.enabled,
   });

@@ -42,6 +42,11 @@ type TaskQuery = {
   projectId?: number;
 };
 
+type TaskStatsQuery = {
+  priority?: TaskRecord["priority"];
+  projectId?: number;
+};
+
 type AccessScope = {
   role: UserRole;
   userId: string;
@@ -87,6 +92,16 @@ function mapTask(task: {
     valueStream: task.valueStream as TaskRecord["valueStream"],
     column: fromDbColumn(task.column),
     projectId: task.projectId ?? null,
+  };
+}
+
+function buildTaskWhere(query: { column?: TaskRecord["column"]; priority?: TaskRecord["priority"]; projectId?: number }, employeeAssignees?: string[] | null): Prisma.TaskWhereInput {
+  return {
+    deletedAt: null,
+    ...(query.column ? { column: toDbColumn(query.column) } : {}),
+    ...(query.priority ? { priority: query.priority } : {}),
+    ...(query.projectId ? { projectId: query.projectId } : {}),
+    ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : {}),
   };
 }
 
@@ -148,18 +163,13 @@ export const tasksService = {
 
   async list(query: TaskQuery, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where: Prisma.TaskWhereInput = {
-      deletedAt: null,
-      ...(query.column ? { column: toDbColumn(query.column) } : {}),
-      ...(query.priority ? { priority: query.priority } : {}),
-      ...(query.projectId ? { projectId: query.projectId } : {}),
-      ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : {}),
-    };
+    const where = buildTaskWhere(query, employeeAssignees);
 
     const tasks = await prisma.task.findMany({
       where,
-      orderBy: [{ column: "asc" }, { createdAt: "asc" }],
-      take: 500, // safety cap — UI paginates via ShowMore
+      // Return full board data; frontend handles "show more" per column.
+      // A hard cap here can hide non-todo columns when todo volume is high.
+      orderBy: [{ createdAt: "desc" }],
     });
 
     const grouped: Record<TaskRecord["column"], TaskRecord[]> = {
@@ -169,6 +179,66 @@ export const tasksService = {
     };
     tasks.map(mapTask).forEach((task) => grouped[task.column].push(task));
     return grouped;
+  },
+
+  async listPaginated(query: TaskQuery, access?: AccessScope) {
+    if (!query.column) {
+      throw new AppError("Column is required for paginated task listing", 400, "BAD_REQUEST");
+    }
+
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
+    const where = buildTaskWhere(query, employeeAssignees);
+    const limit = Math.max(1, Math.min(query.limit, 100));
+    const page = Math.max(1, query.page);
+    const skip = (page - 1) * limit;
+
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        skip,
+        take: limit,
+      }),
+      prisma.task.count({ where }),
+    ]);
+
+    return {
+      data: tasks.map(mapTask),
+      column: query.column,
+      page,
+      limit,
+      total,
+      hasMore: skip + tasks.length < total,
+    };
+  },
+
+  async stats(query: TaskStatsQuery, access?: AccessScope) {
+    const employeeAssignees = await getEmployeeAssigneeScope(access);
+    const where = buildTaskWhere(query, employeeAssignees);
+
+    const grouped = await prisma.task.groupBy({
+      by: ["column"],
+      where,
+      _count: {
+        _all: true,
+      },
+    });
+
+    const stats: Record<TaskRecord["column"], number> = {
+      todo: 0,
+      "in-progress": 0,
+      done: 0,
+    };
+
+    grouped.forEach((row) => {
+      const column = fromDbColumn(row.column);
+      stats[column] = row._count._all;
+    });
+
+    return {
+      ...stats,
+      total: stats.todo + stats["in-progress"] + stats.done,
+    };
   },
 
   async create(input: TaskInput, access?: AccessScope) {
