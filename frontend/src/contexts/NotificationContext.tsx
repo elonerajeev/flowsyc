@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "@/components/ui/sonner";
 import { triggerHaptic } from "@/lib/micro-interactions";
@@ -104,19 +104,29 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Fetch initial notifications from API
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
+    let isMounted = true;
+
     async function fetchNotifications() {
       try {
         const response = await getNotifications({ limit: 50 });
         const mapped = response.data.map(mapBackendToFrontendNotification);
-        setNotifications(mapped);
+        if (isMounted) {
+          setNotifications(mapped);
+        }
       } catch (error) {
         console.error("Failed to fetch notifications:", error);
       } finally {
-        setInitialLoadComplete(true);
+        if (isMounted) {
+          setInitialLoadComplete(true);
+        }
       }
     }
     fetchNotifications();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Fetch unread count

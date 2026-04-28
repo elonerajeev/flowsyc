@@ -487,7 +487,7 @@ export const candidatesService = {
     });
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: {
           candidateId,
           action: "offer_letter_sent",
@@ -533,7 +533,7 @@ export const candidatesService = {
     }, reason).catch(() => {});
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },
       });
     } catch (err) {
@@ -546,7 +546,7 @@ export const candidatesService = {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
 
-    const activities = await (prisma as any).candidateActivity.findMany({
+    const activities = await prisma.candidateActivity.findMany({
       where: { candidateId },
       orderBy: { createdAt: "desc" },
     });
@@ -558,7 +558,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "note", detail: note, performedBy },
       });
     } catch (err) {

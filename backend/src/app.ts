@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
 import { apiRateLimiter, writeRateLimiter } from "./middleware/rate-limit.middleware";
+import { requireAuth, requireRole } from "./middleware/auth.middleware";
 
 interface MetricsModule {
   metricsMiddleware?: express.RequestHandler;
@@ -104,7 +105,7 @@ export function createApp() {
     app.use(metricsMiddleware);
     
     if (prometheusRegistry) {
-      app.get(["/metrics", "/api/metrics"], async (_req: express.Request, res: express.Response) => {
+      app.get(["/metrics", "/api/metrics"], requireAuth, requireRole(["admin"]), async (_req: express.Request, res: express.Response) => {
         res.set("Content-Type", prometheusRegistry.contentType);
         res.status(200).send(await prometheusRegistry.metrics());
       });

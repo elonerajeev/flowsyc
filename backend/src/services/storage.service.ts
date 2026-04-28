@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import multer from "multer";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 import { AppError } from "../middleware/error.middleware";
 
 const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
@@ -18,6 +20,19 @@ const MAX_SIZE: Record<string, number> = {
   document: 15 * 1024 * 1024,  // 15 MB
 };
 
+type StorageType = "disk" | "cloudinary";
+
+function getStorageType(): StorageType {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  if (cloudName && apiKey && apiSecret) {
+    return "cloudinary";
+  }
+  return "disk";
+}
+
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -30,7 +45,7 @@ function generateFilename(originalName: string): string {
   return `${hash}${ext}`;
 }
 
-function createStorage(category: string) {
+function createDiskStorage(category: string) {
   const dir = path.join(UPLOAD_ROOT, category);
   ensureDir(dir);
 
@@ -51,15 +66,69 @@ function createStorage(category: string) {
   });
 }
 
+function createCloudinaryStorage(category: string) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+
+  const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: `crm/${category}`,
+      allowed_formats: ALLOWED_MIME[category]?.map(m => m.split("/")[1]) ?? ["pdf", "doc", "docx", "txt", "jpg", "png"],
+      transformation: category === "avatar" ? [{ width: 500, height: 500, crop: "limit" }] : undefined,
+    } as any,
+  });
+
+  return multer({
+    storage,
+    limits: { fileSize: MAX_SIZE[category] ?? 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ALLOWED_MIME[category] ?? ALLOWED_MIME.document;
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new AppError(`Invalid file type: ${file.mimetype}. Allowed: ${allowed.join(", ")}`, 400, "INVALID_FILE_TYPE"));
+      }
+    },
+  });
+}
+
+function createStorage(category: string) {
+  const storageType = getStorageType();
+
+  if (storageType === "cloudinary") {
+    return createCloudinaryStorage(category);
+  }
+  return createDiskStorage(category);
+}
+
 export const uploadAvatar = createStorage("avatar");
 export const uploadResume = createStorage("resume");
 export const uploadDocument = createStorage("document");
 
 export function getFileUrl(category: string, filename: string): string {
+  const storageType = getStorageType();
+
+  if (storageType === "cloudinary") {
+    return filename;
+  }
   return `/uploads/${category}/${filename}`;
 }
 
 export function deleteFile(category: string, filename: string): boolean {
+  const storageType = getStorageType();
+
+  if (storageType === "cloudinary") {
+    return new Promise<boolean>((resolve) => {
+      cloudinary.uploader.destroy(`crm/${category}/${filename}`, (result) => {
+        resolve(!result.error);
+      });
+    }) as unknown as boolean;
+  }
+
   try {
     const filePath = path.join(UPLOAD_ROOT, category, filename);
     if (fs.existsSync(filePath)) {
