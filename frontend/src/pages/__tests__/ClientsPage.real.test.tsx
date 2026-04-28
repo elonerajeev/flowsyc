@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { useInfiniteQuery } from '@tanstack/react-query'
+import type { UseInfiniteQueryResult } from '@tanstack/react-query'
+import type { ClientRecord } from '@/types/crm'
 import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
 import ClientsPage from '@/pages/ClientsPage'
 
@@ -26,8 +27,8 @@ vi.mock('@/services/crm', () => ({
   },
 }))
 
-const mockInfiniteData = {
-  pages: [{ data: [] as never[], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } }],
+const mockInfiniteData: UseInfiniteQueryResult<ClientRecord[], Error> = {
+  pages: [{ data: [] as ClientRecord[], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } }],
   pageParams: [undefined],
 }
 
@@ -111,7 +112,7 @@ describe('ClientsPage - Real App Logic', () => {
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-    } as ReturnType<typeof useInfiniteQuery>)
+    } as UseInfiniteQueryResult<ClientRecord[], Error>)
   })
 
   it('renders page with correct title and description', () => {
@@ -189,7 +190,7 @@ describe('ClientsPage - Real App Logic', () => {
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-    } as ReturnType<typeof useInfiniteQuery>)
+    } as UseInfiniteQueryResult<ClientRecord[], Error>)
     render(<ClientsPage />)
     expect(document.querySelector('[class*="skeleton"], [class*="animate-pulse"], [class*="shimmer"]') || document.body).toBeInTheDocument()
   })

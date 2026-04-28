@@ -110,7 +110,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     workflowToOpen, 
     canUseQuickCreate, 
     privacyMode,
-    editData
+    editData,
+    togglePrivacyMode,
   ]);
 
   return (

@@ -37,9 +37,9 @@ export const PrivacyValue = memo(function PrivacyValue({ value, className, blur 
     masked = `${local[0] ?? "•"}${"•".repeat(3)}@${"•".repeat(3)}.${domain?.split(".").pop() ?? "•••"}`;
   } else if (type === "phone" || /^\+?[\d\s\-()]{7,}$/.test(str)) {
     masked = str.slice(0, 2) + "•".repeat(str.length - 4) + str.slice(-2);
-  } else if (type === "number" || /^[\$£€₹]?[\d,]+/.test(str)) {
+  } else if (type === "number" || /^[$£€₹]?[\d,]+/.test(str)) {
     // keep currency symbol, mask digits
-    const symbol = str.match(/^[\$£€₹]/)?.[0] ?? "";
+    const symbol = str.match(/^[$£€₹]/)?.[0] ?? "";
     masked = symbol + "••••";
   } else {
     // generic: show first char, mask rest
