@@ -35,9 +35,13 @@ jobs:
 
       - name: 🗄️ Validate Prisma schema
         run: cd backend && npx prisma validate
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: 🔷 Backend typecheck
         run: cd backend && npx tsc --noEmit
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: 📦 Install frontend deps
         run: cd frontend && npm ci
