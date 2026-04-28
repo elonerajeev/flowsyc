@@ -103,6 +103,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Fetch initial notifications from API
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    
     async function fetchNotifications() {
       try {
         const response = await getNotifications({ limit: 50 });
