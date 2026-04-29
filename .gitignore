@@ -1,30 +1,28 @@
-/frontend/node_modules
-/frontend/dist
-/backend/node_modules
-/backend/dist
+# Dependencies
+frontend/node_modules/
+backend/node_modules/
 
-# Environment files
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# Environment files (keep .env.example)
 *.env
 !.env.example
 
-# Auth/secret files
-/frontend/.htpasswd
+# Auth/Security
+frontend/.htpasswd
 
 # Logs
 logs/
 *.log
 
-# Local tooling
+# Local IDE
 .vscode/
 .idea/
-.claude/
-.codex/
-.kiro/
 
 # Temp / cache
 temp/
-/frontend/temp/
-/backend/temp/
 coverage/
 .nyc_output/
 *.tsbuildinfo
@@ -33,7 +31,5 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# AI Context Files
+# AI Context
 codebase-snapshot.xml
-context.md
-GIT_BRANCHING_STRATEGY.md
