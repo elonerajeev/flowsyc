@@ -8,6 +8,7 @@ import { asyncHandler } from "../utils/async-handler";
 import { requireAuth } from "../middleware/auth.middleware";
 import { validateBody } from "../middleware/validate.middleware";
 import { loginSchema, signupSchema, updateProfileSchema } from "../validators/auth.schema";
+import { logger } from "../utils/logger";
 
 export const authRouter = Router();
 

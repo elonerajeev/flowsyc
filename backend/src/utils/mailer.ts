@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
-
 import { AppError } from "../middleware/error.middleware";
+import { logger } from "./logger";
 
 type SendMailInput = {
   to: string;
