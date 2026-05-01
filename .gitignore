@@ -45,6 +45,3 @@ ANTHROPIC.md
 CLAUDE.md
 .opencode/
 skills/
-
-# EC2 setup
-ec2-setup.sh
