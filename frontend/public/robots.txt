@@ -1,5 +1,5 @@
 # Flowsyc CRM Robots.txt
-# https://flowsyc.com
+# https://flowsyc-svuj.vercel.app/
 
 User-agent: *
 Allow: /
@@ -29,7 +29,7 @@ User-agent: Twitterbot
 Allow: /
 
 # Sitemap
-Sitemap: https://flowsyc.com/sitemap.xml
+Sitemap: https://flowsyc-svuj.vercel.app/sitemap.xml
 
 # Disallow sensitive areas
 Disallow: /api/
