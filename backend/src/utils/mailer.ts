@@ -64,7 +64,7 @@ export async function sendMail(input: SendMailInput) {
   try {
     config = readMailConfig();
   } catch (err) {
-    console.warn("Mail skipped (not configured):", (err as any).message);
+    logger.warn("Mail skipped (not configured)", { message: (err as any).message });
     return;
   }
 
@@ -83,6 +83,6 @@ export async function sendMail(input: SendMailInput) {
     
     await transporter.sendMail(mailOptions);
   } catch (err) {
-    console.warn("Failed to deliver email:", (err as any).message);
+    logger.warn("Failed to deliver email", { message: (err as any).message });
   }
 }

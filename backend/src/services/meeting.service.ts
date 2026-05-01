@@ -3,6 +3,7 @@ import { AppError } from "../middleware/error.middleware";
 import type { AccessActor } from "../utils/access-control";
 import { sendMail } from "../utils/mailer";
 import { createCalendarEvent, isGoogleConnected } from "./google-auth.service";
+import { smtpConfig } from "../config/env";
 
 function generateJitsiUrl(hostEmail: string): string {
   const cleanedEmail = hostEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 8) || 'crm';
@@ -94,7 +95,7 @@ export const meetingService = {
     let meetingUrl: string | undefined;
     let googleEventId: string | undefined;
     let googleHtmlLink: string | undefined;
-    const hostEmail = String(actor?.email || "crm@focalpoint.com");
+    const hostEmail = String(actor?.email || smtpConfig.from);
 
     const startTime = new Date(input.scheduledAt);
     const endTime = new Date(startTime.getTime() + (input.duration || 30) * 60 * 1000);
@@ -286,7 +287,7 @@ export const meetingService = {
               ` : ""}
               
               <!-- Footer -->
-              <p style="margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center;">Sent via Focal Point Compass CRM</p>
+              <p style="margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center;">Sent via Flowsyc CRM</p>
             </td>
           </tr>
         </table>

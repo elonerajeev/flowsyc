@@ -6,8 +6,18 @@ import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { systemService } from "../services/system.service";
 import { getAuditLogs } from "../utils/audit";
 import { asyncHandler } from "../utils/async-handler";
+import { smtpConfig } from "../config/env";
 
 const systemRouter = Router();
+
+systemRouter.get("/company", (_req: Request, res: Response) => {
+  res.status(200).json({
+    name: process.env.COMPANY_NAME || "Flowsyc",
+    email: smtpConfig.hrEmail,
+    website: process.env.FRONTEND_URL || "https://flowsyc.ct.ws",
+    supportEmail: smtpConfig.replyTo || smtpConfig.from,
+  });
+});
 
 systemRouter.get("/theme-previews", (_req: Request, res: Response) => {
   res.status(200).json(systemService.getThemePreviews());
@@ -80,7 +90,7 @@ systemRouter.post("/integrations/slack/test", requireAuth, asyncHandler(async (r
       },
       {
         type: "context",
-        elements: [{ type: "mrkdwn", text: `Sent from *Focal Point CRM* · ${new Date().toLocaleString()}` }],
+        elements: [{ type: "mrkdwn", text: `Sent from *Flowsyc CRM* · ${new Date().toLocaleString()}` }],
       },
     ],
   };
@@ -107,7 +117,7 @@ systemRouter.post("/integrations/zapier/test", requireAuth, asyncHandler(async (
   const payload = {
     event: "test",
     timestamp: new Date().toISOString(),
-    source: "Focal Point CRM",
+    source: "Flowsyc CRM",
     data: {
       message: "Your Zapier integration is working correctly! You'll receive notifications here for key CRM events.",
       test: true,

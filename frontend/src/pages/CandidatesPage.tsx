@@ -281,7 +281,7 @@ export default function CandidatesPage() {
       <body>
         <div class="print-container">
           <header class="header-brand">
-            <div class="logo-text">FOCAL POINT <span style="font-weight: 400; color: #64748b;">COMPASS</span></div>
+            <div class="logo-text">FLOWSYC</div>
             <div class="doc-type">Official Employment Offer</div>
           </header>
           ${offerLetterRef.current.innerHTML}
@@ -748,13 +748,13 @@ export default function CandidatesPage() {
                                     <span style={{ color: "white", fontSize: "22px", fontWeight: "bold", fontFamily: "sans-serif" }}>F</span>
                                   </div>
                                   <div>
-                                    <div style={{ fontSize: "20px", fontWeight: "bold", color: "#1e3a5f", letterSpacing: "0.5px", fontFamily: "sans-serif" }}>Focal Point Compass</div>
+                                    <div style={{ fontSize: "20px", fontWeight: "bold", color: "#1e3a5f", letterSpacing: "0.5px", fontFamily: "sans-serif" }}>Flowsyc</div>
                                     <div style={{ fontSize: "11px", color: "#64748b", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: "sans-serif" }}>Human Resources Division</div>
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right", fontSize: "11px", color: "#64748b", lineHeight: "1.8", fontFamily: "sans-serif" }}>
-                                  <div>hr@focalpointcompass.com</div>
-                                  <div>www.focalpointcompass.com</div>
+                                  <div>hr@flowsyc.ct.ws</div>
+                                  <div>www.flowsyc.ct.ws</div>
                                   <div style={{ marginTop: "4px", color: "#94a3b8" }}>Ref: OL-{offerLetterData.candidate.name.replace(/\s/g, '').toUpperCase().slice(0,4)}-{new Date(offerLetterData.offer.generatedAt).getFullYear()}</div>
                                 </div>
                               </div>
@@ -783,7 +783,7 @@ export default function CandidatesPage() {
                                 <p style={{ marginBottom: "18px" }}>Dear <strong>{offerLetterData.candidate.name}</strong>,</p>
 
                                 <p style={{ marginBottom: "18px", color: "#334155" }}>
-                                  We are delighted to offer you the position of <strong style={{ color: "#1e3a5f" }}>{offerLetterData.offer.jobTitle}</strong> at <strong style={{ color: "#1e3a5f" }}>Focal Point Compass</strong>. After careful consideration of your qualifications and experience, we are confident that you will be a valuable addition to our <strong style={{ color: "#1e3a5f" }}>{offerLetterData.offer.department}</strong> team.
+                                  We are delighted to offer you the position of <strong style={{ color: "#1e3a5f" }}>{offerLetterData.offer.jobTitle}</strong> at <strong style={{ color: "#1e3a5f" }}>Flowsyc</strong>. After careful consideration of your qualifications and experience, we are confident that you will be a valuable addition to our <strong style={{ color: "#1e3a5f" }}>{offerLetterData.offer.department}</strong> team.
                                 </p>
 
                                 <p style={{ marginBottom: "28px", color: "#334155" }}>
@@ -821,7 +821,7 @@ export default function CandidatesPage() {
 
                               {/* Page 2 header */}
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "36px", paddingBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
-                                <div style={{ fontSize: "13px", color: "#1e3a5f", fontWeight: "bold", fontFamily: "sans-serif" }}>Focal Point Compass — Offer Letter (Continued)</div>
+                                <div style={{ fontSize: "13px", color: "#1e3a5f", fontWeight: "bold", fontFamily: "sans-serif" }}>Flowsyc — Offer Letter (Continued)</div>
                                 <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "sans-serif" }}>Page 2 of 2</div>
                               </div>
 
@@ -833,7 +833,7 @@ export default function CandidatesPage() {
                                   "This offer is contingent upon successful completion of background verification and reference checks.",
                                   "You will be required to submit all necessary documentation including identity proof, educational certificates, and previous employment records on or before your joining date.",
                                   "The first 90 days of employment will constitute a probationary period, during which your performance will be evaluated.",
-                                  "You are expected to maintain strict confidentiality regarding all proprietary information, trade secrets, and business strategies of Focal Point Compass.",
+                                  "You are expected to maintain strict confidentiality regarding all proprietary information, trade secrets, and business strategies of Flowsyc.",
                                   "This offer supersedes all prior discussions, negotiations, or representations made verbally or in writing.",
                                 ].map((text, i) => (
                                   <div key={i} style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
@@ -845,11 +845,11 @@ export default function CandidatesPage() {
                                 ))}
 
                                 <p style={{ marginTop: "24px", marginBottom: "36px" }}>
-                                  Please confirm your acceptance of this offer by signing below and returning a copy to our HR department at <strong style={{ color: "#1e3a5f" }}>hr@focalpointcompass.com</strong> no later than <strong style={{ color: "#1e3a5f" }}>5 business days</strong> from the date of this letter.
+                                  Please confirm your acceptance of this offer by signing below and returning a copy to our HR department at <strong style={{ color: "#1e3a5f" }}>hr@flowsyc.ct.ws</strong> no later than <strong style={{ color: "#1e3a5f" }}>5 business days</strong> from the date of this letter.
                                 </p>
 
                                 <p style={{ marginBottom: "40px" }}>
-                                  We look forward to welcoming you to the Focal Point Compass family. Should you have any questions, please do not hesitate to reach out.
+                                  We look forward to welcoming you to the Flowsyc family. Should you have any questions, please do not hesitate to reach out.
                                 </p>
 
                                 <p style={{ marginBottom: "40px" }}>Warm regards,</p>
@@ -867,7 +867,7 @@ export default function CandidatesPage() {
                                     </div>
                                     <div style={{ fontSize: "14px", fontWeight: "bold", color: "#1e293b" }}>{offerLetterData.hr.name}</div>
                                     <div style={{ fontSize: "12px", color: "#64748b", fontFamily: "sans-serif" }}>{offerLetterData.hr.designation}</div>
-                                    <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "sans-serif" }}>Focal Point Compass</div>
+                                    <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "sans-serif" }}>Flowsyc</div>
                                     <div style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "sans-serif" }}>{offerLetterData.hr.email}</div>
                                   </div>
 
@@ -890,7 +890,7 @@ export default function CandidatesPage() {
                                   <div style={{ width: "18px", height: "18px", background: "#1e3a5f", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     <span style={{ color: "white", fontSize: "9px", fontWeight: "bold", fontFamily: "sans-serif" }}>F</span>
                                   </div>
-                                  <span style={{ fontSize: "10px", color: "#64748b", fontFamily: "sans-serif" }}>Focal Point Compass</span>
+                                  <span style={{ fontSize: "10px", color: "#64748b", fontFamily: "sans-serif" }}>Flowsyc</span>
                                 </div>
                               </div>
                             </div>

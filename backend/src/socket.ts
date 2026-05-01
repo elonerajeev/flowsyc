@@ -8,21 +8,13 @@ export function initializeIO(server: http.Server): SocketIOServer {
   if (!_io) {
     _io = new SocketIOServer(server, {
       cors: {
-        origin: process.env.FRONTEND_URL ?? "http://localhost:8080",
+        origin: [
+          process.env.FRONTEND_URL ?? "http://localhost:8080",
+          "https://flowsyc-svuj.vercel.app",
+          "https://flowsyc.com",
+        ],
         methods: ["GET", "POST"],
       },
-    });
-
-    _io.on('connection', (socket) => {
-      logger.debug('User connected', { socketId: socket.id });
-
-      socket.on('disconnect', () => {
-        logger.debug('User disconnected', { socketId: socket.id });
-      });
-
-      socket.on('join', (userId: string) => {
-        socket.join(`user_${userId}`);
-      });
     });
   }
   return _io;

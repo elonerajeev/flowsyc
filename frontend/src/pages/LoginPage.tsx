@@ -65,6 +65,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-6 rounded-3xl border border-border bg-card p-8 shadow-card">
         <div>
+          <img src="/logo.png" alt="Flowsyc" className="h-16 w-16 mb-4" />
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Sign in</p>
           <h1 className="mt-3 text-3xl font-display font-semibold text-foreground">Welcome back</h1>
           {pendingSwitchRole ? (

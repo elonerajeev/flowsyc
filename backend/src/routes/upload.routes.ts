@@ -2,13 +2,13 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/auth.middleware";
-import { uploadAvatar, uploadResume, uploadDocument, getFileUrl, deleteFile, resolveFilePath } from "../services/storage.service";
+import { uploadAvatar, uploadResume, uploadDocument, uploadToCloudinary, deleteFromCloudinary } from "../services/storage.service";
 
 const uploadRouter = Router();
 
-// POST /upload/avatar - Upload avatar image
+// POST /upload/avatar - Upload avatar image to Cloudinary
 uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
-  uploadAvatar.single("file")(req, res, (err) => {
+  uploadAvatar.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -16,20 +16,25 @@ uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("avatars", req.file.filename);
-    res.status(201).json({
-      url,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-    });
+
+    try {
+      const { url, publicId } = await uploadToCloudinary(req.file, "avatars");
+      res.status(201).json({
+        url,
+        publicId,
+        filename: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    } catch (uploadErr) {
+      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
+    }
   });
 });
 
-// POST /upload/resume - Upload candidate resume
+// POST /upload/resume - Upload candidate resume to Cloudinary
 uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
-  uploadResume.single("file")(req, res, (err) => {
+  uploadResume.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -37,20 +42,25 @@ uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("resumes", req.file.filename);
-    res.status(201).json({
-      url,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-    });
+
+    try {
+      const { url, publicId } = await uploadToCloudinary(req.file, "resumes");
+      res.status(201).json({
+        url,
+        publicId,
+        filename: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    } catch (uploadErr) {
+      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
+    }
   });
 });
 
-// POST /upload/document - Upload general document
+// POST /upload/document - Upload general document to Cloudinary
 uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
-  uploadDocument.single("file")(req, res, (err) => {
+  uploadDocument.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -58,48 +68,31 @@ uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("documents", req.file.filename);
-    res.status(201).json({
-      url,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-    });
+
+    try {
+      const { url, publicId } = await uploadToCloudinary(req.file, "documents");
+      res.status(201).json({
+        url,
+        publicId,
+        filename: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    } catch (uploadErr) {
+      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
+    }
   });
 });
 
-// DELETE /upload/:category/:filename - Delete uploaded file
-uploadRouter.delete("/:category/:filename", requireAuth, (req: Request, res: Response) => {
-  const { category, filename } = req.params;
-  const validCategories = ["avatars", "resumes", "documents"];
-  const cat = String(category);
-
-  if (!validCategories.includes(cat)) {
-    res.status(400).json({ error: "Invalid category", code: "INVALID_CATEGORY" });
-    return;
+// DELETE /upload/:publicId - Delete uploaded file from Cloudinary
+uploadRouter.delete("/:publicId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { publicId } = req.params;
+    await deleteFromCloudinary(String(publicId));
+    res.status(200).json({ message: "File deleted" });
+  } catch (err) {
+    res.status(500).json({ error: "Delete failed", code: "DELETE_FAILED" });
   }
-
-  const deleted = deleteFile(cat, String(filename));
-  if (!deleted) {
-    res.status(404).json({ error: "File not found", code: "FILE_NOT_FOUND" });
-    return;
-  }
-
-  res.status(200).json({ message: "File deleted" });
-});
-
-// GET /uploads/:category/:filename - Serve uploaded files
-uploadRouter.get("/file/:category/:filename", (req: Request, res: Response) => {
-  const { category, filename } = req.params;
-  const relativePath = `uploads/${String(category)}/${String(filename)}`;
-  const filePath = resolveFilePath(relativePath);
-
-  if (!filePath) {
-    return res.status(404).json({ error: "File not found", code: "FILE_NOT_FOUND" });
-  }
-
-  res.sendFile(filePath);
 });
 
 export { uploadRouter };

@@ -2,7 +2,15 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import { AppError } from "../middleware/error.middleware";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
 
@@ -54,6 +62,26 @@ function createStorage(category: string) {
 export const uploadAvatar = createStorage("avatar");
 export const uploadResume = createStorage("resume");
 export const uploadDocument = createStorage("document");
+
+export async function uploadToCloudinary(file: Express.Multer.File, folder: string): Promise<{ url: string; publicId: string }> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: `flowsyc/${folder}`,
+        resource_type: "auto",
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve({ url: result!.secure_url, publicId: result!.public_id });
+      }
+    );
+    stream.end(file.buffer);
+  });
+}
+
+export async function deleteFromCloudinary(publicId: string): Promise<void> {
+  await cloudinary.uploader.destroy(publicId);
+}
 
 export function getFileUrl(category: string, filename: string): string {
   return `/uploads/${category}/${filename}`;

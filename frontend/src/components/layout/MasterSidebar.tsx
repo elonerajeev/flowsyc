@@ -32,9 +32,7 @@ export default function MasterSidebar({ activeSection, onSectionChange }: Master
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-[72px] flex-col border-r border-sidebar-border bg-[hsl(var(--sidebar-bg))] shadow-[4px_0_16px_hsl(var(--sidebar-border)/0.5)]">
       <div className="relative flex h-16 items-center justify-center border-b border-sidebar-border">
-        <div className={cn("flex h-10 w-10 items-center justify-center bg-gradient-to-br from-primary via-accent to-info shadow-lg shadow-black/20", RADIUS.lg)}>
-          <Zap className="h-5 w-5 text-primary-foreground" />
-        </div>
+        <img src="/logo.png" alt="Flowsyc" className="h-10 w-10 rounded-lg shadow-lg shadow-black/20" />
       </div>
 
       <div className="flex-1 px-2 py-4">

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/Flowsyc Prime Workflow Logo.png" alt="Flowsyc" width="200"/>
+  <img src="docs/Flowsyc-Prime-Workflow-Logo.gif" alt="Flowsyc Logo" width="200"/>
 </p>
 
 <h1 align="center">Flowsyc</h1>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://flowsyc.com"><img src="https://img.shields.io/badge/Website-flowsyc.com-blue?style=for-the-badge&logo=web" alt="Website"/></a>
+  <a href="https://flowsyc-svuj.vercel.app"><img src="https://img.shields.io/badge/Website-flowsyc--svuj.vercel.app-blue?style=for-the-badge&logo=vercel" alt="Website"/></a>
   <a href="https://github.com/elonerajeev/flowsyc"><img src="https://img.shields.io/badge/GitHub-elonerajeev/flowsyc-blue?style=for-the-badge&logo=github" alt="GitHub"/></a>
   <a href="https://github.com/elonerajeev/flowsyc/stargazers"><img src="https://img.shields.io/github/stars/elonerajeev/flowsyc?style=for-the-badge" alt="Stars"/></a>
   <a href="https://github.com/elonerajeev/flowsyc/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/></a>
@@ -85,7 +85,7 @@ Flowsyc replaces **dozens** of disconnected tools with a single, unified platfor
 
 | Dashboard | Sales Pipeline | HR Management |
 |-----------|--------------|---------------|
-| ![Dashboard](docs/Flowsyc%20Prime%20Workflow%20Logo.png) | ![Pipeline](docs/Flowsyc%20Prime%20Workflow%20Logo.png) | ![HR](docs/Flowsyc%20Prime%20Workflow%20Logo.png) |
+| ![Dashboard](docs/Flowsyc-Prime-Workflow-Logo.png) | ![Pipeline](docs/Flowsyc-Prime-Workflow-Logo.jpg) | ![HR](docs/Flowsyc-Prime-Workflow-Logo.gif) |
 
 *See more in [docs/](docs/) folder.*
 
@@ -119,19 +119,20 @@ docker-compose up -d
 # Visit http://localhost:8080
 ```
 
-### Manual Setup
+### Manual Setup (Frontend on Vercel + Backend on EC2)
 
 ```bash
-# Backend
+# Backend (on EC2)
 cd backend
 npm install
 npx prisma migrate deploy
-npm run dev
+npm run build
+npm start
 
-# Frontend (new terminal)
-cd frontend
-npm install
-npm run dev
+# Frontend (deploy to Vercel)
+# Connect GitHub repo to Vercel and set env vars:
+# VITE_API_BASE_URL=http://185.27.134.55/api
+# VITE_SOCKET_URL=ws://185.27.134.55
 ```
 
 ---
@@ -170,21 +171,21 @@ CLOUDINARY_API_SECRET=
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                   FRONTEND (React)                       │
-│  Port 8080 (prod) / 5173 (dev)                        │
-│  • 35+ Pages  • Role-Gated  • Responsive            │
+│  Port 8080 (prod) / 5173 (dev)                           │
+│  • 35+ Pages  • Role-Gated  • Responsive                 │
 └────────────────────┬────────────────────────────────────┘
                      │ HTTP + WebSocket
 ┌────────────────────▼────────────────────────────────────┐
-│                   BACKEND (Express)              │
-│  Port 3000                                     │
-│  • REST API  • Auth  • Socket.IO               │
-│  • Zod Validation  • Rate Limiting            │
+│                   BACKEND (Express)                     │
+│  Port 3000                                              │
+│  • REST API  • Auth  • Socket.IO                        │
+│  • Zod Validation  • Rate Limiting                      │
 └────────────────────┬────────────────────────────────────┘
                      │ Prisma ORM
 ┌────────────────────▼────────────────────────────────────┐
-│              DATABASE (PostgreSQL)                  │
-│  • 30+ Models  • Migrations  • Indexes       │
-└─────────────────────────────────────────────┘
+│              DATABASE (PostgreSQL)                      │
+│  • 30+ Models  • Migrations  • Indexes                  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -249,5 +250,5 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 <p align="center">
   <strong>Built with ❤️ by Flowsyc Team</strong><br/>
-  <a href="https://flowsyc.com">flowsyc.com</a>
+  <a href="https://flowsyc-svuj.vercel.app">flowsyc-svuj.vercel.app</a>
 </p>

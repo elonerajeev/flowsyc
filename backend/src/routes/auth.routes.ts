@@ -88,7 +88,7 @@ authRouter.get("/google/callback", asyncHandler(async (req, res) => {
   const { code, error: googleError, error_description, state } = req.query;
   
   if (googleError) {
-    console.error("Google auth error:", googleError, error_description);
+    logger.error("Google auth error", { googleError, error_description });
     return res.redirect(`${env.FRONTEND_URL}/login?error=google_${googleError}`);
   }
   
@@ -108,7 +108,7 @@ authRouter.get("/google/callback", asyncHandler(async (req, res) => {
     setAuthCookies(res, session.accessToken, session.refreshToken);
     return res.redirect(`${env.FRONTEND_URL}/auth/google/callback`);
   } catch (error) {
-    console.error("Google callback error:", error);
+    logger.error("Google callback error", { error });
     return res.redirect(`${env.FRONTEND_URL}/login?error=google_auth_failed`);
   }
 }));
@@ -130,7 +130,7 @@ authRouter.get("/google/calendar-callback", asyncHandler(async (req, res) => {
     
     return res.redirect(`${env.FRONTEND_URL}/system/settings?google=connected`);
   } catch (error) {
-    console.error("Google calendar callback error:", error);
+    logger.error("Google calendar callback error", { error });
     return res.redirect(`${env.FRONTEND_URL}/system/settings?google=error`);
   }
 }));

@@ -54,6 +54,17 @@ async function start() {
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  
+  // Handle unhandled rejections
+  process.on("unhandledRejection", (reason) => {
+    logger.error("Unhandled rejection", { reason });
+  });
+  
+  // Handle uncaught exceptions
+  process.on("uncaughtException", (err) => {
+    logger.error("Uncaught exception", { error: err });
+    process.exit(1);
+  });
 }
 
 start().catch(async (error: unknown) => {

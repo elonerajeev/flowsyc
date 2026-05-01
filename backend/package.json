@@ -1,5 +1,5 @@
 {
-  "name": "focal-point-compass-backend",
+  "name": "flowsyc-backend",
   "private": true,
   "version": "0.1.0",
   "type": "commonjs",
@@ -19,6 +19,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/sanitize-html": "^2.16.1",
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.0",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
