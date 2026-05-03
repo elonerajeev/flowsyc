@@ -2,28 +2,51 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
+import AuthLayout from "@/components/layout/AuthLayout";
 import type { UserRole } from "@/contexts/ThemeContext";
+
+const strengthRules = [
+  { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
+  { label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+  { label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  { label: "One number", test: (p: string) => /[0-9]/.test(p) },
+  { label: "One special character", test: (p: string) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(p) },
+];
+
+function getStrength(password: string): { score: number; label: string; color: string } {
+  if (!password) return { score: 0, label: "", color: "" };
+  const score = strengthRules.filter((r) => r.test(password)).length;
+  if (score <= 1) return { score, label: "Weak", color: "bg-destructive" };
+  if (score <= 3) return { score, label: "Fair", color: "bg-warning" };
+  if (score <= 4) return { score, label: "Good", color: "bg-info" };
+  return { score, label: "Strong", color: "bg-success" };
+}
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const { signup } = useAuth();
-  const { setRole } = useTheme();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setLocalRole] = useState<UserRole>("employee");
+  const [role] = useState<UserRole>("admin");
   const [error, setError] = useState("");
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const strength = getStrength(password);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      const user = await signup({ name, email, password, role });
-      setRole(user.role);
-      navigate("/overview");
+      await signup({ name, email, password, role });
+      // Redirect to check-email — user must verify before logging in
+      navigate("/check-email", { state: { email } });
     } catch {
       setError("Unable to create account. Try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -31,7 +54,7 @@ export default function SignupPage() {
     setLoadingGoogle(true);
     setError("");
     try {
-      const response = await fetch(`/api/auth/google/login-url?intent=signup&role=${encodeURIComponent(role)}`);
+      const response = await fetch(`/api/auth/google/login-url?intent=signup&role=admin`);
       if (!response.ok) throw new Error("Failed to get auth URL");
       const data = await response.json();
       if (data.authUrl) {
@@ -45,13 +68,13 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-6 rounded-3xl border border-border bg-card p-8 shadow-card">
+    <AuthLayout showBack={false}>
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Create account</p>
-          <h1 className="mt-3 text-3xl font-display font-semibold text-foreground">Join the workspace</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pick a role and we&apos;ll personalize your layout.
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#5355D6]">Create account</p>
+          <h1 className="mt-2 text-2xl font-bold text-white">Join Flowsyc</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Create your admin account to set up your workspace.
           </p>
         </div>
 
@@ -92,20 +115,30 @@ export default function SignupPage() {
             />
           </label>
 
-          <label className="space-y-2 text-sm font-semibold text-foreground">
-            Role
-            <select
-              value={role}
-              onChange={(event) => setLocalRole(event.target.value as UserRole)}
-              className="h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {(["employee", "client"] as UserRole[]).map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
+          {password && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${strength.color}`}
+                    style={{ width: `${(strength.score / strengthRules.length) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-muted-foreground">{strength.label}</span>
+              </div>
+              <ul className="space-y-1">
+                {strengthRules.map((rule) => (
+                  <li key={rule.label} className="flex items-center gap-2 text-xs">
+                    <span className={`h-1.5 w-1.5 rounded-full transition-colors ${rule.test(password) ? "bg-success" : "bg-muted-foreground/30"}`} />
+                    <span className={rule.test(password) ? "text-muted-foreground" : "text-muted-foreground/50"}>
+                      {rule.label}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
         </div>
 
         {error && (
@@ -114,9 +147,10 @@ export default function SignupPage() {
 
         <button
           type="submit"
-          className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+          disabled={loading}
+          className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Create account
+          {loading ? "Creating account..." : "Create account"}
         </button>
 
         <div className="relative">
@@ -147,6 +181,6 @@ export default function SignupPage() {
           Already have an account? <button type="button" onClick={() => navigate("/login")} className="text-primary underline">Sign in</button>.
         </p>
       </form>
-    </div>
+    </AuthLayout>
   );
 }
