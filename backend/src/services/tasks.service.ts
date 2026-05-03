@@ -8,7 +8,6 @@ import { getEmployeeAssigneeScope } from "../utils/access-control";
 import { sendTaskAssignmentEmail } from "../utils/email-templates";
 import { getIO } from "../socket";
 import { triggerAutomation } from "./automation-engine";
-import { createNotification } from "./notifications.service";
 
 type TaskRecord = {
   id: number;
@@ -52,6 +51,7 @@ type AccessScope = {
   role: UserRole;
   userId: string;
   email: string;
+  organizationId?: string;
 } | null | undefined;
 
 function toDbPriority(priority: TaskRecord["priority"]): TaskPriority {
@@ -99,35 +99,18 @@ function mapTask(task: {
 function buildTaskWhere(
   query: { column?: TaskRecord["column"]; priority?: TaskRecord["priority"]; projectId?: number },
   employeeAssignees?: string[] | null,
-  access?: AccessScope,
+  organizationId?: string,
 ): Prisma.TaskWhereInput {
-  const isAdminOrManager = access?.role === "admin" || access?.role === "manager";
-
-  let assigneeFilter: Prisma.TaskWhereInput = {};
-  if (employeeAssignees) {
-    assigneeFilter = { assignee: { in: employeeAssignees as any } };
-  } else if (!isAdminOrManager && access?.email) {
-    assigneeFilter = { assignee: access.email };
-  }
-
-  let createdByFilter: Prisma.TaskWhereInput = {};
-  if (isAdminOrManager && access?.email) {
-    createdByFilter = { createdBy: access.email };
-  }
-
   return {
     deletedAt: null,
+    ...(organizationId ? { organizationId } : {}),
     ...(query.column ? { column: toDbColumn(query.column) } : {}),
     ...(query.priority ? { priority: query.priority } : {}),
     ...(query.projectId ? { projectId: query.projectId } : {}),
-    ...assigneeFilter,
-    ...(createdByFilter.OR ? {} : createdByFilter),
-    OR: [
-      assigneeFilter,
-      createdByFilter,
-    ].filter(w => Object.keys(w).length > 0),
+    ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : {}),
   };
 }
+
 async function ensureProjectExists(projectId?: number | null) {
   if (!projectId) {
     return;
@@ -174,7 +157,7 @@ export const tasksService = {
           where: {
             deletedAt: null,
             id: taskId,
-            assignee: { in: employeeAssignees as any },
+            assignee: { in: employeeAssignees },
           },
         })
       : await prisma.task.findUnique({ where: { id: taskId } });
@@ -186,7 +169,7 @@ export const tasksService = {
 
   async list(query: TaskQuery, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees as any, access);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
 
     const tasks = await prisma.task.findMany({
       where,
@@ -210,7 +193,7 @@ export const tasksService = {
     }
 
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees as any, access);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
     const limit = Math.max(1, Math.min(query.limit, 100));
     const page = Math.max(1, query.page);
     const skip = (page - 1) * limit;
@@ -237,7 +220,7 @@ export const tasksService = {
 
   async stats(query: TaskStatsQuery, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees as any, access);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
 
     const grouped = await prisma.task.groupBy({
       by: ["column"],
@@ -278,8 +261,8 @@ export const tasksService = {
         valueStream: input.valueStream ?? "Growth",
         column: toDbColumn(input.column ?? "todo"),
         projectId: input.projectId ?? null,
+        organizationId: access?.organizationId ?? null,
         updatedAt: new Date(),
-        createdBy: access?.email,
       },
     });
 
@@ -334,23 +317,6 @@ export const tasksService = {
       },
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
-    // Create notification for assignee
-    if (assignee && access) {
-      createNotification({
-        userId: assignee.email,
-        type: "task",
-        title: "New task assigned",
-        message: `You have been assigned to task: ${task.title}`,
-        priority: toDbPriority(input.priority) === "high" ? "high" : "medium",
-        linkUrl: `/tasks?taskId=${task.id}`,
-        linkLabel: "View task",
-        entityType: "Task",
-        entityId: task.id,
-        batchKey: `task-assigned-${assignee.email}`,
-        metadata: { taskId: task.id, priority: task.priority },
-      }).catch((err) => logger.error("Failed to create notification:", err));
-    }
-
     // Emit real-time update
     const socketIO = getIO();
     if (socketIO) {
@@ -371,7 +337,7 @@ export const tasksService = {
           where: {
             id: taskId,
             deletedAt: null,
-            assignee: { in: employeeAssignees as any },
+            assignee: { in: employeeAssignees },
           },
         })
       : await prisma.task.findUnique({ where: { id: taskId } });
@@ -444,7 +410,7 @@ export const tasksService = {
           where: {
             id: taskId,
             deletedAt: null,
-            assignee: { in: employeeAssignees as any },
+            assignee: { in: employeeAssignees },
           },
         })
       : await prisma.task.findUnique({ where: { id: taskId } });

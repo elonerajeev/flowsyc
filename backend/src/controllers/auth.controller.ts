@@ -206,7 +206,7 @@ export const authController = {
   logout: async (req: Request, res: Response): Promise<void> => {
     if (req.auth) {
       await authService.logout(req.auth.userId);
-      await logAudit({ userId: req.auth.userId, userName: req.auth.email, action: "logout", entity: "Auth", detail: "Logged out" });
+      await logAudit({ userId: req.auth.userId, organizationId: req.auth?.organizationId, userName: req.auth.email, action: "logout", entity: "Auth", detail: "Logged out" });
     }
     clearAuthCookies(res);
     res.status(200).json({ message: "Logged out successfully" });

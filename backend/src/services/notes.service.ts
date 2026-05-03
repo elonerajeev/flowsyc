@@ -1,6 +1,5 @@
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
-import type { AccessActor } from "../utils/access-control";
 
 type NoteRecord = {
   id: number;
@@ -43,25 +42,19 @@ function mapNote(note: {
 }
 
 export const notesService = {
-  async list(actor?: AccessActor) {
-    const where: { deletedAt: null; authorId?: string } = { deletedAt: null };
-    
-    // Admin/Manager: see only their own notes; Employee: see their own
-    if (actor?.role === "admin" || actor?.role === "manager") {
-      where.authorId = actor.email;
-    } else if (actor?.role === "employee" && actor.email) {
-      where.authorId = actor.email;
-    }
-
+  async list(authorId: string, organizationId?: string) {
     const notes = await prisma.note.findMany({
-      where,
+      where: {
+        deletedAt: null,
+        authorId,
+        ...(organizationId ? { organizationId } : {}),
+      },
       orderBy: [{ isPinned: "desc" }, { updatedAt: "desc" }],
     });
     return { data: notes.map(mapNote) };
   },
 
-  async getById(noteId: number, actor?: AccessActor) {
-    const authorId = actor?.email ?? "";
+  async getById(noteId: number, authorId: string) {
     const note = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!note || note.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
@@ -69,25 +62,22 @@ export const notesService = {
     return mapNote(note);
   },
 
-  async create(actor: AccessActor, input: NoteInput) {
-    if (!actor?.email) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    }
+  async create(authorId: string, input: NoteInput, organizationId?: string) {
     const note = await prisma.note.create({
       data: {
         title: input.title,
         content: input.content ?? "",
         isPinned: input.isPinned ?? false,
         color: input.color ?? "default",
-        authorId: actor.email,
+        authorId,
+        organizationId: organizationId ?? null,
         updatedAt: new Date(),
       },
     });
     return mapNote(note);
   },
 
-  async update(noteId: number, actor: AccessActor, patch: Partial<NoteInput>) {
-    const authorId = actor?.email ?? "";
+  async update(noteId: number, authorId: string, patch: Partial<NoteInput>) {
     const existing = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
@@ -105,8 +95,7 @@ export const notesService = {
     return mapNote(note);
   },
 
-  async delete(noteId: number, actor: AccessActor) {
-    const authorId = actor?.email ?? "";
+  async delete(noteId: number, authorId: string) {
     const existing = await prisma.note.findUnique({ where: { id: noteId, authorId } });
     if (!existing || existing.deletedAt) {
       throw new AppError("Note not found", 404, "NOT_FOUND");
