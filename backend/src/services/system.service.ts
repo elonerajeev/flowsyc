@@ -55,16 +55,17 @@ export const systemService = {
   async getZapierIntegration(userId: string, event: string) {
     try {
       const prisma = (await import("../config/prisma")).prisma;
-      const integration = await (prisma as any).integration.findFirst({
+      const integration = await prisma.integration.findFirst({
         where: { userId, id: "zapier", status: "connected" },
       });
 
-      if (!integration?.config?.webhookUrl || !integration?.config?.events?.includes(event)) {
+      const config = integration?.config as { webhookUrl?: string; events?: string[] } | undefined;
+      if (!config?.webhookUrl || !config?.events?.includes(event)) {
         return null;
       }
 
       return {
-        webhookUrl: integration.config.webhookUrl,
+        webhookUrl: config.webhookUrl,
         enabled: true,
       };
     } catch {

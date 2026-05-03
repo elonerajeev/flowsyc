@@ -7,6 +7,8 @@ import { GTMAutomationService } from "./gtm-automation.service";
 import { gtmLifecycleService } from "./gtm-lifecycle.service";
 import { logger } from "../utils/logger";
 import { cache, TTL } from "../utils/cache";
+import { normalizePagination } from "../utils/pagination";
+import { createNotification } from "./notifications.service";
 
 type LeadRecord = {
   id: number;
@@ -181,17 +183,19 @@ export const leadsService = {
       !params.assignedTo && !params.assignedState && params.minScore === undefined && params.maxScore === undefined &&
       access?.role !== "employee" && (params.limit || 50) >= 100;
 
-    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.page || 1}:${params.limit || 50}`;
+    const { page, limit, skip } = normalizePagination({ page: params.page, limit: params.limit });
+
+    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${page}:${limit}`;
     if (isUnfiltered) {
-      const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
+      const cached = await cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
       if (cached) return cached;
     }
 
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
-      take: params.limit || 50,
-      skip: params.page ? (params.page - 1) * (params.limit || 50) : 0,
+      take: limit,
+      skip,
       select: {
         id: true,
         firstName: true,
@@ -217,7 +221,7 @@ export const leadsService = {
     const total = await prisma.lead.count({ where });
 
     const result = { leads: leads.map(mapLead), total, page: params.page || 1, limit: params.limit || 50 };
-    if (isUnfiltered) cache.set(cacheKey, result, TTL.LEADS_LIST);
+    if (isUnfiltered) await cache.set(cacheKey, result, TTL.LEADS_LIST);
     return result;
   },
 
@@ -290,7 +294,24 @@ export const leadsService = {
       createdBy: access?.email,
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
-    cache.invalidatePrefix("leads:list");
+    // Notify assigned user if there's an assignee
+    if (lead.assignedTo) {
+      createNotification({
+        userId: lead.assignedTo,
+        type: "lead",
+        title: "New lead assigned",
+        message: `You have been assigned to lead: ${lead.firstName} ${lead.lastName}`,
+        priority: lead.score > 70 ? "high" : "medium",
+        linkUrl: `/leads?leadId=${lead.id}`,
+        linkLabel: "View lead",
+        entityType: "Lead",
+        entityId: lead.id,
+        batchKey: `lead-assigned-${lead.assignedTo}`,
+        metadata: { leadId: lead.id, score: lead.score },
+      }).catch((err) => logger.error("Failed to create notification:", err));
+    }
+
+    await cache.invalidatePrefix("leads:list");
     return mapLead(lead);
   },
 
@@ -327,7 +348,7 @@ export const leadsService = {
       gtmLifecycleService.syncLeadLifecycle(lead.id, access?.email).catch((err) => logger.error("Lifecycle sync failed:", err));
     }
 
-    cache.invalidatePrefix("leads:list");
+    await cache.invalidatePrefix("leads:list");
     cache.invalidatePattern("gtm:overview:");
     return mapLead(lead);
   },
@@ -376,7 +397,7 @@ export const leadsService = {
     });
     
     // Invalidate caches
-    cache.invalidatePrefix("leads:list");
+    await cache.invalidatePrefix("leads:list");
     cache.invalidatePattern("gtm:overview:");
   },
 

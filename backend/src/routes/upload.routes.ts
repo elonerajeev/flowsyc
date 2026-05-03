@@ -3,12 +3,13 @@ import { Router } from "express";
 
 import { requireAuth } from "../middleware/auth.middleware";
 import { uploadAvatar, uploadResume, uploadDocument, getFileUrl, deleteFile, resolveFilePath } from "../services/storage.service";
+import { optimizeUploadedImage } from "../services/image-optimization.service";
 
 const uploadRouter = Router();
 
 // POST /upload/avatar - Upload avatar image
 uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
-  uploadAvatar.single("file")(req, res, (err) => {
+  uploadAvatar.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -16,14 +17,32 @@ uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("avatars", req.file.filename);
-    res.status(201).json({
-      url,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-    });
+
+    try {
+      // Optimize the avatar
+      const { optimizedPath, thumbnailPath } = await optimizeUploadedImage(req.file.path);
+      const url = getFileUrl("avatar", optimizedPath);
+      const thumbUrl = getFileUrl("avatar", thumbnailPath);
+
+      res.status(201).json({
+        url,
+        thumbUrl,
+        filename: optimizedPath,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: "image/webp",
+      });
+    } catch (optErr) {
+      // Fallback if optimization fails
+      const url = getFileUrl("avatar", req.file.filename);
+      res.status(201).json({
+        url,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    }
   });
 });
 
@@ -37,7 +56,7 @@ uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("resumes", req.file.filename);
+    const url = getFileUrl("resume", req.file.filename);
     res.status(201).json({
       url,
       filename: req.file.filename,
@@ -58,7 +77,7 @@ uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-    const url = getFileUrl("documents", req.file.filename);
+    const url = getFileUrl("document", req.file.filename);
     res.status(201).json({
       url,
       filename: req.file.filename,
@@ -72,7 +91,7 @@ uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
 // DELETE /upload/:category/:filename - Delete uploaded file
 uploadRouter.delete("/:category/:filename", requireAuth, (req: Request, res: Response) => {
   const { category, filename } = req.params;
-  const validCategories = ["avatars", "resumes", "documents"];
+  const validCategories = ["avatar", "resume", "document"];
   const cat = String(category);
 
   if (!validCategories.includes(cat)) {

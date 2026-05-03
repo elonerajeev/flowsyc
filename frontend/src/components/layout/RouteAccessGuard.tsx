@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Lock, ShieldAlert } from "lucide-react";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { isRemoteApiEnabled } from "@/lib/api-client";
 import { getAccessiblePathForRole, getAllowedRolesForPath } from "./sidebarConfig";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
@@ -15,15 +17,21 @@ export default function RouteAccessGuard({ children }: RouteAccessGuardProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useTheme();
+  const { user } = useAuth();
+  const effectiveRole = user?.role ?? role;
+
+  if (isRemoteApiEnabled() && !user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const allowedRoles = getAllowedRolesForPath(location.pathname);
 
   if (!allowedRoles) {
-    return <Navigate to={getAccessiblePathForRole(role)} replace />;
+    return <Navigate to={getAccessiblePathForRole(effectiveRole)} replace />;
   }
 
-  if (!allowedRoles.includes(role)) {
-    const fallback = getAccessiblePathForRole(role);
+  if (!allowedRoles.includes(effectiveRole)) {
+    const fallback = getAccessiblePathForRole(effectiveRole);
 
     return (
       <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-8">
@@ -34,7 +42,7 @@ export default function RouteAccessGuard({ children }: RouteAccessGuardProps) {
           <p className={cn("mt-4 font-semibold uppercase tracking-[0.2em] text-muted-foreground", TEXT.eyebrow)}>Access restricted</p>
           <h1 className="mt-3 font-display text-3xl font-semibold text-foreground">You do not have access to this page</h1>
           <p className={cn("mx-auto mt-3 max-w-lg text-muted-foreground", TEXT.bodyRelaxed)}>
-            Your current role is <span className="font-semibold text-foreground">{role}</span>. This section is hidden in the frontend until your backend permissions are connected.
+            Your current role is <span className="font-semibold text-foreground">{effectiveRole}</span>. This section is hidden in the frontend until your backend permissions are connected.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <button

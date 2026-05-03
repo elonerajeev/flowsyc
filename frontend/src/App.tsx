@@ -162,7 +162,7 @@ const App = () => {
 
                               <Route path="/hr/hiring" element={<RouteAccessGuard><HiringPage /></RouteAccessGuard>} />
                               <Route path="/hr/candidates" element={<RouteAccessGuard><CandidatesPage /></RouteAccessGuard>} />
-                              <Route path="/hr/employees" element={<Navigate to="/people/members" replace />} />
+                              <Route path="/hr/employees" element={<RouteAccessGuard><TeamPage /></RouteAccessGuard>} />
                               <Route path="/hr/payroll" element={<RouteAccessGuard><PayrollPage /></RouteAccessGuard>} />
 
                               <Route path="/insights/analytics" element={<RouteAccessGuard><AnalyticsPage /></RouteAccessGuard>} />
@@ -209,6 +209,14 @@ const App = () => {
                               <Route path="/integrations" element={<Navigate to="/system/integrations" replace />} />
                               <Route path="/billing" element={<Navigate to="/finance" replace />} />
                               <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
+                              {/* Section root redirects */}
+                              <Route path="/people" element={<Navigate to="/people/teams" replace />} />
+                              <Route path="/workspace" element={<Navigate to="/workspace/tasks" replace />} />
+                              <Route path="/sales" element={<Navigate to="/sales/leads" replace />} />
+                              <Route path="/hr" element={<Navigate to="/hr/hiring" replace />} />
+                              <Route path="/insights" element={<Navigate to="/insights/analytics" replace />} />
+                              <Route path="/automation" element={<Navigate to="/automation/rules" replace />} />
+                              <Route path="/system" element={<Navigate to="/system/settings" replace />} />
                               <Route path="/restricted" element={<RestrictedPage />} />
                               <Route path="*" element={<NotFound />} />
                             </Routes>

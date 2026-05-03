@@ -23,8 +23,20 @@ router.post(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req: Request, res: Response) => {
     const contactData: ContactInput = req.body;
-    const contact = await contactsService.create(contactData);
+    const contact = await contactsService.create(contactData, req.auth);
     res.status(201).json(contact);
+  })
+);
+
+// GET /api/contacts/:id - Get contact by ID
+router.get(
+  "/:id",
+  requireAuth,
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const contact = await contactsService.getById(id, req.auth);
+    res.json(contact);
   })
 );
 

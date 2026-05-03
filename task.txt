@@ -1,0 +1,13 @@
+1. why this routes get slowed to load check and fix if have any dead thinsg and make it fast while 
+keepign all functi and main thiungs "http://localhost:8080/hr/candidates"
+
+2. in teh app some of the page have this text button "Refresh List", instead of just Refresh List button 
+without "" (quotes) check in app and make it fix. also make sute this button reayy wokring well and functional on al page ()where have implemnetd)
+
+3. when i try to comeon this "Section HR in Employees" then it automatic go on this "Section People Members" why fix this now and ensure all routes pointing correct 
+
+4. this page look very messy "http://localhost:8080/system/settings" so clean it and keepig main things and important things , aldo why this is here "Google Calendar
+
+Connect to create real Google Meet links for meetings", keep thi sin seeting intergation page
+
+5.  

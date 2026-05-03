@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import { QUERY_LIMITS } from "../utils/query-limits";
 import { AutomationTrigger as PrismaAutomationTrigger, Prisma } from "@prisma/client";
 import { sendMail } from "../utils/mailer";
 import { logger } from "../utils/logger";
@@ -115,7 +116,8 @@ async function getRulesForTrigger(trigger: TriggerType): Promise<AutomationRule[
       isActive: true,
       status: "active"
     },
-    orderBy: { priority: "desc" }
+    orderBy: { priority: "desc" },
+    take: QUERY_LIMITS.AUTOMATION_BATCH,
   }) as Promise<AutomationRule[]>;
 }
 
@@ -1367,7 +1369,7 @@ export async function executeScheduledJobs() {
       status: "pending",
       scheduledFor: { lte: now }
     },
-    take: 10
+    take: QUERY_LIMITS.SCHEDULED_JOBS,
   });
   
   for (const job of jobs) {

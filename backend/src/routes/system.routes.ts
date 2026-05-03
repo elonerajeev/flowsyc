@@ -16,10 +16,9 @@ systemRouter.get("/theme-previews", (_req: Request, res: Response) => {
 // GET /system/integrations - get user's integration states
 systemRouter.get("/integrations", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    const rows = await (prisma as any).integration.findMany({ where: { userId: req.auth!.userId } });
+    const rows = await prisma.integration.findMany({ where: { userId: req.auth!.userId } });
     res.status(200).json({ data: rows });
   } catch {
-    // Table may not exist yet - return empty
     res.status(200).json({ data: [] });
   }
 }));
@@ -27,12 +26,12 @@ systemRouter.get("/integrations", requireAuth, asyncHandler(async (req: Request,
 // PATCH /system/integrations/:id - connect/disconnect/update integration
 systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { status, config, name } = req.body;
-    const existing = await (prisma as any).integration.findFirst({ where: { id, userId: req.auth!.userId } });
+    const existing = await prisma.integration.findFirst({ where: { id, userId: req.auth!.userId } });
 
     if (existing) {
-      const updated = await (prisma as any).integration.update({
+      const updated = await prisma.integration.update({
         where: { id },
         data: {
           ...(status !== undefined && { status }),
@@ -43,7 +42,7 @@ systemRouter.patch("/integrations/:id", requireAuth, asyncHandler(async (req: Re
       });
       res.status(200).json(updated);
     } else {
-      const created = await (prisma as any).integration.create({
+      const created = await prisma.integration.create({
         data: {
           id,
           userId: req.auth!.userId,

@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
+import { cache } from "./cache";
 
 export type AccessActor =
   | {
@@ -40,7 +41,14 @@ function normalizeScopes(values: Array<string | null | undefined>) {
 }
 
 export async function getEmployeeAssigneeScope(actor: AccessActor) {
+  // Cache key for this actor's scope (works for all roles)
+  const cacheKey = `actor:scope:${actor?.userId || actor?.email}`;
+  const cached = await cache.get(cacheKey);
+  if (cached !== null) return cached;
+
   if (!actor || actor.role !== "employee") {
+    // Cache null result too (for non-employees)
+    await cache.set(cacheKey, null, 5 * 60 * 1000);
     return null;
   }
 
@@ -69,7 +77,13 @@ export async function getEmployeeAssigneeScope(actor: AccessActor) {
     // also include first name to match partial assignee entries like "Rajeev"
     (member?.name || user?.name)?.split(" ")[0],
   ]);
-  return scopes.length > 0 ? scopes : null;
+  
+  const result = scopes.length > 0 ? scopes : null;
+  
+  // Cache for 5 minutes (employee scope rarely changes)
+  cache.set(cacheKey, result, 5 * 60 * 1000);
+  
+  return result;
 }
 
 export async function getEmployeeProjectScope(actor: AccessActor) {

@@ -445,4 +445,31 @@ export const crmService = {
     uploadFile<{ data: CSVImportRecord; success: number; failed: number; message: string }>("/csv-import", file, "file"),
   deleteCSVImport: (id: number) =>
     persistApi<{ success: boolean }>(`/csv-import/${id}`, { method: "DELETE" }),
+
+  // Notifications
+  getNotifications: (params?: { page?: number; limit?: number; unreadOnly?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.unreadOnly) query.set("unreadOnly", "true");
+    return requestJson<{
+      data: Array<{
+        id: number;
+        type: string;
+        title: string;
+        message: string;
+        linkUrl?: string;
+        linkLabel?: string;
+        entityType?: string;
+        entityId?: number;
+        isRead: boolean;
+        batchCount: number;
+        createdAt: string;
+      }>;
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/notifications?${query.toString()}`);
+  },
+  getUnreadNotificationCount: () => requestJson<{ count: number }>("/notifications/unread-count"),
+  markNotificationRead: (id: number) => persistApi<{ success: boolean }>(`/notifications/${id}/read`, { method: "PATCH" }),
+  markAllNotificationsRead: () => persistApi<{ success: boolean }>("/notifications/read-all", { method: "POST" }),
 };

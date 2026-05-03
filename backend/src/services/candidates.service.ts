@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { sendMail } from "../utils/mailer";
 import { sendHireEmail, sendRejectionEmail, sendInterviewInvitationEmail } from "../utils/email-templates";
+import { cache, TTL } from "../utils/cache";
 
 type CandidateRecord = {
   id: number;
@@ -160,6 +161,10 @@ export const candidatesService = {
       where.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
     }
 
+    const cacheKey = `candidates:list:${access?.userId ?? access?.email ?? "anon"}:${page}:${limit}:${query?.stage ?? ""}:${query?.jobId ?? ""}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
     const [candidates, total] = await Promise.all([
       prisma.candidate.findMany({
         where,
@@ -170,10 +175,12 @@ export const candidatesService = {
       }),
       prisma.candidate.count({ where }),
     ]);
-    return {
+    const result = {
       data: candidates.map(mapCandidate),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     };
+    await cache.set(cacheKey, result, TTL.LEADS_LIST);
+    return result;
   },
 
   async getById(candidateId: number, access?: CandidateAccessScope) {
@@ -480,7 +487,7 @@ export const candidatesService = {
     });
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: {
           candidateId,
           action: "offer_letter_sent",
@@ -526,7 +533,7 @@ export const candidatesService = {
     }, reason).catch(() => {});
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },
       });
     } catch (err) {
@@ -539,7 +546,7 @@ export const candidatesService = {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
 
-    const activities = await (prisma as any).candidateActivity.findMany({
+    const activities = await prisma.candidateActivity.findMany({
       where: { candidateId },
       orderBy: { createdAt: "desc" },
     });
@@ -551,7 +558,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "note", detail: note, performedBy },
       });
     } catch (err) {

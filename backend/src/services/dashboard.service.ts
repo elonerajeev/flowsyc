@@ -8,6 +8,8 @@ import {
   getEmployeeProjectScope,
   getInvoiceClientLabels,
 } from "../utils/access-control";
+import { cache, TTL } from "../utils/cache";
+import { QUERY_LIMITS } from "../utils/query-limits";
 
 const pipelineColors = [
   { name: "Qualified", color: "hsl(211 38% 51%)" },
@@ -135,7 +137,7 @@ async function buildStaffDashboard(actor?: AccessActor) {
       where: invoiceWhere,
       orderBy: { createdAt: "asc" },
       select: { amount: true, createdAt: true, date: true },
-      take: 500,
+      take: QUERY_LIMITS.DASHBOARD_ITEMS,
     }),
     prisma.teamMember.findMany({
       where: {
@@ -148,7 +150,7 @@ async function buildStaffDashboard(actor?: AccessActor) {
       take: 6,
       select: { id: true, name: true, designation: true, avatar: true, attendance: true, updatedAt: true },
     }),
-    getAuditLogs(12),
+    getAuditLogs({ limit: 12, userId: actor?.userId, role: actor?.role }),
     prisma.teamMember.groupBy({
       by: ["team", "attendance"],
       where: { deletedAt: null },
@@ -350,23 +352,11 @@ async function buildEmployeeDashboard(actor: AccessActor) {
     getEmployeeProjectScope(actor),
   ]);
 
-  const projectWhere =
-    employeeProjectScopes || employeeAssignees
-      ? {
-          deletedAt: null,
-          OR: [
-            ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
-          ],
-        }
-      : {
-          deletedAt: null,
-          id: -1,
-        };
-  const taskWhere = {
-    deletedAt: null,
-    ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : { id: -1 }),
-  };
+  const projectWhere: any = { deletedAt: null };
+  const taskWhere: any = { deletedAt: null };
+  if (employeeAssignees && Array.isArray(employeeAssignees) && employeeAssignees.length > 0) {
+    taskWhere.assignee = { in: employeeAssignees };
+  }
 
   const [projects, tasks, member] = await Promise.all([
     prisma.project.findMany({
@@ -592,14 +582,21 @@ async function buildClientDashboard(actor: AccessActor) {
 
 export const dashboardService = {
   async get(actor?: AccessActor) {
+    const cacheKey = `dashboard:${actor?.role || "staff"}:${actor?.userId || "anonymous"}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
+    let data;
     if (actor?.role === "employee") {
-      return buildEmployeeDashboard(actor);
+      data = await buildEmployeeDashboard(actor);
+    } else if (actor?.role === "client") {
+      data = await buildClientDashboard(actor);
+    } else {
+      data = await buildStaffDashboard(actor);
     }
 
-    if (actor?.role === "client") {
-      return buildClientDashboard(actor);
-    }
-
-    return buildStaffDashboard(actor);
+    // Cache for 5 minutes (dashboard data doesn't change frequently)
+    await cache.set(cacheKey, data, 5 * 60 * 1000);
+    return data;
   },
 };

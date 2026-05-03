@@ -1,5 +1,5 @@
 import type { CompanyRecord, CompanySize, ContactRecord, SalesMetrics } from "../data/crm-static";
-import { commandActions, themePreviews } from "../data/crm-static";
+import { commandActions } from "../data/crm-static";
 import { prisma } from "../config/prisma";
 import { Prisma } from "@prisma/client";
 import { cache, TTL } from "../utils/cache";
@@ -259,9 +259,5 @@ export const staticCrmService = {
 
   async listCommandActions() {
     return commandActions;
-  },
-
-  async listThemePreviews() {
-    return themePreviews;
   },
 };

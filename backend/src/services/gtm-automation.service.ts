@@ -16,26 +16,16 @@ interface HealthScoreInput {
   engagementScore?: number;
 }
 
-// Simple in-memory cache for lead scores
-const scoreCache = new Map<number, { score: number; breakdown: Record<string, number>; timestamp: number }>();
-const CACHE_TTL = 60000; // 1 minute TTL for cache
+import { cache, TTL } from "../utils/cache";
 
-function getCachedScore(leadId: number): { score: number; breakdown: Record<string, number> } | null {
-  const cached = scoreCache.get(leadId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return { score: cached.score, breakdown: cached.breakdown };
-  }
-  scoreCache.delete(leadId);
-  return null;
+async function getCachedScore(leadId: number): Promise<{ score: number; breakdown: Record<string, number> } | null> {
+  const cacheKey = `lead:score:${leadId}`;
+  return await cache.get<{ score: number; breakdown: Record<string, number> }>(cacheKey);
 }
 
-function setCachedScore(leadId: number, score: number, breakdown: Record<string, number>): void {
-  scoreCache.set(leadId, { score, breakdown, timestamp: Date.now() });
-  // Limit cache size
-  if (scoreCache.size > 1000) {
-    const firstKey = scoreCache.keys().next().value;
-    if (firstKey !== undefined) scoreCache.delete(firstKey);
-  }
+async function setCachedScore(leadId: number, score: number, breakdown: Record<string, number>): Promise<void> {
+  const cacheKey = `lead:score:${leadId}`;
+  await cache.set(cacheKey, { score, breakdown }, TTL.MEDIUM);
 }
 
 export class GTMAutomationService {
@@ -70,7 +60,7 @@ export class GTMAutomationService {
 
   static async calculateLeadScore(leadId: number): Promise<{ score: number; breakdown: Record<string, number> }> {
     // Check cache first
-    const cached = getCachedScore(leadId);
+    const cached = await getCachedScore(leadId);
     if (cached) return cached;
 
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
@@ -121,7 +111,7 @@ export class GTMAutomationService {
     });
 
     // Cache the result
-    setCachedScore(leadId, finalScore, breakdown);
+    await setCachedScore(leadId, finalScore, breakdown);
 
     return { score: finalScore, breakdown };
   }

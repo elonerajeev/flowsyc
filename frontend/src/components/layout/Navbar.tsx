@@ -1,6 +1,6 @@
 import { Search, Bell, Sun, Moon, ChevronDown, Command, Plus, Settings, LogOut, User, Shield, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTheme, UserRole } from "@/contexts/ThemeContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { findTeamMemberByEmail, useSharedTeamMembers } from "@/lib/team-roster";
 import { toast } from "@/components/ui/sonner";
 import Breadcrumbs from "@/components/shared/Breadcrumbs";
+import { getAllowedRolesForPath, getAccessiblePathForRole } from "@/components/layout/sidebarConfig";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ export default function Navbar() {
   const { unreadCount, toggleCenter, centerOpen } = useNotifications();
   const { user, logout, switchRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const role = (user?.role ?? themeRole) as UserRole;
   const sharedTeamMembers = useSharedTeamMembers();
   const employeeRecord = findTeamMemberByEmail(sharedTeamMembers, user?.email);
@@ -80,6 +82,11 @@ export default function Navbar() {
     if (result.success) {
       setRole(targetRole);
       toast.success(`Switched to ${roleLabels[targetRole]}`);
+      // Navigate to first accessible path for new role to avoid redirect loop
+      const allowedRoles = getAllowedRolesForPath(location.pathname);
+      if (!allowedRoles || !allowedRoles.includes(targetRole)) {
+        navigate(getAccessiblePathForRole(targetRole));
+      }
     } else if (result.error === "NO_SESSION") {
       toast.error("Session expired. Please sign in again.");
       navigate(`/login?switchRole=${targetRole}`);
@@ -139,16 +146,19 @@ export default function Navbar() {
         {/* Privacy toggle */}
         <button
           onClick={togglePrivacyMode}
-          title={privacyMode ? "Show sensitive data" : "Hide sensitive data"}
+          title={privacyMode ? "Privacy mode ON — click to reveal data" : "Click to hide sensitive data"}
           className={cn(
-            "premium-hover flex h-9 w-9 items-center justify-center border transition-all hover:scale-105",
+            "premium-hover relative flex h-9 items-center gap-1.5 border px-2.5 transition-all hover:scale-105",
             privacyMode
-              ? "border-warning/40 bg-warning/10 text-warning"
+              ? "border-warning/50 bg-warning/10 text-warning shadow-[0_0_12px_hsl(var(--warning)/0.2)]"
               : "border-border/70 bg-secondary/28 text-muted-foreground hover:bg-secondary hover:text-foreground",
             RADIUS.xl
           )}
         >
-          {privacyMode ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          {privacyMode
+            ? <><EyeOff className="h-4 w-4" /><span className="text-xs font-semibold hidden sm:inline">Private</span></>
+            : <><Eye className="h-4 w-4" /><span className="text-xs font-semibold hidden sm:inline">Visible</span></>
+          }
         </button>
 
         {/* Notifications */}
@@ -184,11 +194,11 @@ export default function Navbar() {
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success border-2 border-card" />
               </div>
-              <div className="hidden md:block text-left">
-                <p className={cn("font-semibold text-foreground leading-tight", TEXT.body)}>
-                  {greeting}, {displayName}
+              <div className="hidden md:block text-left max-w-[120px]">
+                <p className={cn("font-semibold text-foreground leading-tight truncate", TEXT.body)}>
+                  {displayName.split(" ")[0]}
                 </p>
-                <p className={cn("text-muted-foreground capitalize", TEXT.meta)}>
+                <p className={cn("text-muted-foreground capitalize truncate", TEXT.meta)}>
                   {roleLabels[role]}
                 </p>
               </div>

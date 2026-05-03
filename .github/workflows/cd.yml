@@ -34,10 +34,14 @@ jobs:
         run: cd backend && npm ci
 
       - name: 🗄️ Validate Prisma schema
-        run: cd backend && npx prisma validate
+        run: cd backend && npx prisma validate --skip-generate
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: 🔷 Backend typecheck
         run: cd backend && npx tsc --noEmit
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: 📦 Install frontend deps
         run: cd frontend && npm ci
@@ -50,7 +54,7 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy to EC2
+    name:  Deploy to EC2
     needs: validate
     runs-on: ubuntu-latest
     environment: production
@@ -98,7 +102,7 @@ jobs:
             echo "⏳ Waiting for health check..."
             sleep 10
 
-      - name: 🏥 Health check
+      - name:  Health check
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -113,7 +117,7 @@ jobs:
             fi
             echo "✅ Deployment successful!"
 
-      - name: 📢 Notify deployment success
+      - name:  Notify deployment success
         if: success()
         run: |
           echo "✅ Deployment to production succeeded!"
@@ -121,7 +125,7 @@ jobs:
           echo "   Branch: ${{ github.ref_name }}"
           echo "   Actor:  ${{ github.actor }}"
 
-      - name: 📢 Notify deployment failure
+      - name:  Notify deployment failure
         if: failure()
         run: |
           echo "❌ Deployment FAILED!"

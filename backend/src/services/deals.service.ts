@@ -6,6 +6,7 @@ import { onDealStageChanged, triggerAutomation } from "./automation-engine";
 import { gtmLifecycleService } from "./gtm-lifecycle.service";
 import { logger } from "../utils/logger";
 import { cache } from "../utils/cache";
+import { createNotification } from "./notifications.service";
 
 type DealRecord = {
   id: number;
@@ -168,6 +169,24 @@ export const dealsService = {
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
     gtmLifecycleService.syncDealLifecycle(deal.id, input.assignedTo).catch((err) => logger.error("Deal lifecycle sync failed:", err));
+
+    // Notify assigned user
+    if (deal.assignedTo) {
+      createNotification({
+        userId: deal.assignedTo,
+        type: "deal",
+        title: "New deal assigned",
+        message: `You have been assigned to deal: ${deal.title}`,
+        priority: deal.probability > 70 ? "high" : "medium",
+        linkUrl: `/deals?dealId=${deal.id}`,
+        linkLabel: "View deal",
+        entityType: "Deal",
+        entityId: deal.id,
+        batchKey: `deal-assigned-${deal.assignedTo}`,
+        metadata: { dealId: deal.id, value: deal.value, stage: deal.stage },
+      }).catch((err) => logger.error("Failed to create notification:", err));
+    }
+
     cache.invalidatePattern("gtm:overview:");
     return mapDeal(deal);
   },

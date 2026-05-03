@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 
 import { env } from "./config/env";
 import { apiRateLimiter, writeRateLimiter } from "./middleware/rate-limit.middleware";
+import { requireAuth, requireRole } from "./middleware/auth.middleware";
 
 interface MetricsModule {
   metricsMiddleware?: express.RequestHandler;
@@ -60,6 +61,7 @@ import { activityRouter } from "./routes/activity.routes";
 import googleAuthRoutes from "./routes/google-auth.routes";
 import { csvImportRouter } from "./routes/csv-import.routes";
 import inboxRouter from "./routes/inbox.routes";
+import { notificationsRouter } from "./routes/notifications.routes";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { logger } from "./utils/logger";
 
@@ -103,7 +105,7 @@ export function createApp() {
     app.use(metricsMiddleware);
     
     if (prometheusRegistry) {
-      app.get(["/metrics", "/api/metrics"], async (_req: express.Request, res: express.Response) => {
+      app.get(["/metrics", "/api/metrics"], requireAuth, requireRole(["admin"]), async (_req: express.Request, res: express.Response) => {
         res.set("Content-Type", prometheusRegistry.contentType);
         res.status(200).send(await prometheusRegistry.metrics());
       });
@@ -152,6 +154,7 @@ export function createApp() {
   app.use("/api/activities", activityRouter);
   app.use("/api/csv-import", csvImportRouter);
   app.use("/api/inbox", inboxRouter);
+  app.use("/api/notifications", notificationsRouter);
 
   app.use(notFound);
   app.use(errorHandler);

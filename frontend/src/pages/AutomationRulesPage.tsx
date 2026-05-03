@@ -206,35 +206,26 @@ export default function AutomationRulesPage() {
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       {/* Header */}
       <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
               <Zap className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-medium text-muted-foreground">Automation · Rules</span>
             </div>
             <h1 className="font-display text-3xl font-semibold text-foreground">Automation Rules</h1>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">Build conditional triggers to automate lead assignments, notifications, and status changes.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-border bg-secondary/50 px-3 py-1 text-xs font-medium text-muted-foreground">{rules.length} total</span>
+              <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-medium text-success">{activeRules} active</span>
+              {rules.length - activeRules > 0 && <span className="rounded-full border border-border bg-secondary/50 px-3 py-1 text-xs font-medium text-muted-foreground">{rules.length - activeRules} inactive</span>}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
-              <Zap className="h-4 w-4 text-primary flex-shrink-0" />
-              <span className="text-sm font-medium">{rules.length} total rules</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
-              <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-              <span className="text-sm font-medium text-success">{activeRules} active</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
-              <span className="text-sm font-medium text-muted-foreground">{rules.length - activeRules} inactive</span>
-            </div>
-            <div className="flex items-center gap-2 ml-1">
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => setLogsDialogOpen(true)}>
-                <Activity className="h-3.5 w-3.5" /> Logs
-              </Button>
-              <Button size="sm" className="gap-2" onClick={() => setRuleDialogOpen(true)}>
-                <Plus className="h-3.5 w-3.5" /> New Rule
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setLogsDialogOpen(true)}>
+              <Activity className="h-3.5 w-3.5" /> Logs
+            </Button>
+            <Button size="sm" className="gap-2" onClick={() => setRuleDialogOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New Rule
+            </Button>
           </div>
         </div>
       </section>

@@ -506,45 +506,26 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 mb-3">
               <Shield className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-medium text-muted-foreground">People · Members</span>
             </div>
             <h1 className="font-display text-3xl font-semibold text-foreground">Members</h1>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">Manage team members, access, attendance, and status changes.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-medium text-success">{summary.active} active</span>
+              <span className="rounded-full border border-border bg-secondary/50 px-3 py-1 text-xs font-medium text-muted-foreground">{summary.admins} admins</span>
+              {summary.absent > 0 && <span className="rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive">{summary.absent} absent</span>}
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-4 py-2">
-              <BadgeCheck className="h-4 w-4 text-success flex-shrink-0" />
-              <span className="text-sm font-medium text-success">{summary.active} active</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-2">
-              <Shield className="h-4 w-4 text-primary flex-shrink-0" />
-              <span className="text-sm font-medium">{summary.admins} admins</span>
-            </div>
-            {summary.absent > 0 && (
-              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive/10 px-4 py-2">
-                <span className="text-sm font-medium text-destructive">{summary.absent} absent</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2 ml-1">
-              {(role === "admin" || role === "manager") && (
-                <>
-                  <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
-                    <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} /> Refresh
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
-                    <Download className="h-4 w-4" /> Export
-                  </Button>
-                </>
-              )}
-              <Button size="sm" onClick={() => canEditTeam && setShowAddForm((c) => !c)} disabled={!canEditTeam} className="gap-2">
-                <UserPlus className="h-4 w-4" /> Add Member
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
+              <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} /> Refresh
+            </Button>
+            <Button size="sm" onClick={() => canEditTeam && setShowAddForm((c) => !c)} disabled={!canEditTeam} className="gap-2">
+              <UserPlus className="h-4 w-4" /> Add Member
+            </Button>
           </div>
         </div>
       </section>

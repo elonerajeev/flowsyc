@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +31,10 @@ const statusStyles: Record<Status, string> = {
   absent: "bg-destructive/14 text-foreground border-destructive/25",
 };
 
-export default function StatusBadge({ status }: { status: Status }) {
+export default memo(function StatusBadge({ status }: { status: Status }) {
   return (
     <span className={cn("inline-flex items-center border font-semibold capitalize tracking-[0.02em]", RADIUS.pill, SPACING.buttonCompact, TEXT.meta, statusStyles[status])}>
       {status.replace("-", " ")}
     </span>
   );
-}
+});

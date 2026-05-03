@@ -59,12 +59,9 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const rules = await prisma.automationRule.findMany({
+      where: { createdBy: req.auth?.email },
       orderBy: { priority: "desc" },
-      include: {
-        _count: {
-          select: { logs: true }
-        }
-      }
+      include: { _count: { select: { logs: true } } }
     });
     res.json(rules);
   })
@@ -75,14 +72,9 @@ router.get(
   "/rules/:id",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const rule = await prisma.automationRule.findUnique({
-      where: { id: Number(req.params.id) },
-      include: {
-        logs: {
-          orderBy: { startedAt: "desc" },
-          take: 10
-        }
-      }
+    const rule = await prisma.automationRule.findFirst({
+      where: { id: Number(req.params.id), createdBy: req.auth?.email },
+      include: { logs: { orderBy: { startedAt: "desc" }, take: 10 } }
     });
     if (!rule) {
       res.status(404).json({ error: "Rule not found" });
@@ -150,8 +142,8 @@ router.patch(
       maxRunsPerDay,
     } = req.body;
     
-    const rule = await prisma.automationRule.update({
-      where: { id: Number(req.params.id) },
+    const rule = await prisma.automationRule.updateMany({
+      where: { id: Number(req.params.id), createdBy: req.auth?.email },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
@@ -165,8 +157,9 @@ router.patch(
         ...(maxRunsPerDay !== undefined && { maxRunsPerDay }),
       }
     });
-    
-    res.json(rule);
+    if (rule.count === 0) { res.status(404).json({ error: "Rule not found" }); return; }
+    const updated = await prisma.automationRule.findFirst({ where: { id: Number(req.params.id) } });
+    res.json(updated);
   })
 );
 
@@ -175,9 +168,10 @@ router.delete(
   "/rules/:id",
   requireRole(["admin"]),
   asyncHandler(async (req, res) => {
-    await prisma.automationRule.delete({
-      where: { id: Number(req.params.id) }
+    const r = await prisma.automationRule.deleteMany({
+      where: { id: Number(req.params.id), createdBy: req.auth?.email }
     });
+    if (r.count === 0) { res.status(404).json({ error: "Rule not found" }); return; }
     res.status(204).end();
   })
 );
@@ -187,20 +181,14 @@ router.post(
   "/rules/:id/toggle",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const rule = await prisma.automationRule.findUnique({
-      where: { id: Number(req.params.id) }
+    const rule = await prisma.automationRule.findFirst({
+      where: { id: Number(req.params.id), createdBy: req.auth?.email }
     });
-    
-    if (!rule) {
-      res.status(404).json({ error: "Rule not found" });
-      return;
-    }
-    
+    if (!rule) { res.status(404).json({ error: "Rule not found" }); return; }
     const updated = await prisma.automationRule.update({
       where: { id: Number(req.params.id) },
       data: { isActive: !rule.isActive }
     });
-    
     res.json(updated);
   })
 );
@@ -226,26 +214,28 @@ router.get(
     if (ruleId && !isNaN(ruleId)) where.ruleId = ruleId;
     if (entityType) where.entityType = entityType;
 
-    // Restrict logs to user/system at DB level; legacy logs without createdBy are treated as shared.
+    // Get rules created by this admin and include their logs
     const userEmail = req.auth?.email;
-    where.AND = [
-      {
-        OR: [
-          ...(userEmail
-            ? [{ triggerData: { path: ["data", "createdBy"], equals: userEmail } as Prisma.JsonFilter }]
-            : []),
-          { triggerData: { path: ["data", "createdBy"], equals: "system" } as Prisma.JsonFilter },
-          { triggerData: { path: ["data", "createdBy"], equals: Prisma.AnyNull } as Prisma.JsonFilter },
-        ],
-      },
-    ];
+    if (userEmail) {
+      const userRules = await prisma.automationRule.findMany({
+        where: { createdBy: userEmail },
+        select: { id: true }
+      });
+      const userRuleIds = userRules.map(r => r.id);
+      
+      // Include logs from user's rules OR rules without creator (system/global)
+      where.OR = [
+        { ruleId: { in: userRuleIds } },
+        { rule: { createdBy: null } }  // Legacy rules without owner
+      ];
+    }
 
     const [logs, total] = await prisma.$transaction([
       prisma.automationLog.findMany({
         where,
         orderBy: [{ startedAt: "desc" }, { id: "desc" }],
         include: {
-          rule: { select: { name: true } },
+          rule: { select: { name: true, createdBy: true } },
         },
         take: limit,
         skip: offset,
@@ -291,7 +281,7 @@ router.get(
     }
     
     const jobs = await prisma.scheduledJob.findMany({
-      where,
+      where: { ...where, createdBy: req.auth?.email },
       orderBy: { scheduledFor: "desc" },
       take: 200,
     });
