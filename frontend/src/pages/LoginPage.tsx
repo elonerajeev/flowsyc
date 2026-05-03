@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { authService } from "@/services/auth";
+import AuthLayout from "@/components/layout/AuthLayout";
 import type { UserRole } from "@/contexts/ThemeContext";
 
 const roleLabels: Record<UserRole, string> = {
@@ -21,26 +23,56 @@ export default function LoginPage() {
   const { setRole } = useTheme();
   const [email, setEmail] = useState("john@crmpro.com");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [verificationResent, setVerificationResent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
+    setEmailNotVerified(false);
+    setLoading(true);
     try {
       const user = await login({ email, password });
       setRole(user.role);
 
       if (pendingSwitchRole && pendingSwitchRole !== user.role) {
         const result = await switchRole(pendingSwitchRole);
-        if (result.success) {
-          setRole(pendingSwitchRole);
-        }
+        if (result.success) setRole(pendingSwitchRole);
       }
 
-      navigate("/overview");
+      if (rememberMe) {
+        localStorage.setItem("crm-remember-email", email);
+      } else {
+        localStorage.removeItem("crm-remember-email");
+      }
+
+      navigate(nextPath);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("EMAIL_NOT_VERIFIED") || msg.includes("verify your email")) {
+        setEmailNotVerified(true);
+      } else {
+        setError("Invalid email or password. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      await authService.resendVerification(email);
+      setVerificationResent(true);
     } catch {
-      setError("Invalid email or password. Please try again.");
+      setError("Failed to resend verification email.");
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -62,11 +94,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-6 rounded-3xl border border-border bg-card p-8 shadow-card">
+    <AuthLayout showBack={false}>
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Sign in</p>
-          <h1 className="mt-3 text-3xl font-display font-semibold text-foreground">Welcome back</h1>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#5355D6]">Sign in</p>
+          <h1 className="mt-2 text-2xl font-bold text-white">Welcome back</h1>
           {pendingSwitchRole ? (
             <p className="mt-1 text-sm text-muted-foreground">
               Sign in to switch to{" "}
@@ -103,15 +135,60 @@ export default function LoginPage() {
               className="h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             />
           </label>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-input bg-background text-primary focus:ring-ring focus:ring-offset-0"
+              />
+              Remember me
+            </label>
+            <button
+              type="button"
+              onClick={() => navigate("/forgot-password")}
+              className="text-sm text-primary underline hover:brightness-125"
+            >
+              Forgot password?
+            </button>
+          </div>
         </div>
 
         {error && <p className="text-xs font-semibold text-destructive">{error}</p>}
 
+        {emailNotVerified && (
+          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm">
+            <p className="font-semibold text-yellow-600">Email not verified</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Please check your inbox and click the verification link before logging in.
+            </p>
+            {verificationResent ? (
+              <p className="mt-2 text-xs font-medium text-green-600">✓ Verification email resent!</p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendingVerification}
+                className="mt-2 text-xs font-semibold text-primary underline hover:brightness-125 disabled:opacity-50"
+              >
+                {resendingVerification ? "Sending..." : "Resend verification email"}
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           type="submit"
-          className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105"
+          disabled={loading}
+          className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {pendingSwitchRole ? `Sign in as ${roleLabels[pendingSwitchRole]}` : "Sign in"}
+          {loading
+            ? "Signing in..."
+            : pendingSwitchRole
+              ? `Sign in as ${roleLabels[pendingSwitchRole]}`
+              : "Sign in"}
         </button>
 
         <div className="relative">
@@ -146,6 +223,6 @@ export default function LoginPage() {
           .
         </p>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

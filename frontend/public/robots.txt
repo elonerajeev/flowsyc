@@ -1,14 +1,41 @@
-# Allow all search engines for SEO
+# Flowsyc CRM Robots.txt
+# https://flowsyc-svuj.vercel.app/
+
 User-agent: *
 Allow: /
 
-# Specific rules for crawlers
 User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
 Allow: /
 
 User-agent: Bingbot
 Allow: /
 
-# Disallow sensitive areas (if any)
-Disallow: /admin/
+User-agent: Yahoo! Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: LinkedinBot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+# Sitemap
+Sitemap: https://flowsyc-svuj.vercel.app/sitemap.xml
+
+# Disallow sensitive areas
 Disallow: /api/
+Disallow: /auth/login
+Disallow: /*?token=*
+Disallow: /*?key=*
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
