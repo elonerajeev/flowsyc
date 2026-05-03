@@ -49,9 +49,9 @@ export const clientsController = {
     const body = req.auth && !req.body.assignedTo
       ? { ...req.body, assignedTo: req.auth.email }
       : req.body;
-    const client = await clientsService.create(body);
+    const client = await clientsService.create(body, req.auth);
     if (req.auth) {
-      await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "create", entity: "Client", entityId: client.id, detail: `Created: ${client.name}` });
+      await logAudit({ userId: req.auth.userId, organizationId: req.auth?.organizationId, userName: await getActorName(req.auth.userId), action: "create", entity: "Client", entityId: client.id, detail: `Created: ${client.name}` });
 
       // Trigger Zapier webhook for new_client event
       const { systemService } = await import("../services/system.service");
@@ -81,7 +81,7 @@ export const clientsController = {
     const clientId = readClientId(req);
     const client = await clientsService.update(clientId, req.body, req.auth);
     if (req.auth) {
-      await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "update", entity: "Client", entityId: clientId, detail: `Updated: ${client.name}` });
+      await logAudit({ userId: req.auth.userId, organizationId: req.auth?.organizationId, userName: await getActorName(req.auth.userId), action: "update", entity: "Client", entityId: clientId, detail: `Updated: ${client.name}` });
     }
     res.status(200).json(client);
   },
@@ -90,7 +90,7 @@ export const clientsController = {
     const clientId = readClientId(req);
     await clientsService.delete(clientId, req.auth);
     if (req.auth) {
-      await logAudit({ userId: req.auth.userId, userName: await getActorName(req.auth.userId), action: "delete", entity: "Client", entityId: clientId, detail: `Deleted client #${clientId}` });
+      await logAudit({ userId: req.auth.userId, organizationId: req.auth?.organizationId, userName: await getActorName(req.auth.userId), action: "delete", entity: "Client", entityId: clientId, detail: `Deleted client #${clientId}` });
     }
     res.status(200).json({ message: "Client deleted successfully" });
   },

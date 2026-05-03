@@ -19,6 +19,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
       userId: payload.sub,
       email: payload.email,
       role: payload.role as UserRole,
+      organizationId: payload.organizationId,
     };
     next();
   } catch {

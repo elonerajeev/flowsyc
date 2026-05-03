@@ -53,6 +53,7 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 type QueryParams = {
@@ -137,22 +138,34 @@ export const leadsService = {
     if (params.minScore !== undefined) filterConditions.push({ score: { gte: params.minScore } });
     if (params.maxScore !== undefined) filterConditions.push({ score: { lte: params.maxScore } });
 
-    // Data isolation: Admin/Manager can only see leads they created or assigned to them
-    if (access?.role === "admin" || access?.role === "manager") {
-      filterConditions.push({
-        OR: [
-          { createdBy: access.email },
-          { assignedTo: access.email },
-          { assignedTo: access.userId ?? "" },
-        ],
-      });
-    }
-
-    // RBAC
-    if (access?.role === "employee") {
-      filterConditions.push({
-        assignedTo: { in: [access.email, access.userId ?? ""] },
-      });
+    // Org-level isolation (primary)
+    if (access?.organizationId) {
+      filterConditions.push({ organizationId: access.organizationId });
+      if (access.role === "manager") {
+        const ids = [access.email, access.userId].filter(Boolean) as string[];
+        filterConditions.push({ OR: [
+          ...ids.map((id) => ({ createdBy: id })),
+          ...ids.map((id) => ({ assignedTo: id })),
+        ]});
+      } else if (access.role === "employee") {
+        filterConditions.push({ assignedTo: { in: [access.email, access.userId ?? ""].filter(Boolean) } });
+      }
+    } else {
+      // Backward-compat user-level isolation
+      if (access?.role === "admin" || access?.role === "manager") {
+        filterConditions.push({
+          OR: [
+            { createdBy: access.email },
+            { assignedTo: access.email },
+            { assignedTo: access.userId ?? "" },
+          ],
+        });
+      }
+      if (access?.role === "employee") {
+        filterConditions.push({
+          assignedTo: { in: [access.email, access.userId ?? ""] },
+        });
+      }
     }
 
     // Apply all filters
@@ -260,7 +273,8 @@ export const leadsService = {
         companySize: input.companySize as any,
         budget: input.budget as any,
         timeline: input.timeline as any,
-        createdBy: access?.email, // Track who created this lead
+        createdBy: access?.email,
+        organizationId: access?.organizationId ?? null,
       },
     });
 

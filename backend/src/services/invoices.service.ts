@@ -26,19 +26,28 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 async function buildWhere(query: InvoiceQuery, access: AccessScope) {
   const permittedLabels = await getInvoiceClientLabels(access);
-  return {
+  const base: Record<string, unknown> = {
     deletedAt: null,
     ...(query.status ? { status: query.status } : {}),
-    ...(permittedLabels
-      ? { client: { in: permittedLabels } }
-      : access?.role === "admin" || access?.role === "manager"
-        ? { createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) } }
-        : {}),
   };
+
+  if (permittedLabels) {
+    base.client = { in: permittedLabels };
+  } else if (access?.organizationId) {
+    base.organizationId = access.organizationId;
+    if (access.role === "manager") {
+      base.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+    }
+  } else if (access?.role === "admin" || access?.role === "manager") {
+    base.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+  }
+
+  return base;
 }
 
 export const invoicesService = {
@@ -118,6 +127,7 @@ export const invoicesService = {
         due: input.due,
         status: input.status ?? "pending",
         createdBy: access?.email ?? null,
+        organizationId: access?.organizationId ?? null,
         updatedAt: new Date(),
       },
     });

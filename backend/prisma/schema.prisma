@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Candidate {
   id              Int            @id @default(autoincrement())
   name            String
@@ -26,7 +33,8 @@ model Candidate {
   offerLetterSent Boolean?       @default(false)
   joiningDate     String?
   offeredSalary   String?
-  createdBy       String?        // User email who created this candidate
+  createdBy       String?
+  organizationId  String?
   JobPosting      JobPosting     @relation(fields: [jobId], references: [id])
 
   @@index([deletedAt])
@@ -35,6 +43,7 @@ model Candidate {
   @@index([source])
   @@index([rating])
   @@index([createdBy])
+  @@index([organizationId])
 }
 
 model Client {
@@ -61,15 +70,16 @@ model Client {
   tags        String[]      @default([])
   contacts    Contact[]
   meetings    Meeting[]
-  
+
   // Health tracking
   lastContactDate DateTime?
-  engagementScore Int        @default(50)  // 0-100
-  
+  engagementScore Int        @default(50)
+
   // Contract info for renewals
   contractStartDate DateTime?
   contractEndDate   DateTime?
-  
+
+  organizationId String?
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
@@ -83,6 +93,7 @@ model Client {
   @@index([assignedTo])
   @@index([lastContactDate])
   @@index([contractEndDate])
+  @@index([organizationId])
 }
 
 model Conversation {
@@ -104,42 +115,46 @@ model Conversation {
 }
 
 model Invoice {
-  id        String       @id
-  client    String
-  amount    String
-  date      String
-  due       String
-  status    ClientStatus @default(pending)
-  createdBy String?      // User email who created this invoice
-  deletedAt DateTime?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime
+  id             String       @id
+  client         String
+  amount         String
+  date           String
+  due            String
+  status         ClientStatus @default(pending)
+  createdBy      String?
+  organizationId String?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime
 
   @@index([deletedAt])
   @@index([status])
+  @@index([organizationId])
 }
 
 model JobPosting {
-  id          Int         @id @default(autoincrement())
-  title       String
-  department  String
-  location    String
-  type        String      @default("Full-time")
-  status      JobStatus   @default(open)
-  description String      @default("")
-  deletedAt   DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime
-  salary      String?     @default("Competitive")
-  experience  String?     @default("2-5 years")
-  skills      String[]    @default([])
-  views       Int?        @default(0)
-  deadline    String?
-  priority    String?     @default("normal")
-  Candidate   Candidate[]
+  id             Int         @id @default(autoincrement())
+  title          String
+  department     String
+  location       String
+  type           String      @default("Full-time")
+  status         JobStatus   @default(open)
+  description    String      @default("")
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime
+  salary         String?     @default("Competitive")
+  experience     String?     @default("2-5 years")
+  skills         String[]    @default([])
+  views          Int?        @default(0)
+  deadline       String?
+  priority       String?     @default("normal")
+  organizationId String?
+  Candidate      Candidate[]
 
   @@index([deletedAt])
   @@index([status])
+  @@index([organizationId])
 }
 
 model Message {
@@ -159,43 +174,47 @@ model Message {
 }
 
 model Note {
-  id        Int       @id @default(autoincrement())
-  title     String
-  content   String    @default("")
-  isPinned  Boolean   @default(false)
-  color     String    @default("default")
-  authorId  String
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime
+  id             Int       @id @default(autoincrement())
+  title          String
+  content        String    @default("")
+  isPinned       Boolean   @default(false)
+  color          String    @default("default")
+  authorId       String
+  organizationId String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
 
   @@index([authorId])
   @@index([deletedAt])
+  @@index([organizationId])
 }
 
 model Project {
-  id          Int           @id @default(autoincrement())
-  name        String
-  description String        @default("")
-  progress    Int           @default(0)
-  status      ProjectStatus @default(pending)
-  team        String[]      @default([])
-  dueDate     String        @default("")
-  stage       ProjectStage  @default(Discovery)
-  budget      String        @default("$0")
-  tasksDone   Int           @default(0)
-  tasksTotal  Int           @default(0)
-  createdBy   String?       // User email who created this project
-  deletedAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime
-  tasks       Task[]
-  comments    Comment[]
-  attachments Attachment[]
+  id             Int           @id @default(autoincrement())
+  name           String
+  description    String        @default("")
+  progress       Int           @default(0)
+  status         ProjectStatus @default(pending)
+  team           String[]      @default([])
+  dueDate        String        @default("")
+  stage          ProjectStage  @default(Discovery)
+  budget         String        @default("$0")
+  tasksDone      Int           @default(0)
+  tasksTotal     Int           @default(0)
+  createdBy      String?
+  organizationId String?
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  tasks          Task[]
+  comments       Comment[]
+  attachments    Attachment[]
 
   @@index([deletedAt])
   @@index([stage])
   @@index([status])
+  @@index([organizationId])
 }
 
 model RefreshToken {
@@ -211,22 +230,23 @@ model RefreshToken {
 }
 
 model Task {
-  id          Int          @id @default(autoincrement())
-  title       String
-  assignee    String
-  avatar      String
-  priority    TaskPriority
-  dueDate     String
-  tags        String[]     @default([])
-  valueStream String
-  column      TaskColumn   @default(todo)
-  deletedAt   DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime
-  projectId   Int?
-  project     Project?     @relation(fields: [projectId], references: [id], onUpdate: NoAction)
-  comments    Comment[]
-  attachments Attachment[]
+  id             Int          @id @default(autoincrement())
+  title          String
+  assignee       String
+  avatar         String
+  priority       TaskPriority
+  dueDate        String
+  tags           String[]     @default([])
+  valueStream    String
+  column         TaskColumn   @default(todo)
+  organizationId String?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime
+  projectId      Int?
+  project        Project?     @relation(fields: [projectId], references: [id], onUpdate: NoAction)
+  comments       Comment[]
+  attachments    Attachment[]
 
   @@index([column])
   @@index([deletedAt])
@@ -234,6 +254,7 @@ model Task {
   @@index([projectId])
   @@index([dueDate])
   @@index([assignee])
+  @@index([organizationId])
   @@index([deletedAt, column, updatedAt(sort: Desc), id(sort: Desc)])
   @@index([deletedAt, projectId, column, updatedAt(sort: Desc), id(sort: Desc)])
   @@index([deletedAt, priority, column, updatedAt(sort: Desc), id(sort: Desc)])
@@ -317,6 +338,7 @@ model TeamMember {
   checkIn               String         @default("-")
   location              String         @default("-")
   workload              Int            @default(0)
+  organizationId        String?
   deletedAt             DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime
@@ -325,6 +347,7 @@ model TeamMember {
   @@index([role])
   @@index([status])
   @@index([teamId])
+  @@index([organizationId])
 }
 
 model User {
@@ -350,6 +373,7 @@ model User {
   payrollDueDate String
   joinedAt       String
   location       String
+  organizationId String?
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime
@@ -357,6 +381,8 @@ model User {
   RefreshToken   RefreshToken[]
   comments       Comment[]
   attachments    Attachment[]
+
+  @@index([organizationId])
 }
 
 model UserPreference {
@@ -370,26 +396,27 @@ model UserPreference {
 }
 
 model Lead {
-  id         Int        @id @default(autoincrement())
-  firstName  String
-  lastName   String
-  email      String     @unique
-  company    String
-  jobTitle   String?
-  phone      String?
-  status     LeadStatus @default(new)
-  source     LeadSource @default(website)
-  score      Int        @default(50)
-  assignedTo String?
-  assignedAt DateTime?
-  notes      String?
-  tags       String[]   @default([])
-  convertedAt DateTime?
+  id                  Int        @id @default(autoincrement())
+  firstName           String
+  lastName            String
+  email               String     @unique
+  company             String
+  jobTitle            String?
+  phone               String?
+  status              LeadStatus @default(new)
+  source              LeadSource @default(website)
+  score               Int        @default(50)
+  assignedTo          String?
+  assignedAt          DateTime?
+  notes               String?
+  tags                String[]   @default([])
+  convertedAt         DateTime?
   convertedToClientId Int?
-  deletedAt  DateTime?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  createdBy  String?    // User email who created this lead (for data isolation)
+  deletedAt           DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  createdBy           String?
+  organizationId      String?
 
   // Extended fields for scoring
   companySize String?
@@ -410,54 +437,59 @@ model Lead {
   @@index([updatedAt])
   @@index([createdAt])
   @@index([company])
+  @@index([organizationId])
 }
 
 model Contact {
-  id           Int       @id @default(autoincrement())
-  firstName    String
-  lastName     String
-  email        String    @unique
-  phone        String?
-  jobTitle     String?
-  department   String?
-  seniority    String?
-  clientId     Int?
-  leadId       Int?      // Link to original lead (optional, for tracking)
-  client       Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  meetings     Meeting[]
-  deletedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  firstName      String
+  lastName       String
+  email          String    @unique
+  phone          String?
+  jobTitle       String?
+  department     String?
+  seniority      String?
+  clientId       Int?
+  leadId         Int?
+  organizationId String?
+  client         Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  meetings       Meeting[]
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([deletedAt])
   @@index([clientId])
   @@index([email])
   @@index([leadId])
+  @@index([organizationId])
 }
 
 model Deal {
-  id            Int            @id @default(autoincrement())
-  title         String
-  value         Int
-  currency      String         @default("USD")
-  stage         DealStage      @default(prospecting)
-  probability   Int            @default(50)
-  assignedTo    String?
-  createdBy     String?        // User email who created this deal
-  expectedClose DateTime?
-  actualClose   DateTime?
-  description   String?
-  tags          String[]       @default([])
-  deletedAt     DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  activities    DealActivity[]
+  id             Int            @id @default(autoincrement())
+  title          String
+  value          Int
+  currency       String         @default("USD")
+  stage          DealStage      @default(prospecting)
+  probability    Int            @default(50)
+  assignedTo     String?
+  createdBy      String?
+  expectedClose  DateTime?
+  actualClose    DateTime?
+  description    String?
+  tags           String[]       @default([])
+  organizationId String?
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  activities     DealActivity[]
 
   @@index([deletedAt])
   @@index([stage])
   @@index([assignedTo])
   @@index([createdBy])
   @@index([updatedAt])
+  @@index([organizationId])
 }
 
 model DealActivity {
@@ -472,18 +504,20 @@ model DealActivity {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String
-  userName  String
-  action    String
-  entity    String
-  entityId  String?
-  detail    String?
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  userId         String
+  userName       String
+  action         String
+  entity         String
+  entityId       String?
+  detail         String?
+  organizationId String?
+  createdAt      DateTime @default(now())
 
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+  @@index([organizationId])
 }
 
 model CandidateActivity {
@@ -621,8 +655,8 @@ model CalendarEvent {
   id             Int            @id @default(autoincrement())
   title          String
   date           String
-  startTime    String     @map("starttime")
-  endTime      String     @map("endtime")
+  startTime      String         @map("starttime")
+  endTime        String         @map("endtime")
   location       String         @default("")
   notes          String         @default("")
   color          String         @default("primary")
@@ -632,6 +666,7 @@ model CalendarEvent {
   assigneeName   String         @default("")
   assigneeMeta   String         @default("")
   authorId       String
+  organizationId String?
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -640,6 +675,7 @@ model CalendarEvent {
   @@index([deletedAt])
   @@index([date])
   @@index([assigneeId])
+  @@index([organizationId])
 }
 
 enum MeetingType {
@@ -701,19 +737,21 @@ enum ActivityType {
 }
 
 model Activity {
-  id          Int          @id @default(autoincrement())
-  entityType String
-  entityId   Int
-  type        ActivityType
-  title       String
-  description String       @default("")
-  metadata    String       @default("")
-  createdBy   String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  entityType     String
+  entityId       Int
+  type           ActivityType
+  title          String
+  description    String       @default("")
+  metadata       String       @default("")
+  createdBy      String
+  organizationId String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([organizationId])
 }
 
 model Payroll {
@@ -834,36 +872,30 @@ enum AutomationLogStatus {
 
 // Automation Rules - Define what automation to run
 model AutomationRule {
-  id          Int                   @id @default(autoincrement())
-  name        String
-  description String?
-  trigger     AutomationTrigger
-  conditions  Json                  @default("[]") // Array of condition objects
-  actions     Json                  @default("[]") // Array of action objects
-  
-  // Scheduling (for custom_schedule trigger)
-  cronExpression String?            // e.g., "0 9 * * *" for daily at 9am
-  isActive       Boolean            @default(true)
-  status        AutomationRuleStatus @default(active)
-  
-  // Metadata
-  priority     Int                  @default(0) // Higher = runs first
-  maxRunsPerDay Int?               // Limit daily executions
-  
-  // Usage tracking
-  runCount     Int                  @default(0)
-  lastRunAt    DateTime?
-  lastRunError String?
-  
-  // Relations
-  logs         AutomationLog[]
-  createdBy    String?             // User email who created
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id             Int                  @id @default(autoincrement())
+  name           String
+  description    String?
+  trigger        AutomationTrigger
+  conditions     Json                 @default("[]")
+  actions        Json                 @default("[]")
+  cronExpression String?
+  isActive       Boolean              @default(true)
+  status         AutomationRuleStatus @default(active)
+  priority       Int                  @default(0)
+  maxRunsPerDay  Int?
+  runCount       Int                  @default(0)
+  lastRunAt      DateTime?
+  lastRunError   String?
+  logs           AutomationLog[]
+  createdBy      String?
+  organizationId String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@index([trigger])
   @@index([status])
   @@index([isActive])
+  @@index([organizationId])
 }
 
 // Automation Logs - Track execution history
@@ -914,43 +946,30 @@ enum ScheduledJobStatus {
 }
 
 model ScheduledJob {
-  id          Int                 @id @default(autoincrement())
-  
-  jobType     ScheduledJobType
-  name        String
-  description String?
-  
-  // Scheduling
-  scheduledFor DateTime           // When to run
-  cronExpression String?          // For recurring jobs
-  
-  // Payload - what to execute
-  payload     Json               @default("{}")
-  
-  // Status
-  status      ScheduledJobStatus  @default(pending)
-  
-  // For recurring jobs
-  isRecurring Boolean            @default(false)
-  nextRunAt   DateTime?
-  
-  // Execution tracking
-  runCount    Int                @default(0)
-  lastRunAt   DateTime?
-  lastError   String?
-  
-  // Who/What this is for
-  entityType  String?             // "Lead", "Deal", "Client", etc.
-  entityId    Int?
-  
-  // Who created this
-  createdBy   String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id             Int                @id @default(autoincrement())
+  jobType        ScheduledJobType
+  name           String
+  description    String?
+  scheduledFor   DateTime
+  cronExpression String?
+  payload        Json               @default("{}")
+  status         ScheduledJobStatus @default(pending)
+  isRecurring    Boolean            @default(false)
+  nextRunAt      DateTime?
+  runCount       Int                @default(0)
+  lastRunAt      DateTime?
+  lastError      String?
+  entityType     String?
+  entityId       Int?
+  createdBy      String?
+  organizationId String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@index([status, scheduledFor])
   @@index([entityType, entityId])
   @@index([isRecurring])
+  @@index([organizationId])
 }
 
 // Email Queue - For sending emails with retry logic
@@ -1012,34 +1031,27 @@ model EmailQueue {
 
 // Activity Log - Track all CRM activities for automation triggers
 model ActivityLog {
-  id          Int               @id @default(autoincrement())
-  
-  // What happened
-  action      String            // "created", "updated", "deleted", "viewed", etc.
-  entityType  String            // "Lead", "Deal", "Client", etc.
-  entityId    Int
-  
-  // Details
-  description String?            // Human readable description
-  changes    Json?              @default("{}") // What changed
-  metadata   Json?               @default("{}")
-  
-  // Who did it
-  performedBy String?           // User email
+  id              Int      @id @default(autoincrement())
+  action          String
+  entityType      String
+  entityId        Int
+  description     String?
+  changes         Json?    @default("{}")
+  metadata        Json?    @default("{}")
+  performedBy     String?
   performedByName String?
-  
-  // For activity feed
-  isVisible  Boolean            @default(true)
-  icon       String?            // Icon name for UI
-  color      String?            // Color for UI
-  
-  createdAt  DateTime           @default(now())
+  isVisible       Boolean  @default(true)
+  icon            String?
+  color           String?
+  organizationId  String?
+  createdAt       DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([performedBy])
   @@index([createdAt])
   @@index([action])
   @@index([isVisible, createdAt])
+  @@index([organizationId])
 }
 
 // Alert model for automation alerts
@@ -1059,30 +1071,27 @@ enum AlertSeverity {
 }
 
 model Alert {
-  id          Int          @id @default(autoincrement())
-  type        AlertType    @default(custom)
-  severity    AlertSeverity @default(warning)
-  title       String
-  message     String
-  entityType  String?      // "Lead", "Deal", "Client", etc.
-  entityId    Int?
-  
-  // Resolution
-  isResolved  Boolean      @default(false)
-  resolvedAt  DateTime?
-  resolvedBy  String?
-  
-  // Metadata
-  metadata    Json?        @default("{}")
-  
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id             Int           @id @default(autoincrement())
+  type           AlertType     @default(custom)
+  severity       AlertSeverity @default(warning)
+  title          String
+  message        String
+  entityType     String?
+  entityId       Int?
+  isResolved     Boolean       @default(false)
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  metadata       Json?         @default("{}")
+  organizationId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([entityType, entityId])
   @@index([isResolved])
   @@index([severity])
   @@index([createdAt])
   @@index([type])
+  @@index([organizationId])
 }
 
 model CsvImport {

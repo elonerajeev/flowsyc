@@ -31,6 +31,7 @@ export type GetAuditLogsOptions = {
   role?: string;
   dateFrom?: string;
   dateTo?: string;
+  organizationId?: string;
 };
 
 export type AuditLogListResult = {
@@ -72,6 +73,7 @@ export async function logAudit(params: {
   entity: string;
   entityId?: string | number;
   detail?: string;
+  organizationId?: string;
 }) {
   try {
     await prisma.auditLog.create({
@@ -82,6 +84,7 @@ export async function logAudit(params: {
         entity: params.entity,
         entityId: params.entityId ? String(params.entityId) : null,
         detail: params.detail ?? null,
+        organizationId: params.organizationId ?? null,
       },
     });
     // Purge old logs — fire-and-forget, never blocks the caller
@@ -112,6 +115,7 @@ function normalizeAuditOptions(input: number | GetAuditLogsOptions): GetAuditLog
     entity: input.entity?.trim() ?? "",
     userId: input.userId,
     role: input.role,
+    organizationId: input.organizationId,
   };
 }
 
@@ -121,6 +125,12 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
   // Always restrict to retention window
   params.push(retentionCutoff().toISOString());
   conditions.push(`"createdAt" >= $${params.length}::timestamptz`);
+
+  // Org-level isolation: filter by organizationId when available
+  if (options.organizationId) {
+    params.push(options.organizationId);
+    conditions.push(`"organizationId" = $${params.length}`);
+  }
 
   if (options.role === "employee" && options.userId) {
     params.push(options.userId);

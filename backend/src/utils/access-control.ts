@@ -7,12 +7,17 @@ export type AccessActor =
       userId?: string;
       email: string;
       role: UserRole;
+      organizationId?: string;
     }
   | null
   | undefined;
 
 // Alias used by older service files
 export type AccessScope = AccessActor;
+
+export function orgFilter(actor: AccessActor): { organizationId?: string } {
+  return actor?.organizationId ? { organizationId: actor.organizationId } : {};
+}
 
 function deriveInitials(value: string) {
   return value

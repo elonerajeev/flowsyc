@@ -51,6 +51,7 @@ type AccessScope = {
   role: UserRole;
   userId: string;
   email: string;
+  organizationId?: string;
 } | null | undefined;
 
 function toDbPriority(priority: TaskRecord["priority"]): TaskPriority {
@@ -95,9 +96,14 @@ function mapTask(task: {
   };
 }
 
-function buildTaskWhere(query: { column?: TaskRecord["column"]; priority?: TaskRecord["priority"]; projectId?: number }, employeeAssignees?: string[] | null): Prisma.TaskWhereInput {
+function buildTaskWhere(
+  query: { column?: TaskRecord["column"]; priority?: TaskRecord["priority"]; projectId?: number },
+  employeeAssignees?: string[] | null,
+  organizationId?: string,
+): Prisma.TaskWhereInput {
   return {
     deletedAt: null,
+    ...(organizationId ? { organizationId } : {}),
     ...(query.column ? { column: toDbColumn(query.column) } : {}),
     ...(query.priority ? { priority: query.priority } : {}),
     ...(query.projectId ? { projectId: query.projectId } : {}),
@@ -163,7 +169,7 @@ export const tasksService = {
 
   async list(query: TaskQuery, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
 
     const tasks = await prisma.task.findMany({
       where,
@@ -187,7 +193,7 @@ export const tasksService = {
     }
 
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
     const limit = Math.max(1, Math.min(query.limit, 100));
     const page = Math.max(1, query.page);
     const skip = (page - 1) * limit;
@@ -214,7 +220,7 @@ export const tasksService = {
 
   async stats(query: TaskStatsQuery, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const where = buildTaskWhere(query, employeeAssignees);
+    const where = buildTaskWhere(query, employeeAssignees, access?.organizationId);
 
     const grouped = await prisma.task.groupBy({
       by: ["column"],
@@ -255,6 +261,7 @@ export const tasksService = {
         valueStream: input.valueStream ?? "Growth",
         column: toDbColumn(input.column ?? "todo"),
         projectId: input.projectId ?? null,
+        organizationId: access?.organizationId ?? null,
         updatedAt: new Date(),
       },
     });

@@ -57,6 +57,7 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 type ClientInput = {
@@ -146,21 +147,32 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     });
   }
 
-  // Data isolation: Admin/Manager can only see clients they created or assigned to them
-  if (access?.role === "admin" || access?.role === "manager") {
-    and.push({
-      OR: [
-        { assignedTo: access.email },
-        { assignedTo: access.userId ?? "" },
-      ],
-    });
-  }
-
-  // RBAC: Employees see only assigned clients
-  if (access?.role === "employee") {
-    and.push({
-      assignedTo: { in: [access.email, access.userId ?? ""] },
-    });
+  // Org-level isolation (primary): filters by organizationId when available
+  if (access?.organizationId) {
+    and.push({ organizationId: access.organizationId });
+    // Within org: role-based sub-scoping
+    if (access.role === "manager") {
+      const ids = [access.email, access.userId].filter(Boolean) as string[];
+      and.push({ OR: ids.map((id) => ({ assignedTo: id })) });
+    } else if (access.role === "employee") {
+      and.push({ assignedTo: { in: [access.email, access.userId ?? ""].filter(Boolean) } });
+    }
+    // admin sees all org clients
+  } else {
+    // Backward-compat user-level isolation when no org context exists
+    if (access?.role === "admin" || access?.role === "manager") {
+      and.push({
+        OR: [
+          { assignedTo: access.email },
+          { assignedTo: access.userId ?? "" },
+        ],
+      });
+    }
+    if (access?.role === "employee") {
+      and.push({
+        assignedTo: { in: [access.email, access.userId ?? ""] },
+      });
+    }
   }
 
   if (filters.status) {
@@ -277,7 +289,7 @@ export const clientsService = {
     };
   },
 
-  async create(input: ClientInput) {
+  async create(input: ClientInput, access?: AccessScope) {
     const existing = await prisma.client.findUnique({ where: { email: input.email } });
     if (existing) {
       throw new AppError("Client email already exists", 409, "CONFLICT");
@@ -305,6 +317,7 @@ export const clientsService = {
           phone: input.phone ?? "",
           company: input.company ?? "",
           tags: input.tags ?? [],
+          organizationId: access?.organizationId ?? null,
           updatedAt: new Date(),
         },
       });

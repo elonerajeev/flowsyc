@@ -42,9 +42,13 @@ function mapNote(note: {
 }
 
 export const notesService = {
-  async list(authorId: string) {
+  async list(authorId: string, organizationId?: string) {
     const notes = await prisma.note.findMany({
-      where: { deletedAt: null, authorId },
+      where: {
+        deletedAt: null,
+        authorId,
+        ...(organizationId ? { organizationId } : {}),
+      },
       orderBy: [{ isPinned: "desc" }, { updatedAt: "desc" }],
     });
     return { data: notes.map(mapNote) };
@@ -58,7 +62,7 @@ export const notesService = {
     return mapNote(note);
   },
 
-  async create(authorId: string, input: NoteInput) {
+  async create(authorId: string, input: NoteInput, organizationId?: string) {
     const note = await prisma.note.create({
       data: {
         title: input.title,
@@ -66,6 +70,7 @@ export const notesService = {
         isPinned: input.isPinned ?? false,
         color: input.color ?? "default",
         authorId,
+        organizationId: organizationId ?? null,
         updatedAt: new Date(),
       },
     });

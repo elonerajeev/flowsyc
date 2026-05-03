@@ -9,6 +9,7 @@ export type TokenPayload = {
   email: string;
   role?: UserRole;
   type?: string;
+  organizationId?: string;
 };
 
 export function signAccessToken(payload: TokenPayload) {

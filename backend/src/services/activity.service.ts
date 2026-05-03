@@ -23,6 +23,7 @@ export const activityService = {
         description: input.description || "",
         metadata: input.metadata ? JSON.stringify(input.metadata) : "",
         createdBy: String(actor?.userId || actor?.email || "system"),
+        organizationId: actor?.organizationId ?? null,
       },
     });
 
@@ -55,9 +56,19 @@ export const activityService = {
   async getRecent(limit = 20, actor?: AccessActor) {
     const where: any = {};
 
-    if (actor && (actor.role === "admin" || actor.role === "manager")) {
+    if (actor?.organizationId) {
+      where.organizationId = actor.organizationId;
+      // Within org: manager/employee see only their own activities
+      if (actor.role === "manager" || actor.role === "employee") {
+        const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+        where.createdBy = { in: actorIds };
+      }
+    } else if (actor) {
+      // Backward-compat: scope to actor's own activities regardless of role
       const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
-      where.createdBy = { in: actorIds };
+      if (actorIds.length > 0) {
+        where.createdBy = { in: actorIds };
+      }
     }
 
     const activities = await prisma.activity.findMany({
