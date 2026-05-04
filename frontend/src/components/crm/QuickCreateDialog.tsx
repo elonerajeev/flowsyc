@@ -210,7 +210,7 @@ export default function QuickCreateDialog() {
             source: "website",
             status: "new",
             score: 50,
-            assignedTo: manager.trim() || "Sarah Johnson",
+            assignedTo: manager.trim().includes("@") ? manager.trim() : undefined,
             notes: description.trim(),
           });
         }
@@ -294,7 +294,7 @@ export default function QuickCreateDialog() {
     onSuccess: async (_, workflowId) => {
       const keyMap: Record<string, unknown[]> = { 
         client: crmKeys.clients, 
-        lead: ["leads"],
+        lead: crmKeys.leads,
         contact: ["contacts"],
         deal: ["deals"],
         project: crmKeys.projects, 

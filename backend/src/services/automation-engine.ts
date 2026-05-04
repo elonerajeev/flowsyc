@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import { QUERY_LIMITS } from "../utils/query-limits";
 import { AutomationTrigger as PrismaAutomationTrigger, Prisma } from "@prisma/client";
 import { sendMail } from "../utils/mailer";
 import { logger } from "../utils/logger";
@@ -115,7 +116,8 @@ async function getRulesForTrigger(trigger: TriggerType): Promise<AutomationRule[
       isActive: true,
       status: "active"
     },
-    orderBy: { priority: "desc" }
+    orderBy: { priority: "desc" },
+    take: QUERY_LIMITS.AUTOMATION_BATCH,
   }) as Promise<AutomationRule[]>;
 }
 
@@ -1367,7 +1369,7 @@ export async function executeScheduledJobs() {
       status: "pending",
       scheduledFor: { lte: now }
     },
-    take: 10
+    take: QUERY_LIMITS.SCHEDULED_JOBS,
   });
   
   for (const job of jobs) {
@@ -1474,7 +1476,7 @@ export function startAutomationCron() {
       const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const cutoff90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-      const [tokens, jobs, logs, actLogs] = await Promise.all([
+      const [tokens, jobs, logs, actLogs, notifications] = await Promise.all([
         // Expired refresh tokens
         prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
         // Completed/failed/cancelled scheduled jobs older than 30 days
@@ -1485,6 +1487,8 @@ export function startAutomationCron() {
         prisma.automationLog.deleteMany({ where: { startedAt: { lt: cutoff90d } } }),
         // Activity logs older than 90 days
         prisma.activityLog.deleteMany({ where: { createdAt: { lt: cutoff90d } } }),
+        // Read notifications older than 30 days
+        prisma.notification.deleteMany({ where: { isRead: true, createdAt: { lt: cutoff30d } } }),
       ]);
 
       logger.info("Daily cleanup done", {
@@ -1492,6 +1496,7 @@ export function startAutomationCron() {
         oldJobs: jobs.count,
         oldLogs: logs.count,
         oldActivityLogs: actLogs.count,
+        oldNotifications: notifications.count,
       });
     } catch (err) {
       logger.error("Daily cleanup failed:", err);

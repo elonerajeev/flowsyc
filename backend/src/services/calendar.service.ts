@@ -9,6 +9,14 @@ type CalendarEventWhere = Prisma.CalendarEventWhereInput;
 async function buildCalendarWhere(actor: AccessActor): Promise<CalendarEventWhere> {
   const baseWhere: CalendarEventWhere = { deletedAt: null };
 
+  // Admin and Manager: see only their own calendar events
+  if (actor?.role === "admin" || actor?.role === "manager") {
+    return {
+      ...baseWhere,
+      authorId: actor.userId,
+    };
+  }
+
   if (actor?.role === "employee") {
     const member = await prisma.teamMember.findFirst({
       where: { email: { equals: actor.email, mode: "insensitive" }, deletedAt: null },

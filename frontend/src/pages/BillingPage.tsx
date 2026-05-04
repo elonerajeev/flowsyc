@@ -4,6 +4,7 @@ import { CreditCard, Receipt, ShieldCheck, Zap, AlertCircle } from "lucide-react
 import { useInvoices } from "@/hooks/use-crm-data";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { cn } from "@/lib/utils";
 import { BillingSkeleton } from "@/components/skeletons";
 
@@ -101,7 +102,7 @@ export default function BillingPage() {
                   <p className="text-xs text-muted-foreground">Due {inv.due}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-foreground">{inv.amount}</span>
+                  <span className="text-sm font-semibold text-foreground"><PrivacyValue value={inv.amount} type="number" /></span>
                   <span className={cn(
                     "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
                     inv.status === "completed" ? "bg-success/10 text-success border-success/20" :

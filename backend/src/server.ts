@@ -8,6 +8,15 @@ import { startAutomationCron, stopAutomationCron } from "./services/automation-e
 import { startInboxScheduler, stopInboxScheduler } from "./services/inbox-scheduler.service";
 import { purgeOldAuditLogs } from "./utils/audit";
 
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled rejection", { reason });
+});
+
+process.on("uncaughtException", (err: Error) => {
+  logger.error("Uncaught exception", { err: err.message, stack: err.stack });
+  process.exit(1);
+});
+
 const app = createApp();
 const server = http.createServer(app);
 

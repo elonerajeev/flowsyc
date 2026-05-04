@@ -51,6 +51,7 @@ import { Label } from "@/components/ui/label";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
 import LeadEmailDialog from "@/components/crm/LeadEmailDialog";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
@@ -1130,7 +1131,7 @@ const LeadsPage = () => {
                         {lead.phone && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Phone className="h-4 w-4" />
-                            <span>{lead.phone}</span>
+                            <span><PrivacyValue value={lead.phone} type="phone" /></span>
                           </div>
                         )}
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">

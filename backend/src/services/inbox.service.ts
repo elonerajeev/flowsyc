@@ -117,9 +117,12 @@ export async function getEmailById(userId: string, emailId: number) {
   return email;
 }
 
-export async function getEmailsByEntity(entityType: string, entityId: number) {
+export async function getEmailsByEntity(userId: string, entityType: string, entityId: number) {
+  const account = await prisma.imapAccount.findUnique({ where: { userId }, select: { email: true } });
+  if (!account) return [];
+
   return prisma.inboxEmail.findMany({
-    where: { entityType, entityId },
+    where: { entityType, entityId, toEmail: account.email },
     orderBy: { receivedAt: "desc" },
     select: {
       id: true, subject: true, fromEmail: true, fromName: true,

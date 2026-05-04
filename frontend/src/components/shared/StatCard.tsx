@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
 
@@ -19,7 +20,7 @@ interface StatCardProps {
   accentColor?: string;
 }
 
-export default function StatCard({
+export default memo(function StatCard({
   title,
   value,
   change,
@@ -68,4 +69,4 @@ export default function StatCard({
       </div>
     </motion.div>
   );
-}
+});

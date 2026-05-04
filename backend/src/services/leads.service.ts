@@ -7,6 +7,8 @@ import { GTMAutomationService } from "./gtm-automation.service";
 import { gtmLifecycleService } from "./gtm-lifecycle.service";
 import { logger } from "../utils/logger";
 import { cache, TTL } from "../utils/cache";
+import { normalizePagination } from "../utils/pagination";
+import { createNotification } from "./notifications.service";
 
 type LeadRecord = {
   id: number;
@@ -37,7 +39,7 @@ type LeadInput = {
   company?: string;
   jobTitle?: string;
   source?: LeadSource;
-  status?: LeadStatus;
+  status?: LeadStatus | "won" | "lost";
   score?: number;
   assignedTo?: string;
   notes?: string;
@@ -53,6 +55,7 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 type QueryParams = {
@@ -103,6 +106,13 @@ function mapLead(lead: any): LeadRecord {
   };
 }
 
+function ensureLeadOrgAccess(lead: { organizationId?: string | null }, access?: AccessScope) {
+  if (!access?.organizationId) return;
+  if (lead.organizationId !== access.organizationId) {
+    throw new AppError("Access denied", 403, "FORBIDDEN");
+  }
+}
+
 export const leadsService = {
   async list(access?: AccessScope, params: QueryParams = {}) {
     const where: Prisma.LeadWhereInput = { deletedAt: null };
@@ -124,7 +134,10 @@ export const leadsService = {
 
     // Filters
     if (params.status) {
-      filterConditions.push({ status: params.status as any });
+      let normalizedStatus = params.status;
+      if (normalizedStatus === "won") normalizedStatus = "closed_won";
+      if (normalizedStatus === "lost") normalizedStatus = "closed_lost";
+      filterConditions.push({ status: normalizedStatus as LeadStatus });
     }
     if (params.source) filterConditions.push({ source: params.source as any });
     if (params.assignedTo) filterConditions.push({ assignedTo: params.assignedTo });
@@ -137,22 +150,34 @@ export const leadsService = {
     if (params.minScore !== undefined) filterConditions.push({ score: { gte: params.minScore } });
     if (params.maxScore !== undefined) filterConditions.push({ score: { lte: params.maxScore } });
 
-    // Data isolation: Admin/Manager can only see leads they created or assigned to them
-    if (access?.role === "admin" || access?.role === "manager") {
-      filterConditions.push({
-        OR: [
-          { createdBy: access.email },
-          { assignedTo: access.email },
-          { assignedTo: access.userId ?? "" },
-        ],
-      });
-    }
-
-    // RBAC
-    if (access?.role === "employee") {
-      filterConditions.push({
-        assignedTo: { in: [access.email, access.userId ?? ""] },
-      });
+    // Org-level isolation (primary)
+    if (access?.organizationId) {
+      filterConditions.push({ organizationId: access.organizationId });
+      if (access.role === "manager") {
+        const ids = [access.email, access.userId].filter(Boolean) as string[];
+        filterConditions.push({ OR: [
+          ...ids.map((id) => ({ createdBy: id })),
+          ...ids.map((id) => ({ assignedTo: id })),
+        ]});
+      } else if (access.role === "employee") {
+        filterConditions.push({ assignedTo: { in: [access.email, access.userId ?? ""].filter(Boolean) } });
+      }
+    } else {
+      // Backward-compat user-level isolation
+      if (access?.role === "admin" || access?.role === "manager") {
+        filterConditions.push({
+          OR: [
+            { createdBy: access.email },
+            { assignedTo: access.email },
+            { assignedTo: access.userId ?? "" },
+          ],
+        });
+      }
+      if (access?.role === "employee") {
+        filterConditions.push({
+          assignedTo: { in: [access.email, access.userId ?? ""] },
+        });
+      }
     }
 
     // Apply all filters
@@ -168,17 +193,19 @@ export const leadsService = {
       !params.assignedTo && !params.assignedState && params.minScore === undefined && params.maxScore === undefined &&
       access?.role !== "employee" && (params.limit || 50) >= 100;
 
-    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${params.page || 1}:${params.limit || 50}`;
+    const { page, limit, skip } = normalizePagination({ page: params.page, limit: params.limit });
+
+    const cacheKey = `leads:list:${access?.userId ?? access?.email ?? "anon"}:${page}:${limit}`;
     if (isUnfiltered) {
-      const cached = cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
+      const cached = await cache.get<{ leads: ReturnType<typeof mapLead>[]; total: number; page: number; limit: number }>(cacheKey);
       if (cached) return cached;
     }
 
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
-      take: params.limit || 50,
-      skip: params.page ? (params.page - 1) * (params.limit || 50) : 0,
+      take: limit,
+      skip,
       select: {
         id: true,
         firstName: true,
@@ -204,7 +231,7 @@ export const leadsService = {
     const total = await prisma.lead.count({ where });
 
     const result = { leads: leads.map(mapLead), total, page: params.page || 1, limit: params.limit || 50 };
-    if (isUnfiltered) cache.set(cacheKey, result, TTL.LEADS_LIST);
+    if (isUnfiltered) await cache.set(cacheKey, result, TTL.LEADS_LIST);
     return result;
   },
 
@@ -213,6 +240,7 @@ export const leadsService = {
     if (!lead || lead.deletedAt) {
       throw new AppError("Lead not found", 404, "NOT_FOUND");
     }
+    ensureLeadOrgAccess(lead, access);
 
     // Data isolation: Admin/Manager can only access leads they created or assigned to them
     if ((access?.role === "admin" || access?.role === "manager")) {
@@ -233,7 +261,11 @@ export const leadsService = {
   async create(input: LeadInput, access?: AccessScope) {
     // Check for duplicate email
     const existing = await prisma.lead.findFirst({
-      where: { email: input.email.toLowerCase(), deletedAt: null },
+      where: {
+        email: input.email.toLowerCase(),
+        deletedAt: null,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
     });
     if (existing) {
       throw new AppError("A lead with this email already exists", 400, "DUPLICATE_EMAIL");
@@ -260,7 +292,8 @@ export const leadsService = {
         companySize: input.companySize as any,
         budget: input.budget as any,
         timeline: input.timeline as any,
-        createdBy: access?.email, // Track who created this lead
+        createdBy: access?.email,
+        organizationId: access?.organizationId ?? null,
       },
     });
 
@@ -276,7 +309,24 @@ export const leadsService = {
       createdBy: access?.email,
     }).catch((err) => logger.error("Automation trigger failed:", err));
 
-    cache.invalidatePrefix("leads:list");
+    // Notify assigned user if there's an assignee
+    if (lead.assignedTo) {
+      createNotification({
+        userId: lead.assignedTo,
+        type: "lead",
+        title: "New lead assigned",
+        message: `You have been assigned to lead: ${lead.firstName} ${lead.lastName}`,
+        priority: lead.score > 70 ? "high" : "medium",
+        linkUrl: `/leads?leadId=${lead.id}`,
+        linkLabel: "View lead",
+        entityType: "Lead",
+        entityId: lead.id,
+        batchKey: `lead-assigned-${lead.assignedTo}`,
+        metadata: { leadId: lead.id, score: lead.score },
+      }).catch((err) => logger.error("Failed to create notification:", err));
+    }
+
+    await cache.invalidatePrefix("leads:list");
     return mapLead(lead);
   },
 
@@ -286,7 +336,12 @@ export const leadsService = {
     // Check for duplicate email if updating email
     if (patch.email && patch.email.toLowerCase() !== existing.email) {
       const duplicate = await prisma.lead.findFirst({
-        where: { email: patch.email.toLowerCase(), deletedAt: null, id: { not: id } },
+        where: {
+          email: patch.email.toLowerCase(),
+          deletedAt: null,
+          id: { not: id },
+          ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+        },
       });
       if (duplicate) {
         throw new AppError("A lead with this email already exists", 400, "DUPLICATE_EMAIL");
@@ -313,7 +368,7 @@ export const leadsService = {
       gtmLifecycleService.syncLeadLifecycle(lead.id, access?.email).catch((err) => logger.error("Lifecycle sync failed:", err));
     }
 
-    cache.invalidatePrefix("leads:list");
+    await cache.invalidatePrefix("leads:list");
     cache.invalidatePattern("gtm:overview:");
     return mapLead(lead);
   },
@@ -358,11 +413,12 @@ export const leadsService = {
         description: `Lead deleted: ${lead.firstName} ${lead.lastName} (${lead.email})`,
         performedBy: access?.email || "system",
         isVisible: true,
+        organizationId: access?.organizationId ?? null,
       },
     });
     
     // Invalidate caches
-    cache.invalidatePrefix("leads:list");
+    await cache.invalidatePrefix("leads:list");
     cache.invalidatePattern("gtm:overview:");
   },
 
@@ -397,6 +453,7 @@ export const leadsService = {
         healthScore: 75,
         healthGrade: "B",
         avatar: input.clientName.substring(0, 2).toUpperCase(),
+        organizationId: access?.organizationId ?? null,
         updatedAt: new Date(),
       },
     });
@@ -421,6 +478,7 @@ export const leadsService = {
         entity: "Lead",
         entityId: String(id),
         detail: `Lead "${lead.firstName} ${lead.lastName}" converted to client "${input.clientName}"`,
+        organizationId: access?.organizationId ?? null,
       },
     });
 
@@ -441,7 +499,8 @@ export const leadsService = {
   // ============================================
   // GTM FEATURES
   // ============================================
-  async recalculateScore(id: number) {
+  async recalculateScore(id: number, access?: AccessScope) {
+    await this.getById(id, access);
     const result = await GTMAutomationService.calculateLeadScore(id);
     
     await prisma.lead.update({
@@ -462,13 +521,15 @@ export const leadsService = {
     return { score: result.score, breakdown: result.breakdown, tags };
   },
 
-  async createFollowUpSequence(id: number, userEmail: string) {
+  async createFollowUpSequence(id: number, userEmail: string, access?: AccessScope) {
+    await this.getById(id, access);
     await GTMAutomationService.createFollowUpReminders(id, userEmail);
     gtmLifecycleService.syncLeadLifecycle(id, userEmail).catch((err) => logger.error("Lifecycle sync failed:", err));
     return { success: true, message: "Follow-up sequence created" };
   },
 
-  async assignToBestRep(id: number) {
+  async assignToBestRep(id: number, access?: AccessScope) {
+    await this.getById(id, access);
     const result = await GTMAutomationService.assignLeadToBestRep(id);
 
     if (!result.assigned) {
@@ -478,8 +539,14 @@ export const leadsService = {
     return result;
   },
 
-  async bulkRecalculateScores() {
-    const leads = await prisma.lead.findMany({ where: { deletedAt: null }, select: { id: true } });
+  async bulkRecalculateScores(access?: AccessScope) {
+    const leads = await prisma.lead.findMany({
+      where: {
+        deletedAt: null,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
+      select: { id: true },
+    });
 
     const BATCH = 10;
     let hotLeads = 0, warmLeads = 0, mediumLeads = 0, coldLeads = 0;
@@ -519,7 +586,13 @@ export const leadsService = {
           ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
           : {};
     const leads = await prisma.lead.findMany({
-      where: { score: { gte: minScore }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
+      where: {
+        score: { gte: minScore },
+        status: { notIn: ["closed_won", "closed_lost"] },
+        deletedAt: null,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+        ...ownerFilter,
+      },
       orderBy: { score: "desc" },
     });
     return leads.map(mapLead);
@@ -534,22 +607,28 @@ export const leadsService = {
           ? { assignedTo: { in: [access.email, access.userId ?? ""] } }
           : {};
     const leads = await prisma.lead.findMany({
-      where: { updatedAt: { lt: cutoffDate }, status: { notIn: ["closed_won", "closed_lost"] }, deletedAt: null, ...ownerFilter },
+      where: {
+        updatedAt: { lt: cutoffDate },
+        status: { notIn: ["closed_won", "closed_lost"] },
+        deletedAt: null,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+        ...ownerFilter,
+      },
       orderBy: { updatedAt: "asc" },
     });
     return leads.map(mapLead);
   },
 
   async updateStage(leadId: number, status: string, notes?: string, actor?: any) {
-    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (!lead) {
-      throw new AppError("Lead not found", 404, "NOT_FOUND");
-    }
+    const lead = await this.getById(leadId, actor);
+    let normalizedStatus = status;
+    if (normalizedStatus === "won") normalizedStatus = "closed_won";
+    if (normalizedStatus === "lost") normalizedStatus = "closed_lost";
 
     const oldStatus = lead.status;
     const updatedLead = await prisma.lead.update({
       where: { id: leadId },
-      data: { status: status as LeadStatus },
+      data: { status: normalizedStatus as LeadStatus },
     });
 
     await prisma.activity.create({
@@ -557,17 +636,18 @@ export const leadsService = {
         entityType: "lead",
         entityId: leadId,
         type: "stage_change",
-        title: `Stage changed: ${oldStatus} → ${status}`,
-        description: notes || `Lead moved from ${oldStatus} to ${status}`,
-        metadata: JSON.stringify({ oldStatus, newStatus: status }),
+        title: `Stage changed: ${oldStatus} → ${normalizedStatus}`,
+        description: notes || `Lead moved from ${oldStatus} to ${normalizedStatus}`,
+        metadata: JSON.stringify({ oldStatus, newStatus: normalizedStatus }),
         createdBy: String(actor?.userId || actor?.email || "system"),
+        organizationId: actor?.organizationId ?? null,
       },
     });
 
     logger.debug(`[Lead Stage Update] Triggering automation for lead ${leadId}: ${oldStatus} → ${status}`);
     
     try {
-      await onLeadUpdated(leadId, { status: status as any }, actor?.email);
+      await onLeadUpdated(leadId, { status: normalizedStatus as any }, actor?.email);
       logger.debug(`[Lead Stage Update] Automation completed for lead ${leadId}`);
     } catch (err) {
       logger.error(`[Lead Stage Update] Automation failed for lead ${leadId}:`, err);
@@ -577,15 +657,12 @@ export const leadsService = {
       success: true,
       lead: mapLead(updatedLead),
       previousStatus: oldStatus,
-      newStatus: status,
+      newStatus: normalizedStatus,
     };
   },
 
   async logActivity(leadId: number, type: string, title: string, description?: string, actor?: any) {
-    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (!lead) {
-      throw new AppError("Lead not found", 404, "NOT_FOUND");
-    }
+    await this.getById(leadId, actor);
 
     const activity = await prisma.activity.create({
       data: {
@@ -596,6 +673,7 @@ export const leadsService = {
         description: description || "",
         metadata: JSON.stringify({}),
         createdBy: String(actor?.userId || actor?.email || "system"),
+        organizationId: actor?.organizationId ?? null,
       },
     });
 
@@ -607,9 +685,14 @@ export const leadsService = {
     return activity;
   },
 
-  async getActivities(leadId: number, limit = 50) {
+  async getActivities(leadId: number, limit = 50, access?: AccessScope) {
+    await this.getById(leadId, access);
     const activities = await prisma.activity.findMany({
-      where: { entityType: "lead", entityId: leadId },
+      where: {
+        entityType: "lead",
+        entityId: leadId,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -620,9 +703,13 @@ export const leadsService = {
     }));
   },
 
-  async getMeetings(leadId: number) {
+  async getMeetings(leadId: number, access?: AccessScope) {
+    await this.getById(leadId, access);
     const meetings = await prisma.meeting.findMany({
-      where: { leadId },
+      where: {
+        leadId,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
       orderBy: { scheduledAt: "desc" },
     });
     return meetings;

@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext'
 import { NotificationProvider } from '@/contexts/NotificationContext'
+import { RealtimeProvider } from '@/contexts/RealtimeContext'
 
-// Create test query client
 const createTestQueryClient = () => new QueryClient({
   defaultOptions: {
     queries: { retry: false },
@@ -14,7 +14,6 @@ const createTestQueryClient = () => new QueryClient({
   },
 })
 
-// Test wrapper with all providers
 const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
   const queryClient = createTestQueryClient()
   
@@ -23,9 +22,11 @@ const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ThemeProvider>
           <WorkspaceProvider>
-            <NotificationProvider>
-              {children}
-            </NotificationProvider>
+            <RealtimeProvider>
+              <NotificationProvider>
+                {children}
+              </NotificationProvider>
+            </RealtimeProvider>
           </WorkspaceProvider>
         </ThemeProvider>
       </BrowserRouter>
@@ -33,7 +34,6 @@ const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
   )
 }
 
-// Custom render function
 const customRender = (
   ui: ReactElement,
   options?: Omit<RenderOptions, 'wrapper'>

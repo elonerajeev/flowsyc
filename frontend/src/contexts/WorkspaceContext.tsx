@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { triggerHaptic } from "@/lib/micro-interactions";
+import { readStoredString, writeStoredString } from "@/lib/preferences";
+import { crmService } from "@/services/crm";
 
 export type WorkspaceContextValue = {
   commandOpen: boolean;
@@ -24,10 +26,33 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [workflowToOpen, setWorkflowToOpen] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, unknown> | null>(null);
-  const [privacyMode, setPrivacyMode] = useState(false);
+  // Persist privacy mode in localStorage + backend preferences
+  const [privacyMode, setPrivacyMode] = useState(() => readStoredString("crm-privacy-mode", "false") === "true");
 
   const canUseQuickCreate = role === "admin" || role === "manager";
-  const togglePrivacyMode = () => setPrivacyMode(v => !v);
+
+  // Sync privacy mode from backend on mount
+  useEffect(() => {
+    if (typeof crmService.getPreferences !== 'function') return;
+    crmService.getPreferences().then(({ data }) => {
+      if (data["crm-privacy-mode"] !== undefined) {
+        const val = data["crm-privacy-mode"] === "true" || data["crm-privacy-mode"] === true;
+        setPrivacyMode(val);
+        writeStoredString("crm-privacy-mode", String(val));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const togglePrivacyMode = useCallback(() => {
+    setPrivacyMode(v => {
+      const next = !v;
+      writeStoredString("crm-privacy-mode", String(next));
+      // Persist to backend — org-wide for admin, personal for others
+      crmService.updatePreferences({ "crm-privacy-mode": String(next) }).catch(() => {});
+      triggerHaptic("medium");
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -85,7 +110,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     workflowToOpen, 
     canUseQuickCreate, 
     privacyMode,
-    editData
+    editData,
+    togglePrivacyMode,
   ]);
 
   return (

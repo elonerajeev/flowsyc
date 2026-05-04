@@ -567,46 +567,6 @@ export default function SettingsPage() {
                 ))}
               </div>
 
-              {/* Google Calendar Integration - admin/manager only */}
-              {(role === "admin" || role === "manager") && (
-                <div className="rounded-2xl border border-border/70 bg-secondary/20 p-4 mt-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-                      <Calendar className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground">Google Calendar</p>
-                      <p className="text-xs text-muted-foreground">
-                        {googleConnected
-                          ? "Connected — Google Meet links can be generated for meetings"
-                          : "Connect to create real Google Meet links for meetings"}
-                      </p>
-                    </div>
-                    {googleConnected ? (
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>
-                        <button
-                          type="button"
-                          onClick={disconnectGoogleCalendar}
-                          disabled={connectingCalendar}
-                          className="rounded-xl border border-border/70 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/50 disabled:opacity-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={connectGoogleCalendar}
-                        disabled={connectingCalendar || googleConnected === null}
-                        className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
-                      >
-                        {connectingCalendar ? "Connecting..." : "Connect"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 

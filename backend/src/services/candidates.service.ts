@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { sendMail } from "../utils/mailer";
 import { sendHireEmail, sendRejectionEmail, sendInterviewInvitationEmail } from "../utils/email-templates";
+import { cache, TTL } from "../utils/cache";
 
 type CandidateRecord = {
   id: number;
@@ -143,7 +144,15 @@ type CandidateAccessScope = {
   role: string;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
+
+function assertOrganizationAccess(recordOrgId: string | null | undefined, access?: CandidateAccessScope) {
+  if (!access?.organizationId) return;
+  if (recordOrgId !== access.organizationId) {
+    throw new AppError("Access denied", 403, "FORBIDDEN");
+  }
+}
 
 export const candidatesService = {
   async list(query?: { page?: number; limit?: number; stage?: string; jobId?: number }, access?: CandidateAccessScope) {
@@ -152,6 +161,7 @@ export const candidatesService = {
     const skip = (page - 1) * limit;
 
     const where: any = { deletedAt: null };
+    if (access?.organizationId) where.organizationId = access.organizationId;
     if (query?.stage) where.stage = query.stage;
     if (query?.jobId) where.jobId = query.jobId;
 
@@ -159,6 +169,10 @@ export const candidatesService = {
     if (access?.role === "admin" || access?.role === "manager") {
       where.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
     }
+
+    const cacheKey = `candidates:list:${access?.userId ?? access?.email ?? "anon"}:${page}:${limit}:${query?.stage ?? ""}:${query?.jobId ?? ""}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
     const [candidates, total] = await Promise.all([
       prisma.candidate.findMany({
@@ -170,10 +184,12 @@ export const candidatesService = {
       }),
       prisma.candidate.count({ where }),
     ]);
-    return {
+    const result = {
       data: candidates.map(mapCandidate),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     };
+    await cache.set(cacheKey, result, TTL.LEADS_LIST);
+    return result;
   },
 
   async getById(candidateId: number, access?: CandidateAccessScope) {
@@ -184,6 +200,7 @@ export const candidatesService = {
     if (!candidate || candidate.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(candidate.organizationId, access);
 
     if (access?.role === "admin" || access?.role === "manager") {
       const isOwner = candidate.createdBy === access.email || candidate.createdBy === access.userId;
@@ -196,7 +213,13 @@ export const candidatesService = {
   },
 
   async create(input: CandidateInput, access?: CandidateAccessScope) {
-    const existingEmail = await prisma.candidate.findUnique({ where: { email: input.email } });
+    const existingEmail = await prisma.candidate.findFirst({
+      where: {
+        email: input.email,
+        deletedAt: null,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
+    });
     if (existingEmail) {
       throw new AppError("Candidate email already exists", 409, "CONFLICT");
     }
@@ -205,6 +228,7 @@ export const candidatesService = {
     if (!job || job.deletedAt) {
       throw new AppError("Job posting not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(job.organizationId, access);
 
     try {
       const candidate = await prisma.candidate.create({
@@ -216,6 +240,7 @@ export const candidatesService = {
           resume: input.resume ?? null,
           notes: input.notes ?? null,
           createdBy: access?.email ?? null,
+          organizationId: access?.organizationId ?? null,
           updatedAt: new Date(),
         },
         include: { JobPosting: { select: { title: true } } },
@@ -234,6 +259,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(existing.organizationId, access);
 
     if (access?.role === "admin" || access?.role === "manager") {
       const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
@@ -247,10 +273,17 @@ export const candidatesService = {
       if (!job || job.deletedAt) {
         throw new AppError("Job posting not found", 404, "NOT_FOUND");
       }
+      assertOrganizationAccess(job.organizationId, access);
     }
 
     if (patch.email !== undefined && patch.email !== existing.email) {
-      const emailOwner = await prisma.candidate.findUnique({ where: { email: patch.email } });
+      const emailOwner = await prisma.candidate.findFirst({
+        where: {
+          email: patch.email,
+          deletedAt: null,
+          ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+        },
+      });
       if (emailOwner && emailOwner.id !== existing.id) {
         throw new AppError("Candidate email already exists", 409, "CONFLICT");
       }
@@ -266,6 +299,7 @@ export const candidatesService = {
           ...(patch.stage !== undefined ? { stage: patch.stage as CandidateStage } : {}),
           ...(patch.resume !== undefined ? { resume: patch.resume } : {}),
           ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+          updatedAt: new Date(),
         },
         include: { JobPosting: { select: { title: true } } },
       });
@@ -283,6 +317,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(existing.organizationId, access);
 
     if (access?.role === "admin" || access?.role === "manager") {
       const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
@@ -293,11 +328,11 @@ export const candidatesService = {
 
     await prisma.candidate.update({
       where: { id: candidateId },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), updatedAt: new Date() },
     });
   },
 
-  async moveToNextStage(candidateId: number, access?: { userId?: string; role: string; email?: string }) {
+  async moveToNextStage(candidateId: number, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { JobPosting: true },
@@ -305,6 +340,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(existing.organizationId, access);
 
     if (access?.role === "admin" || access?.role === "manager") {
       const actorIds = [access.email, access.userId].filter(Boolean) as string[];
@@ -331,7 +367,7 @@ export const candidatesService = {
       // 1. Update candidate stage
       const updatedCandidate = await tx.candidate.update({
         where: { id: candidateId },
-        data: { stage: nextStage },
+        data: { stage: nextStage, updatedAt: new Date() },
         include: { JobPosting: { select: { title: true, department: true, location: true } } },
       });
 
@@ -367,6 +403,7 @@ export const candidatesService = {
               checkIn: "-",
               location: "Onboarding",
               workload: 0,
+              organizationId: existing.organizationId ?? null,
               updatedAt: new Date(),
             },
           });
@@ -421,7 +458,7 @@ export const candidatesService = {
     joiningDate: string;
     offeredSalary: string;
     signatureUrl?: string;
-  }) {
+  }, access?: CandidateAccessScope) {
     const candidate = await prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { JobPosting: true },
@@ -429,6 +466,7 @@ export const candidatesService = {
     if (!candidate || candidate.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(candidate.organizationId, access);
     if (candidate.stage !== "offer") {
       throw new AppError("Candidate must be in offer stage to generate offer letter", 400, "BAD_REQUEST");
     }
@@ -480,7 +518,7 @@ export const candidatesService = {
     });
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: {
           candidateId,
           action: "offer_letter_sent",
@@ -500,6 +538,7 @@ export const candidatesService = {
     if (!existing || existing.deletedAt) {
       throw new AppError("Candidate not found", 404, "NOT_FOUND");
     }
+    assertOrganizationAccess(existing.organizationId, access);
 
     if (access?.role === "admin" || access?.role === "manager") {
       const isOwner = existing.createdBy === access.email || existing.createdBy === access.userId;
@@ -514,7 +553,7 @@ export const candidatesService = {
 
     const candidate = await prisma.candidate.update({
       where: { id: candidateId },
-      data: { stage: "rejected" },
+      data: { stage: "rejected", updatedAt: new Date() },
       include: { JobPosting: { select: { title: true } } },
     });
 
@@ -526,7 +565,7 @@ export const candidatesService = {
     }, reason).catch(() => {});
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "rejected", detail: reason ?? "No reason provided", performedBy: "HR System" },
       });
     } catch (err) {
@@ -535,23 +574,25 @@ export const candidatesService = {
     return mapCandidate(candidate);
   },
 
-  async getTimeline(candidateId: number) {
+  async getTimeline(candidateId: number, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    assertOrganizationAccess(existing.organizationId, access);
 
-    const activities = await (prisma as any).candidateActivity.findMany({
+    const activities = await prisma.candidateActivity.findMany({
       where: { candidateId },
       orderBy: { createdAt: "desc" },
     });
     return activities;
   },
 
-  async addNote(candidateId: number, note: string, performedBy: string) {
+  async addNote(candidateId: number, note: string, performedBy: string, access?: CandidateAccessScope) {
     const existing = await prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!existing || existing.deletedAt) throw new AppError("Candidate not found", 404, "NOT_FOUND");
+    assertOrganizationAccess(existing.organizationId, access);
 
     try {
-      await (prisma as any).candidateActivity.create({
+      await prisma.candidateActivity.create({
         data: { candidateId, action: "note", detail: note, performedBy },
       });
     } catch (err) {
@@ -559,7 +600,7 @@ export const candidatesService = {
     }
     const candidate = await prisma.candidate.update({
       where: { id: candidateId },
-      data: { notes: existing.notes ? `${existing.notes}\n\n${note}` : note },
+      data: { notes: existing.notes ? `${existing.notes}\n\n${note}` : note, updatedAt: new Date() },
       include: { JobPosting: { select: { title: true } } },
     });
     return mapCandidate(candidate);

@@ -3,13 +3,13 @@ import type { Request, Response } from "express";
 import { communicationService } from "../services/communication.service";
 
 export const communicationController = {
-  listConversations: async (_req: Request, res: Response): Promise<void> => {
-    const conversations = await communicationService.listConversations();
+  listConversations: async (req: Request, res: Response): Promise<void> => {
+    const conversations = await communicationService.listConversations(req.auth);
     res.status(200).json(conversations);
   },
 
-  listMessages: async (_req: Request, res: Response): Promise<void> => {
-    const messages = await communicationService.listMessages();
+  listMessages: async (req: Request, res: Response): Promise<void> => {
+    const messages = await communicationService.listMessages(req.auth);
     res.status(200).json(messages);
   },
 
@@ -20,7 +20,7 @@ export const communicationController = {
       text,
       sender,
       isMe: Boolean(isMe),
-    });
+    }, req.auth);
     res.status(201).json(message);
   },
 };

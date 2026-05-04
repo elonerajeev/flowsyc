@@ -13,19 +13,20 @@ function readJobId(request: Request) {
 }
 
 export const hiringController = {
-  list: async (_req: Request, res: Response): Promise<void> => {
-    const jobs = await hiringService.list();
+  list: async (req: Request, res: Response): Promise<void> => {
+    const jobs = await hiringService.list(req.auth);
     res.status(200).json(jobs);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const job = await hiringService.getById(readJobId(req));
+    const job = await hiringService.getById(readJobId(req), req.auth);
     res.status(200).json(job);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const job = await hiringService.create(req.body);
+    const job = await hiringService.create(req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "create",
         entity: "JobPosting",
         entityId: job.id,
@@ -36,10 +37,11 @@ export const hiringController = {
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const jobId = readJobId(req);
-    const job = await hiringService.update(jobId, req.body);
+    const job = await hiringService.update(jobId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "JobPosting",
         entityId: jobId,
@@ -50,10 +52,11 @@ export const hiringController = {
   },
   remove: async (req: Request, res: Response): Promise<void> => {
     const jobId = readJobId(req);
-    await hiringService.delete(jobId);
+    await hiringService.delete(jobId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "delete",
         entity: "JobPosting",
         entityId: jobId,
@@ -64,10 +67,11 @@ export const hiringController = {
   },
   toggleStatus: async (req: Request, res: Response): Promise<void> => {
     const jobId = readJobId(req);
-    const job = await hiringService.toggleStatus(jobId);
+    const job = await hiringService.toggleStatus(jobId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "JobPosting",
         entityId: jobId,
@@ -77,10 +81,11 @@ export const hiringController = {
     res.status(200).json(job);
   },
   clone: async (req: Request, res: Response): Promise<void> => {
-    const job = await hiringService.clone(readJobId(req));
+    const job = await hiringService.clone(readJobId(req), req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "create",
         entity: "JobPosting",
         entityId: job.id,

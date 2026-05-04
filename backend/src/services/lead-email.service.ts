@@ -64,17 +64,18 @@ export async function sendEmailToLead(
       where: { id: leadId },
       data: { status: "contacted" as LeadStatus },
     });
-    await onLeadUpdated(leadId, { status: "contacted", trigger: "email_sent" }, senderEmail);
-    logger.info(`[LeadEmail] Auto-advanced lead ${leadId} to 'contacted' after email sent`);
+    try {
+      await onLeadUpdated(leadId, { status: "contacted", trigger: "email_sent" }, senderEmail);
+      logger.info(`[LeadEmail] Auto-advanced lead ${leadId} to 'contacted' after email sent`);
+    } catch (err) {
+      logger.error(`[LeadEmail] Lead ${leadId} was emailed but lifecycle automation failed:`, err);
+    }
   }
 }
 
 // ─── Get email history for a lead ────────────────────────────────────────────
 
 export async function getLeadEmailHistory(leadId: number) {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { email: true } });
-  if (!lead) return [];
-
   const [sent, received] = await Promise.all([
     // Emails sent from CRM to this lead
     prisma.emailQueue.findMany({
@@ -85,9 +86,9 @@ export async function getLeadEmailHistory(leadId: number) {
         sentAt: true, createdAt: true, recipientName: true,
       },
     }),
-    // Emails received from this lead (IMAP inbox)
+    // Emails received and linked to this specific lead entity
     prisma.inboxEmail.findMany({
-      where: { fromEmail: lead.email },
+      where: { entityType: "Lead", entityId: leadId },
       orderBy: { receivedAt: "desc" },
       select: {
         id: true, subject: true, body: true, fromName: true,

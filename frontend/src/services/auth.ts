@@ -147,6 +147,7 @@ function persistUser(user: AuthUser | null) {
   if (!user) {
     removeStoredValue(AUTH_USER_KEY);
     removeStoredValue("crm-auth-token");
+    removeStoredValue("crm-role");
     return;
   }
   writeStoredJSON(AUTH_USER_KEY, user);

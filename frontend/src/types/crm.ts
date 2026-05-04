@@ -442,31 +442,24 @@ export type CreateTeamInput = {
 export type CreateTeamMemberInput = {
   name: string;
   email: string;
-  role: TeamMemberRecord["role"];
+  role: "Manager" | "Employee";
   status?: TeamMemberRecord["status"];
   avatar?: string;
-  department?: string;
-  team?: string;
+  department: string;
+  team: string;
   teamId?: number | null;
-  designation?: string;
-  manager?: string;
-  workingHours?: string;
-  officeLocation?: string;
-  timeZone?: string;
+  designation: string;
+  manager: string;
+  workingHours: string;
+  officeLocation: string;
+  timeZone: string;
   baseSalary?: number;
   allowances?: number;
   deductions?: number;
   paymentMode?: TeamMemberRecord["paymentMode"];
-  warningCount?: number;
-  suspendedAt?: string | null;
-  terminationEligibleAt?: string | null;
-  handoverCompletedAt?: string | null;
-  terminatedAt?: string | null;
-  separationNote?: string;
   attendance?: TeamMemberRecord["attendance"];
   checkIn?: string;
   location?: string;
-  workload?: number;
 };
 
 export interface AttendanceRecord {

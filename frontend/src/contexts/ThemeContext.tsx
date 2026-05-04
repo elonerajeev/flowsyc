@@ -20,7 +20,7 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  mode: "dark", color: "ocean", background: "ocean", role: "admin",
+  mode: "dark", color: "ocean", background: "ocean", role: "employee",
   toggleMode: () => {}, setColor: () => {}, setBackground: () => {}, setRole: () => {},
 });
 
@@ -411,7 +411,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   });
   const [role, setRoleState] = useState<UserRole>(() => {
     const storedUser = readStoredJSON<{ role?: UserRole }>("crm-auth-user", null);
-    return (storedUser?.role as UserRole) || (readStoredString("crm-role", "admin") as UserRole) || "admin";
+    return (storedUser?.role as UserRole) || (readStoredString("crm-role", "employee") as UserRole) || "employee";
   });
 
   // Sync with backend on mount

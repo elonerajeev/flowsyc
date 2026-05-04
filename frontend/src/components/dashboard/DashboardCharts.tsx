@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { ArrowUpRight, Clock3, Zap, Check } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
@@ -29,6 +30,7 @@ export default function DashboardCharts({
   focusClients,
   atRiskClients,
 }: DashboardChartsProps) {
+  const navigate = useNavigate();
   const [selectedStage, setSelectedStage] = useState(pipelineBreakdown[0] ?? null);
   const [visibleFocusCount, setVisibleFocusCount] = useState(4);
   const [visibleRiskCount, setVisibleRiskCount] = useState(4);
@@ -258,7 +260,7 @@ export default function DashboardCharts({
               <p className={cn("text-muted-foreground", TEXT.eyebrow)}>Priority Accounts</p>
               <h2 className="mt-1 font-display text-xl font-semibold text-foreground">Account radar</h2>
             </div>
-            <button type="button" className={cn("premium-hover inline-flex items-center gap-1 font-semibold text-primary", TEXT.meta)}>
+            <button type="button" onClick={() => navigate("/sales/clients")} className={cn("premium-hover inline-flex items-center gap-1 font-semibold text-primary", TEXT.meta)}>
               View all <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>

@@ -93,54 +93,62 @@ export function DashboardSkeleton() {
       {/* KPI strip */}
       <SkStatCards count={4} />
 
-      {/* main grid */}
-      <div className="grid gap-5 lg:grid-cols-[1.18fr_0.82fr]">
-        {/* left - chart + projects */}
-        <div className="space-y-5">
-          <SkCard className="p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="space-y-2">
-                <Sk className="h-3 w-24" />
-                <Sk className="h-6 w-44" />
-              </div>
-              <Sk className="h-8 w-24" />
+      {/* Charts Grid */}
+      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <SkCard className="p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="space-y-2">
+              <Sk className="h-3 w-24" />
+              <Sk className="h-6 w-44" />
             </div>
-            <Sk className="h-52 w-full rounded-2xl" />
-          </SkCard>
-          <SkCard className="p-6">
-            <Sk className="h-5 w-40 mb-5" />
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Sk className="h-10 w-10 rounded-xl" />
-                  <div className="flex-1 space-y-1.5">
-                    <Sk className="h-4 w-3/5" />
-                    <Sk className="h-3 w-full" />
-                  </div>
-                  <Sk className="h-4 w-12" />
-                </div>
-              ))}
+            <Sk className="h-8 w-24 rounded-xl" />
+          </div>
+          <Sk className="h-[340px] w-full rounded-2xl" />
+        </SkCard>
+        <SkCard className="p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="space-y-2">
+              <Sk className="h-3 w-20" />
+              <Sk className="h-6 w-32" />
             </div>
-          </SkCard>
-        </div>
+            <Sk className="h-8 w-20 rounded-xl" />
+          </div>
+          <Sk className="h-[340px] w-full rounded-2xl" />
+        </SkCard>
+      </div>
 
-        {/* right - activity */}
-        <div className="space-y-5">
-          <SkCard className="p-6">
-            <Sk className="h-5 w-32 mb-4" />
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex gap-3">
-                  <Sk className="h-8 w-8 rounded-full flex-shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <Sk className="h-3 w-full" />
-                    <Sk className="h-3 w-2/3" />
-                  </div>
+      {/* Portfolio + Activity Grid */}
+      <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+        <SkCard className="p-6">
+          <Sk className="h-5 w-40 mb-5" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 border border-border/30 rounded-xl p-4">
+                <Sk className="h-10 w-10 rounded-xl" />
+                <div className="flex-1 space-y-1.5">
+                  <Sk className="h-4 w-3/5" />
+                  <Sk className="h-3 w-full" />
                 </div>
-              ))}
-            </div>
-          </SkCard>
-        </div>
+                <Sk className="h-4 w-12" />
+              </div>
+            ))}
+          </div>
+        </SkCard>
+
+        <SkCard className="p-6">
+          <Sk className="h-5 w-32 mb-4" />
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 border border-border/30 rounded-lg">
+                <Sk className="h-8 w-8 rounded-full" />
+                <div className="flex-1 space-y-1">
+                  <Sk className="h-3 w-3/4" />
+                  <Sk className="h-2 w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </SkCard>
       </div>
     </div>
   );
@@ -1005,6 +1013,105 @@ export function CalendarSkeleton() {
                   </div>
                   <Sk className="h-3 w-48 mb-1" />
                   <Sk className="h-3 w-32" />
+                </div>
+              ))}
+            </div>
+          </SkCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ClientsSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* header */}
+      <SkSection>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <Sk className="h-5 w-24 rounded-full" />
+            <Sk className="h-9 w-44" />
+            <Sk className="h-4 w-96 max-w-full" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Sk className="h-10 w-24 rounded-xl" />
+            <Sk className="h-10 w-24 rounded-xl" />
+            <Sk className="h-10 w-28 rounded-xl" />
+          </div>
+        </div>
+      </SkSection>
+
+      {/* stats */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkCard key={i} className="p-3">
+            <div className="flex items-center gap-2">
+              <Sk className="h-8 w-8 rounded-lg" />
+              <div className="flex-1">
+                <Sk className="h-5 w-12 mb-1" />
+                <Sk className="h-3 w-16" />
+              </div>
+            </div>
+          </SkCard>
+        ))}
+      </div>
+
+      {/* filters */}
+      <SkFilterBar inputs={1} selects={1} />
+
+      {/* segments */}
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Sk key={i} className="h-8 w-24 rounded-full" />
+        ))}
+      </div>
+
+      {/* content grid */}
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkCard key={i} className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Sk className="h-8 w-8 rounded-xl" />
+                  <Sk className="h-12 w-12 rounded-2xl" />
+                  <div className="space-y-2">
+                    <Sk className="h-4 w-32" />
+                    <Sk className="h-3 w-44" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sk className="h-8 w-20 rounded-full" />
+                  <Sk className="h-8 w-8 rounded-full" />
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                <Sk className="h-1.5 w-full rounded-full" />
+                <Sk className="h-3 w-1/2" />
+              </div>
+            </SkCard>
+          ))}
+        </div>
+        <div className="space-y-4">
+          <SkCard className="p-5">
+            <Sk className="h-5 w-32 mb-4" />
+            <div className="space-y-3">
+              <Sk className="h-4 w-full" />
+              <Sk className="h-4 w-4/5" />
+              <Sk className="h-4 w-full" />
+            </div>
+          </SkCard>
+          <SkCard className="p-5">
+            <Sk className="h-5 w-28 mb-4" />
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-4 border border-border/30 rounded-xl">
+                  <div className="flex-1 space-y-2">
+                    <Sk className="h-4 w-24" />
+                    <Sk className="h-3 w-32" />
+                  </div>
+                  <Sk className="h-5 w-8 rounded-full" />
                 </div>
               ))}
             </div>

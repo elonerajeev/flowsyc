@@ -28,7 +28,7 @@ export const notesController = {
     }
 
     const authorId = requestedAuthorId ?? sessionUserId;
-    const notes = await notesService.list(authorId);
+    const notes = await notesService.list(authorId, req.auth?.organizationId);
     res.status(200).json(notes);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
@@ -42,7 +42,7 @@ export const notesController = {
     if (!req.auth?.userId) {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
-    const note = await notesService.create(req.auth.userId, req.body);
+    const note = await notesService.create(req.auth.userId, req.body, req.auth.organizationId);
     await logAudit({
       userId: req.auth.userId,
       action: "create",

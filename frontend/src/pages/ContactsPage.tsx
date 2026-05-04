@@ -39,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { crmService } from "@/services/crm";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
@@ -637,7 +638,7 @@ const ContactsPage = () => {
                         {contact.phone && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Phone className="h-4 w-4" />
-                            <span>{contact.phone}</span>
+                            <span><PrivacyValue value={contact.phone} type="phone" /></span>
                           </div>
                         )}
                       </div>

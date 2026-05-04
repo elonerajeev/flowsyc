@@ -28,7 +28,7 @@ export const teamMembersController = {
       return;
     }
 
-    const members = await teamMembersService.list(parsed.data);
+    const members = await teamMembersService.list(parsed.data, req.auth);
     res.status(200).json(members);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
@@ -36,7 +36,7 @@ export const teamMembersController = {
     res.status(200).json(member);
   },
   create: async (req: Request, res: Response): Promise<void> => {
-    const member = await teamMembersService.create(req.body);
+    const member = await teamMembersService.create(req.body, req.auth);
     res.status(201).json(member);
   },
   update: async (req: Request, res: Response): Promise<void> => {

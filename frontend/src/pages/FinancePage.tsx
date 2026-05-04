@@ -15,6 +15,7 @@ import AdminOnly from "@/components/shared/AdminOnly";
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ShowMoreButton from "@/components/shared/ShowMoreButton";
+import { PrivacyValue } from "@/components/shared/PrivacyValue";
 import { useInvoices, usePayroll } from "@/hooks/use-crm-data";
 import { TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
@@ -136,7 +137,7 @@ function FinancePageInner() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
-                <p className="font-display text-xl font-bold text-foreground">{card.value}</p>
+                <p className="font-display text-xl font-bold text-foreground"><PrivacyValue value={card.value} type="number" /></p>
               </div>
             </div>
           ))}
@@ -223,7 +224,7 @@ function FinancePageInner() {
                   ].map((item) => (
                     <div key={item.label} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
                       <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
-                      <p className="mt-1 font-display text-xl font-semibold text-foreground">{item.value}</p>
+                      <p className="mt-1 font-display text-xl font-semibold text-foreground"><PrivacyValue value={item.value} type="number" /></p>
                       <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
                     </div>
                   ))}

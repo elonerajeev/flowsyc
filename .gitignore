@@ -12,8 +12,8 @@ backend/dist/
 backend/.env
 frontend/.env
 !.env.example
-!backend/.env.example
-!frontend/.env.example
+.env.production
+**/.env.production
 
 # Auth/Security
 frontend/.htpasswd
@@ -38,10 +38,6 @@ Thumbs.db
 
 # AI Context
 codebase-snapshot.xml
-.claude/
-.claude/skills/
-.agents/
-ANTHROPIC.md
-CLAUDE.md
-.opencode/
+context.md
+GIT_BRANCHING_STRATEGY.md
 skills/

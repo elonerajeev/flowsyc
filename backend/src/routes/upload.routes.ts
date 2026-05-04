@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/auth.middleware";
-import { uploadAvatar, uploadResume, uploadDocument, uploadToCloudinary, deleteFromCloudinary } from "../services/storage.service";
+import { uploadAvatar, uploadResume, uploadDocument, getFileUrl, deleteFile, resolveFilePath } from "../services/storage.service";
+import { optimizeUploadedImage } from "../services/image-optimization.service";
 
 const uploadRouter = Router();
 
@@ -18,16 +19,29 @@ uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
     }
 
     try {
-      const { url, publicId } = await uploadToCloudinary(req.file, "avatars");
+      // Optimize the avatar
+      const { optimizedPath, thumbnailPath } = await optimizeUploadedImage(req.file.path);
+      const url = getFileUrl("avatar", optimizedPath);
+      const thumbUrl = getFileUrl("avatar", thumbnailPath);
+
       res.status(201).json({
         url,
-        publicId,
-        filename: req.file.originalname,
+        thumbUrl,
+        filename: optimizedPath,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: "image/webp",
+      });
+    } catch (optErr) {
+      // Fallback if optimization fails
+      const url = getFileUrl("avatar", req.file.filename);
+      res.status(201).json({
+        url,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
         size: req.file.size,
         mimetype: req.file.mimetype,
       });
-    } catch (uploadErr) {
-      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
     }
   });
 });
@@ -42,19 +56,14 @@ uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-
-    try {
-      const { url, publicId } = await uploadToCloudinary(req.file, "resumes");
-      res.status(201).json({
-        url,
-        publicId,
-        filename: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-      });
-    } catch (uploadErr) {
-      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
-    }
+    const url = getFileUrl("resume", req.file.filename);
+    res.status(201).json({
+      url,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    });
   });
 });
 
@@ -68,30 +77,26 @@ uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file provided", code: "NO_FILE" });
     }
-
-    try {
-      const { url, publicId } = await uploadToCloudinary(req.file, "documents");
-      res.status(201).json({
-        url,
-        publicId,
-        filename: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-      });
-    } catch (uploadErr) {
-      res.status(500).json({ error: "Upload failed", code: "UPLOAD_FAILED" });
-    }
+    const url = getFileUrl("document", req.file.filename);
+    res.status(201).json({
+      url,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    });
   });
 });
 
-// DELETE /upload/:publicId - Delete uploaded file from Cloudinary
-uploadRouter.delete("/:publicId", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { publicId } = req.params;
-    await deleteFromCloudinary(String(publicId));
-    res.status(200).json({ message: "File deleted" });
-  } catch (err) {
-    res.status(500).json({ error: "Delete failed", code: "DELETE_FAILED" });
+// DELETE /upload/:category/:filename - Delete uploaded file
+uploadRouter.delete("/:category/:filename", requireAuth, (req: Request, res: Response) => {
+  const { category, filename } = req.params;
+  const validCategories = ["avatar", "resume", "document"];
+  const cat = String(category);
+
+  if (!validCategories.includes(cat)) {
+    res.status(400).json({ error: "Invalid category", code: "INVALID_CATEGORY" });
+    return;
   }
 });
 

@@ -19,44 +19,65 @@ async function logLifecycleToAutomationLog(
   summary: LifecycleSummary,
   performedBy?: string
 ) {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return;
+  try {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) return;
 
-  const actions: any[] = [];
-  
-  if (summary.contactId) {
-    actions.push({ type: "contact_created", status: "success", details: { contactId: summary.contactId } });
-  }
-  if (summary.dealId) {
-    actions.push({ type: "deal_created", status: "success", details: { dealId: summary.dealId } });
-  }
-  if (summary.clientId) {
-    actions.push({ type: "client_created", status: "success", details: { clientId: summary.clientId } });
-  }
-  if (summary.tasksCreated > 0) {
-    actions.push({ type: "tasks_created", status: "success", details: { count: summary.tasksCreated } });
-  }
-  if (summary.remindersCreated > 0) {
-    actions.push({ type: "reminders_created", status: "success", details: { count: summary.remindersCreated } });
-  }
-
-  await prisma.automationLog.create({
-    data: {
-      ruleId: 0,
-      trigger: "lead_updated",
-      triggerData: {
-        leadId,
-        leadName: `${lead.firstName} ${lead.lastName}`,
-        status: lead.status,
-        performedBy,
+    const rule = await prisma.automationRule.findFirst({
+      where: {
+        trigger: "lead_updated",
+        ...(lead.organizationId
+          ? { organizationId: lead.organizationId }
+          : performedBy
+            ? { createdBy: performedBy }
+            : {}),
       },
-      actionData: actions,
-      status: "completed",
-      entityType: "Lead",
-      entityId: leadId,
-      completedAt: new Date(),
-    },
-  });
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+
+    if (!rule) {
+      logger.debug(`[Lifecycle Sync] No automation rule found for lead ${leadId}; skipping automation log entry.`);
+      return;
+    }
+
+    const actions: any[] = [];
+    if (summary.contactId) {
+      actions.push({ type: "contact_created", status: "success", details: { contactId: summary.contactId } });
+    }
+    if (summary.dealId) {
+      actions.push({ type: "deal_created", status: "success", details: { dealId: summary.dealId } });
+    }
+    if (summary.clientId) {
+      actions.push({ type: "client_created", status: "success", details: { clientId: summary.clientId } });
+    }
+    if (summary.tasksCreated > 0) {
+      actions.push({ type: "tasks_created", status: "success", details: { count: summary.tasksCreated } });
+    }
+    if (summary.remindersCreated > 0) {
+      actions.push({ type: "reminders_created", status: "success", details: { count: summary.remindersCreated } });
+    }
+
+    await prisma.automationLog.create({
+      data: {
+        ruleId: rule.id,
+        trigger: "lead_updated",
+        triggerData: {
+          leadId,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+          status: lead.status,
+          performedBy,
+        },
+        actionData: actions,
+        status: "completed",
+        entityType: "Lead",
+        entityId: leadId,
+        completedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error(`[Lifecycle Sync] Failed to write automation log for lead ${leadId}:`, error);
+  }
 }
 
 const FOLLOWUP_TAG = "gtm-followup";

@@ -1,18 +1,24 @@
 import { prisma } from "../config/prisma";
 import type { UserRole } from "../config/types";
 import { AppError } from "../middleware/error.middleware";
+import { cache } from "./cache";
 
 export type AccessActor =
   | {
       userId?: string;
       email: string;
       role: UserRole;
+      organizationId?: string;
     }
   | null
   | undefined;
 
 // Alias used by older service files
 export type AccessScope = AccessActor;
+
+export function orgFilter(actor: AccessActor): { organizationId?: string } {
+  return actor?.organizationId ? { organizationId: actor.organizationId } : {};
+}
 
 function deriveInitials(value: string) {
   return value
@@ -34,8 +40,15 @@ function normalizeScopes(values: Array<string | null | undefined>) {
   );
 }
 
-export async function getEmployeeAssigneeScope(actor: AccessActor) {
+export async function getEmployeeAssigneeScope(actor: AccessActor): Promise<string[] | null> {
+  // Cache key for this actor's scope (works for all roles)
+  const cacheKey = `actor:scope:${actor?.userId || actor?.email}:${actor?.organizationId || "global"}`;
+  const cached = await cache.get<string[] | null>(cacheKey);
+  if (cached !== null) return cached;
+
   if (!actor || actor.role !== "employee") {
+    // Cache null result too (for non-employees)
+    await cache.set(cacheKey, null, 5 * 60 * 1000);
     return null;
   }
 
@@ -47,6 +60,7 @@ export async function getEmployeeAssigneeScope(actor: AccessActor) {
   const member = await prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       OR: [
         { email: { equals: actor.email, mode: "insensitive" } },
         ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
@@ -64,7 +78,13 @@ export async function getEmployeeAssigneeScope(actor: AccessActor) {
     // also include first name to match partial assignee entries like "Rajeev"
     (member?.name || user?.name)?.split(" ")[0],
   ]);
-  return scopes.length > 0 ? scopes : null;
+  
+  const result = scopes.length > 0 ? scopes : null;
+  
+  // Cache for 5 minutes (employee scope rarely changes)
+  cache.set(cacheKey, result, 5 * 60 * 1000);
+  
+  return result;
 }
 
 export async function getEmployeeProjectScope(actor: AccessActor) {
@@ -80,6 +100,7 @@ export async function getEmployeeProjectScope(actor: AccessActor) {
   const member = await prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       OR: [
         { email: { equals: actor.email, mode: "insensitive" } },
         ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
@@ -108,6 +129,7 @@ export async function getEmployeeMemberRecord(actor: AccessActor) {
   return prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       email: { equals: actor.email, mode: "insensitive" },
     },
     select: { id: true, name: true, department: true },
@@ -151,6 +173,7 @@ export async function getInvoiceClientLabels(actor: AccessActor) {
   const clientRecords = await prisma.client.findMany({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       email: { equals: actor.email, mode: "insensitive" },
     },
     select: {

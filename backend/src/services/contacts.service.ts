@@ -30,6 +30,7 @@ type AccessScope = {
   role: string;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 function mapContact(contact: any): ContactRecord {
@@ -49,62 +50,92 @@ function mapContact(contact: any): ContactRecord {
 }
 
 export const contactsService = {
+  async buildScopedWhere(access?: AccessScope, contactId?: number) {
+    const where: any = {
+      deletedAt: null,
+      ...(contactId ? { id: contactId } : {}),
+    };
+
+    const actorIds = [access?.email, access?.userId].filter(Boolean) as string[];
+    if (!access) {
+      return where;
+    }
+
+    // Primary tenant isolation by organization.
+    if (access.organizationId) {
+      where.organizationId = access.organizationId;
+
+      // Employees are narrowed to contacts tied to their scope.
+      if (access.role === "employee") {
+        const [assignedClients, scopedLeads] = await Promise.all([
+          prisma.client.findMany({
+            where: {
+              deletedAt: null,
+              organizationId: access.organizationId,
+              ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : { id: -1 }),
+            },
+            select: { id: true },
+          }),
+          prisma.lead.findMany({
+            where: {
+              deletedAt: null,
+              organizationId: access.organizationId,
+              ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : { id: -1 }),
+            },
+            select: { id: true },
+          }),
+        ]);
+
+        const assignedClientIds = assignedClients.map((c) => c.id);
+        const scopedLeadIds = scopedLeads.map((l) => l.id);
+        where.OR = [
+          { clientId: { in: assignedClientIds } },
+          { leadId: { in: scopedLeadIds } },
+        ];
+      }
+
+      return where;
+    }
+
+    // Legacy fallback for records without organizationId.
+    if (access.role === "admin" || access.role === "manager" || access.role === "employee") {
+      const [scopedLeads, assignedClients] = await Promise.all([
+        prisma.lead.findMany({
+          where: {
+            deletedAt: null,
+            ...(access.role === "employee"
+              ? { assignedTo: { in: actorIds } }
+              : {
+                  OR: [
+                    ...(actorIds.length > 0 ? actorIds.map((id) => ({ createdBy: id })) : []),
+                    ...(actorIds.length > 0 ? actorIds.map((id) => ({ assignedTo: id })) : []),
+                  ],
+                }),
+          },
+          select: { id: true },
+        }),
+        prisma.client.findMany({
+          where: {
+            deletedAt: null,
+            ...(actorIds.length > 0 ? { assignedTo: { in: actorIds } } : { id: -1 }),
+          },
+          select: { id: true },
+        }),
+      ]);
+
+      const scopedLeadIds = scopedLeads.map((l) => l.id);
+      const assignedClientIds = assignedClients.map((c) => c.id);
+      where.OR = [
+        { leadId: { in: scopedLeadIds } },
+        { clientId: { in: assignedClientIds } },
+      ];
+    }
+
+    return where;
+  },
+
   async list(access?: AccessScope) {
-    const where: any = { deletedAt: null };
-
-    // Data isolation: Admin/Manager see only contacts from their leads or assigned clients
-    if (access?.role === "admin" || access?.role === "manager") {
-      // Get contacts from leads created by this user
-      const userLeads = await prisma.lead.findMany({
-        where: {
-          OR: [
-            { createdBy: access.email },
-            { assignedTo: access.email },
-            { assignedTo: access.userId ?? "" },
-          ],
-          deletedAt: null,
-        },
-        select: { email: true },
-      });
-      const leadEmails = userLeads.map(l => l.email);
-
-      // Get contacts from clients assigned to this user
-      const assignedClients = await prisma.client.findMany({
-        where: {
-          OR: [
-            { assignedTo: access.email },
-            { assignedTo: access.userId ?? "" },
-          ],
-          deletedAt: null,
-        },
-        select: { id: true },
-      });
-      const assignedClientIds = assignedClients.map(c => c.id);
-
-      // Show contacts that: belong to user's leads OR belong to assigned clients
-      where.OR = [
-        { email: { in: leadEmails } },
-        { clientId: { in: assignedClientIds } },
-      ];
-    }
-
-    // RBAC: Employees see contacts from clients they're assigned to, PLUS unassigned contacts (from leads)
-    if (access?.role === "employee") {
-      const assignedClients = await prisma.client.findMany({
-        where: {
-          assignedTo: access.email,
-          deletedAt: null,
-        },
-        select: { id: true },
-      });
-      const assignedClientIds = assignedClients.map(c => c.id);
-      // Show contacts that either: 1) belong to assigned clients, OR 2) have no clientId (created from leads)
-      where.OR = [
-        ...(where.OR || []),
-        { clientId: { in: assignedClientIds } },
-        { clientId: null },
-      ];
-    }
+    const where = await this.buildScopedWhere(access);
 
     try {
       const contacts = await prisma.contact.findMany({
@@ -121,7 +152,7 @@ export const contactsService = {
     }
   },
 
-  async create(input: ContactInput) {
+  async create(input: ContactInput, access?: AccessScope) {
     try {
       // Check if email already exists
       const existing = await prisma.contact.findUnique({
@@ -143,6 +174,7 @@ export const contactsService = {
             jobTitle: input.jobTitle,
             department: input.department,
             clientId: input.clientId,
+            organizationId: access?.organizationId ?? existing.organizationId,
             deletedAt: null,
             updatedAt: new Date(),
           },
@@ -161,6 +193,7 @@ export const contactsService = {
           jobTitle: input.jobTitle,
           department: input.department,
           clientId: input.clientId,
+          organizationId: access?.organizationId ?? null,
         },
         include: { client: true },
       });
@@ -214,37 +247,7 @@ export const contactsService = {
   },
 
   async getById(id: number, access?: AccessScope) {
-    const where: any = { id, deletedAt: null };
-
-    if (access?.role === "admin" || access?.role === "manager") {
-      // Same isolation as list(): contacts from leads or assigned clients only
-      const [userLeads, assignedClients] = await Promise.all([
-        prisma.lead.findMany({
-          where: {
-            OR: [{ createdBy: access.email }, { assignedTo: access.email }, { assignedTo: access.userId ?? "" }],
-            deletedAt: null,
-          },
-          select: { email: true },
-        }),
-        prisma.client.findMany({
-          where: {
-            OR: [{ assignedTo: access.email }, { assignedTo: access.userId ?? "" }],
-            deletedAt: null,
-          },
-          select: { id: true },
-        }),
-      ]);
-      where.OR = [
-        { email: { in: userLeads.map(l => l.email) } },
-        { clientId: { in: assignedClients.map(c => c.id) } },
-      ];
-    } else if (access?.role === "employee") {
-      const assignedClients = await prisma.client.findMany({
-        where: { assignedTo: access.email, deletedAt: null },
-        select: { id: true },
-      });
-      where.clientId = { in: assignedClients.map(c => c.id) };
-    }
+    const where = await this.buildScopedWhere(access, id);
 
     const contact = await prisma.contact.findFirst({
       where,
