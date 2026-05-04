@@ -188,7 +188,7 @@ describe("auth API", () => {
         name: "Test User",
         email: "test@example.com",
         password: "Password123!",
-        role: "employee",
+        role: "admin",
       },
     });
 
@@ -199,7 +199,7 @@ describe("auth API", () => {
       refreshToken: string;
     };
     expect(signupBody.user.email).toBe("test@example.com");
-    expect(signupBody.user.role).toBe("employee");
+    expect(signupBody.user.role).toBe("admin");
     expect(signupBody.accessToken).toEqual(expect.any(String));
     expect(signupBody.refreshToken).toEqual(expect.any(String));
 

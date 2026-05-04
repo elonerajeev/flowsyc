@@ -154,9 +154,15 @@ export const contactsService = {
 
   async create(input: ContactInput, access?: AccessScope) {
     try {
+      const normalizedEmail = input.email.trim().toLowerCase();
+      const organizationId = access?.organizationId ?? null;
+
       // Check if email already exists
-      const existing = await prisma.contact.findUnique({
-        where: { email: input.email },
+      const existing = await prisma.contact.findFirst({
+        where: {
+          email: normalizedEmail,
+          organizationId,
+        },
       });
 
       if (existing && !existing.deletedAt) {
@@ -166,15 +172,16 @@ export const contactsService = {
       // If email exists but is deleted, restore it
       if (existing && existing.deletedAt) {
         const updated = await prisma.contact.update({
-          where: { email: input.email },
+          where: { id: existing.id },
           data: {
             firstName: input.firstName,
             lastName: input.lastName,
+            email: normalizedEmail,
             phone: input.phone,
             jobTitle: input.jobTitle,
             department: input.department,
             clientId: input.clientId,
-            organizationId: access?.organizationId ?? existing.organizationId,
+            organizationId: organizationId ?? existing.organizationId,
             deletedAt: null,
             updatedAt: new Date(),
           },
@@ -188,12 +195,12 @@ export const contactsService = {
         data: {
           firstName: input.firstName,
           lastName: input.lastName,
-          email: input.email,
+          email: normalizedEmail,
           phone: input.phone,
           jobTitle: input.jobTitle,
           department: input.department,
           clientId: input.clientId,
-          organizationId: access?.organizationId ?? null,
+          organizationId,
         },
         include: { client: true },
       });
@@ -212,11 +219,28 @@ export const contactsService = {
     try {
       // Check permissions
       const existing = await this.getById(id, access);
+      const normalizedEmail = patch.email?.trim().toLowerCase();
+
+      if (normalizedEmail && normalizedEmail !== existing.email.toLowerCase()) {
+        const emailOwner = await prisma.contact.findFirst({
+          where: {
+            email: normalizedEmail,
+            organizationId: access?.organizationId ?? null,
+            deletedAt: null,
+            id: { not: id },
+          },
+          select: { id: true },
+        });
+        if (emailOwner) {
+          throw new AppError("A contact with this email already exists", 409, "CONFLICT");
+        }
+      }
 
       const contact = await prisma.contact.update({
         where: { id },
         data: {
           ...patch,
+          ...(normalizedEmail ? { email: normalizedEmail } : {}),
           updatedAt: new Date(),
         },
         include: { client: true },

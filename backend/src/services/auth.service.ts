@@ -1,5 +1,5 @@
 import { logger } from "../utils/logger";
-import { UserRole, type PaymentMode as DbPaymentMode } from "@prisma/client";
+import { type PaymentMode as DbPaymentMode } from "@prisma/client";
 import crypto from "crypto";
 
 import { prisma } from "../config/prisma";
@@ -7,8 +7,8 @@ import { AppError } from "../middleware/error.middleware";
 import { buildProfile } from "../utils/employee-profile";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
 import { comparePassword, hashPassword } from "../utils/password";
-import { hashToken, signAccessToken, signRefreshToken, signPasswordResetToken, verifyPasswordResetToken, verifyRefreshToken, type TokenPayload } from "../utils/jwt";
-import { sendWelcomeEmail, sendVerificationEmail } from "../utils/email-templates";
+import { hashToken, signAccessToken, signRefreshToken, signInviteSetupToken, signPasswordResetToken, verifyPasswordResetToken, verifyRefreshToken, type TokenPayload } from "../utils/jwt";
+import { sendEmployeeInviteEmail, sendVerificationEmail } from "../utils/email-templates";
 import type { AuthUser, UserRole as AppUserRole } from "../config/types";
 
 type AuthResponse = {
@@ -17,7 +17,43 @@ type AuthResponse = {
   refreshToken?: string;
 };
 
-type SignupRole = "admin" | "employee" | "client";
+type SignupRole = "admin";
+
+type TeamMemberRole = "Admin" | "Manager" | "Employee";
+
+type InviteActor = {
+  userId?: string;
+  email: string;
+  role: AppUserRole;
+  organizationId?: string;
+} | null | undefined;
+
+type TeamMemberProvisionInput = {
+  teamMemberId: number;
+  userId?: string | null;
+  teamMemberRole: TeamMemberRole;
+  name: string;
+  email: string;
+  department: string;
+  team: string;
+  designation: string;
+  manager: string;
+  workingHours: string;
+  officeLocation: string;
+  timeZone: string;
+  baseSalary: number;
+  allowances: number;
+  deductions: number;
+  paymentMode: "bank-transfer" | "cash" | "upi";
+  location: string;
+  organizationId: string;
+};
+
+type DisableUserInput = {
+  organizationId: string;
+  userId?: string | null;
+  email?: string | null;
+};
 
 function toAuthUser(user: {
   id: string;
@@ -85,6 +121,24 @@ function generateEmployeeId(role: AppUserRole) {
   return `${prefix}-${suffix}`;
 }
 
+function mapTeamMemberRoleToUserRole(role: TeamMemberRole): Exclude<AppUserRole, "client"> {
+  if (role === "Admin") return "admin";
+  if (role === "Manager") return "manager";
+  return "employee";
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function resolveInviteExpiryDate(token: string) {
+  const payload = verifyPasswordResetToken(token);
+  if (typeof payload.exp === "number") {
+    return new Date(payload.exp * 1000);
+  }
+  return new Date(Date.now() + 24 * 60 * 60 * 1000);
+}
+
 async function persistRefreshToken(userId: string, token: string) {
   await prisma.refreshToken.create({
     data: {
@@ -105,35 +159,398 @@ async function createSession(userId: string, email: string, role: AppUserRole, o
 }
 
 export const authService = {
+  async provisionInvitedUserFromTeamMember(
+    input: TeamMemberProvisionInput,
+    actor: InviteActor,
+  ): Promise<{ userId: string; invitationSent: boolean; status: "invited" | "already_active" | "invited_existing_user" }> {
+    if (!actor || (actor.role !== "admin" && actor.role !== "manager")) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
+    }
+    if (!actor.organizationId || actor.organizationId !== input.organizationId) {
+      throw new AppError("Invalid organization context", 403, "FORBIDDEN");
+    }
+    if (actor.role === "manager" && input.teamMemberRole !== "Employee") {
+      throw new AppError("Managers can only invite employee accounts", 403, "FORBIDDEN");
+    }
+
+    const userRole = mapTeamMemberRoleToUserRole(input.teamMemberRole);
+    const normalizedEmail = normalizeEmail(input.email);
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+    const userProfile = {
+      department: input.department,
+      team: input.team,
+      designation: input.designation,
+      manager: input.manager,
+      workingHours: input.workingHours,
+      officeLocation: input.officeLocation,
+      timeZone: input.timeZone,
+      baseSalary: input.baseSalary,
+      allowances: input.allowances,
+      deductions: input.deductions,
+      paymentMode: toDbPaymentMode(input.paymentMode),
+      location: input.location,
+    };
+
+    let user:
+      | {
+          id: string;
+          email: string;
+          name: string;
+          role: AppUserRole;
+          organizationId: string | null;
+          emailVerified: boolean;
+        }
+      | null = null;
+
+    if (existing) {
+      if (existing.organizationId !== input.organizationId) {
+        throw new AppError("This email belongs to another organization", 409, "CROSS_ORG_EMAIL");
+      }
+      if (existing.role === "client") {
+        throw new AppError("Client accounts cannot be linked as team members", 409, "INVALID_ROLE");
+      }
+
+      user = await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: input.name,
+          role: userRole,
+          deletedAt: null,
+          organizationId: input.organizationId,
+          updatedAt: new Date(),
+          ...userProfile,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          organizationId: true,
+          emailVerified: true,
+        },
+      });
+
+      if (user.emailVerified) {
+        return { userId: user.id, invitationSent: false, status: "already_active" };
+      }
+    } else {
+      user = await prisma.user.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: input.name,
+          email: normalizedEmail,
+          passwordHash: await hashPassword(crypto.randomUUID() + crypto.randomBytes(16).toString("hex")),
+          emailVerified: false,
+          role: userRole,
+          employeeId: generateEmployeeId(userRole),
+          payrollCycle: "monthly",
+          payrollDueDate: "",
+          joinedAt: new Date().toISOString().split("T")[0],
+          organizationId: input.organizationId,
+          updatedAt: new Date(),
+          ...userProfile,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          organizationId: true,
+          emailVerified: true,
+        },
+      });
+    }
+
+    const token = signInviteSetupToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId ?? undefined,
+      type: "invite_setup",
+    });
+
+    const tokenHash = hashToken(token);
+    const expiresAt = resolveInviteExpiryDate(token);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.inviteToken.updateMany({
+        where: {
+          userId: user!.id,
+          type: "invite_setup",
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      await tx.inviteToken.create({
+        data: {
+          userId: user!.id,
+          organizationId: user!.organizationId,
+          email: user!.email,
+          tokenHash,
+          type: "invite_setup",
+          createdBy: actor.userId ?? actor.email,
+          expiresAt,
+        },
+      });
+    });
+
+    await sendEmployeeInviteEmail({
+      name: user.name,
+      email: user.email,
+      token,
+      inviterName: actor.email,
+    });
+
+    return {
+      userId: user.id,
+      invitationSent: true,
+      status: existing ? "invited_existing_user" : "invited",
+    };
+  },
+
+  async completeInviteSetup(token: string, newPassword: string): Promise<{ userId: string; email: string }> {
+    let payload: ReturnType<typeof verifyPasswordResetToken>;
+    try {
+      payload = verifyPasswordResetToken(token);
+    } catch {
+      throw new AppError("Invalid or expired token", 400, "INVALID_TOKEN");
+    }
+
+    if (!payload?.sub || payload.type !== "invite_setup") {
+      throw new AppError("Invalid invite token", 400, "INVALID_TOKEN");
+    }
+
+    const tokenHash = hashToken(token);
+    const inviteToken = await prisma.inviteToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!inviteToken || inviteToken.type !== "invite_setup") {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+    if (inviteToken.usedAt || inviteToken.expiresAt <= new Date()) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+
+    const user = inviteToken.user;
+    if (!user || user.deletedAt) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+    if (String(payload.sub) !== user.id) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+    if (payload.email && normalizeEmail(payload.email) !== normalizeEmail(user.email)) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+    if (normalizeEmail(inviteToken.email) !== normalizeEmail(user.email)) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+    if (payload.organizationId && user.organizationId && payload.organizationId !== user.organizationId) {
+      throw new AppError("Invite is no longer valid", 400, "INVALID_TOKEN");
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          emailVerified: true,
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      await tx.inviteToken.update({
+        where: { id: inviteToken.id },
+        data: { usedAt: new Date() },
+      });
+
+      await tx.inviteToken.updateMany({
+        where: {
+          userId: user.id,
+          type: "invite_setup",
+          usedAt: null,
+          id: { not: inviteToken.id },
+        },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    return { userId: user.id, email: user.email };
+  },
+
+  async deactivateUserFromTeamMember(input: DisableUserInput): Promise<string | null> {
+    const normalizedEmail = input.email ? normalizeEmail(input.email) : null;
+    const user =
+      input.userId
+        ? await prisma.user.findUnique({ where: { id: input.userId } })
+        : normalizedEmail
+          ? await prisma.user.findFirst({
+              where: {
+                email: normalizedEmail,
+                organizationId: input.organizationId,
+                deletedAt: null,
+              },
+            })
+          : null;
+
+    if (!user) {
+      return null;
+    }
+
+    if (user.organizationId && user.organizationId !== input.organizationId) {
+      throw new AppError("Cross-organization user operation blocked", 403, "FORBIDDEN");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          deletedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      await tx.inviteToken.updateMany({
+        where: {
+          userId: user.id,
+          type: "invite_setup",
+          usedAt: null,
+        },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    return user.id;
+  },
+
+  async syncUserFromTeamMember(
+    input: TeamMemberProvisionInput,
+    actor: InviteActor,
+  ): Promise<{ userId: string }> {
+    if (!actor || (actor.role !== "admin" && actor.role !== "manager")) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
+    }
+    if (!actor.organizationId || actor.organizationId !== input.organizationId) {
+      throw new AppError("Invalid organization context", 403, "FORBIDDEN");
+    }
+    if (actor.role === "manager" && input.teamMemberRole !== "Employee") {
+      throw new AppError("Managers can only manage employee accounts", 403, "FORBIDDEN");
+    }
+
+    const userRole = mapTeamMemberRoleToUserRole(input.teamMemberRole);
+    const normalizedEmail = normalizeEmail(input.email);
+    const userProfile = {
+      department: input.department,
+      team: input.team,
+      designation: input.designation,
+      manager: input.manager,
+      workingHours: input.workingHours,
+      officeLocation: input.officeLocation,
+      timeZone: input.timeZone,
+      baseSalary: input.baseSalary,
+      allowances: input.allowances,
+      deductions: input.deductions,
+      paymentMode: toDbPaymentMode(input.paymentMode),
+      location: input.location,
+    };
+
+    const existingById = input.userId
+      ? await prisma.user.findUnique({ where: { id: input.userId } })
+      : null;
+    const existingByEmail = !existingById
+      ? await prisma.user.findUnique({ where: { email: normalizedEmail } })
+      : null;
+    const existing = existingById ?? existingByEmail;
+
+    if (!existing) {
+      const provisioned = await authService.provisionInvitedUserFromTeamMember(input, actor);
+      return { userId: provisioned.userId };
+    }
+
+    if (existing.organizationId !== input.organizationId) {
+      throw new AppError("This user belongs to another organization", 409, "CROSS_ORG_USER");
+    }
+    if (existing.role === "client") {
+      throw new AppError("Client accounts cannot be linked as team members", 409, "INVALID_ROLE");
+    }
+
+    if (normalizedEmail !== existing.email) {
+      const emailOwner = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (emailOwner && emailOwner.id !== existing.id) {
+        throw new AppError("Email is already used by another user", 409, "CONFLICT");
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        name: input.name,
+        email: normalizedEmail,
+        role: userRole,
+        deletedAt: null,
+        organizationId: input.organizationId,
+        updatedAt: new Date(),
+        ...userProfile,
+      },
+      select: { id: true },
+    });
+
+    return { userId: updated.id };
+  },
+
   async createSession(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError("User not found", 404, "NOT_FOUND");
     return createSession(user.id, user.email, user.role as AppUserRole, user.organizationId ?? undefined);
   },
 
-  async signup(input: { name: string; email: string; password: string; role: SignupRole }): Promise<AuthResponse> {
-    const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  async signup(input: { name: string; email: string; password: string; role?: SignupRole; organizationName?: string }): Promise<AuthResponse> {
+    const normalizedEmail = normalizeEmail(input.email);
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
       throw new AppError("Email already exists", 409, "CONFLICT");
     }
+
+    const role: SignupRole = "admin";
+    const organizationName = input.organizationName?.trim();
+    const resolvedOrganizationName = organizationName && organizationName.length >= 2
+      ? organizationName
+      : `${input.name}'s Organization`;
 
     const { user, session } = await prisma.$transaction(async (tx) => {
       const org = await (tx as any).organization.create({
         data: {
           id: crypto.randomUUID(),
-          name: `${input.name}'s Organization`,
+          name: resolvedOrganizationName,
           updatedAt: new Date(),
         },
       });
 
-      const profile = buildProfile(input.role);
+      const profile = buildProfile(role);
       const newUser = await tx.user.create({
         data: {
           id: crypto.randomUUID(),
           name: input.name,
-          email: input.email,
+          email: normalizedEmail,
           passwordHash: await hashPassword(input.password),
-          role: input.role,
+          role,
           organizationId: org.id,
           updatedAt: new Date(),
           ...profile,

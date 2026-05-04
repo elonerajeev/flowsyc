@@ -5,6 +5,16 @@ dotenv.config();
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
@@ -15,12 +25,13 @@ const envSchema = z.object({
   COOKIE_SECRET: z.string().min(32),
   SMTP_HOST: z.string().default("smtp.gmail.com"),
   SMTP_PORT: z.coerce.number().default(587),
-  SMTP_SECURE: z.boolean().default(false),
+  SMTP_SECURE: booleanFromEnv.default(false),
   SMTP_USER: z.string().email().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().email().optional(),
   SMTP_REPLY_TO: z.string().email().optional(),
   HR_EMAIL: z.string().email().optional(),
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
 });
 
 const parsed = envSchema.safeParse(process.env);

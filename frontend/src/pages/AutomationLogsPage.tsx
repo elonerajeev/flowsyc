@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
+import PageLoader from "@/components/shared/PageLoader";
+import ErrorFallback from "@/components/shared/ErrorFallback";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -107,11 +109,7 @@ export default function AutomationLogsPage() {
 
       <motion.section variants={item} className="space-y-3">
         {isLoading ? (
-          <>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl bg-card" />
-            ))}
-          </>
+          <PageLoader />
         ) : filteredLogs.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">

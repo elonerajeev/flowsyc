@@ -33,6 +33,13 @@ export function signPasswordResetToken(payload: TokenPayload) {
   });
 }
 
+export function signInviteSetupToken(payload: TokenPayload) {
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: "24h",
+    jwtid: crypto.randomBytes(16).toString("hex"),
+  });
+}
+
 export function verifyPasswordResetToken(token: string) {
   return jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload & jwt.JwtPayload;
 }

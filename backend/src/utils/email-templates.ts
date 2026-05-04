@@ -241,6 +241,41 @@ export async function sendPasswordResetEmail(user: { name: string; email: string
   }
 }
 
+export async function sendEmployeeInviteEmail(params: {
+  name: string;
+  email: string;
+  token: string;
+  inviterName?: string;
+  organizationName?: string;
+}) {
+  const setupUrl = `${process.env.FRONTEND_URL ?? "http://localhost:8080"}/reset-password?token=${params.token}&mode=invite`;
+  const inviter = params.inviterName ? ` by ${params.inviterName}` : "";
+  const orgName = params.organizationName ? ` for ${params.organizationName}` : "";
+
+  try {
+    const email = {
+      to: params.email,
+      subject: `You're invited to ${APP_NAME}`,
+      text: `Hello ${params.name},\n\nYou've been invited${inviter}${orgName}.\n\nSet your password to activate your account:\n${setupUrl}\n\nThis setup link expires in 24 hours.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+          <h2 style="color: #2563eb;">You're Invited</h2>
+          <p>Hello ${params.name},</p>
+          <p>You've been invited${inviter}${orgName}.</p>
+          <p style="margin: 24px 0;">
+            <a href="${setupUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Set Password & Activate</a>
+          </p>
+          <p style="color: #6b7280; font-size: 14px;">This setup link expires in 24 hours.</p>
+          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
+        </div>
+      `,
+    };
+    await sendMail(email);
+  } catch (err) {
+    logger.warn("Failed to send employee invite email", { error: err instanceof Error ? err.message : String(err), email: params.email });
+  }
+}
+
 export async function sendHireEmail(candidate: { name: string; email: string; jobTitle: string; department: string; location: string; joiningDate: string; offeredSalary: string; hrName: string; hrDesignation: string }) {
   try {
     const offerData = {

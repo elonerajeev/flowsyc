@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import PageLoader from "@/components/shared/PageLoader";
+import ErrorFallback from "@/components/shared/ErrorFallback";
 import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { useQuery } from "@tanstack/react-query";
@@ -129,11 +131,7 @@ export default function AutomationAlertsPage() {
 
       <motion.section variants={item} className="space-y-4">
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl bg-card" />
-            ))}
-          </div>
+          <PageLoader />
         ) : alerts.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">
