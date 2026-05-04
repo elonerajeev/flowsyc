@@ -98,15 +98,41 @@ function buildHeatmap(timestamps: Date[]) {
 async function buildStaffDashboard(actor?: AccessActor) {
   // Scope all queries to the actor's own resources (prevents cross-admin data leaks)
   const actorIds = actor ? [actor.email, actor.userId].filter(Boolean) as string[] : [];
+  const orgWhere = actor?.organizationId ? { organizationId: actor.organizationId } : {};
   const clientWhere = actorIds.length > 0
-    ? { deletedAt: null, OR: actorIds.map(id => ({ assignedTo: id })) } as const
-    : { deletedAt: null } as const;
+    ? { deletedAt: null, ...orgWhere, OR: actorIds.map(id => ({ assignedTo: id })) }
+    : { deletedAt: null, ...orgWhere };
   const projectWhere = actorIds.length > 0
-    ? { deletedAt: null, OR: actorIds.map(id => ({ createdBy: id })) } as const
-    : { deletedAt: null } as const;
+    ? { deletedAt: null, ...orgWhere, OR: actorIds.map(id => ({ createdBy: id })) }
+    : { deletedAt: null, ...orgWhere };
   const invoiceWhere = actorIds.length > 0
-    ? { deletedAt: null, OR: actorIds.map(id => ({ createdBy: id })) } as const
-    : { deletedAt: null } as const;
+    ? { deletedAt: null, ...orgWhere, OR: actorIds.map(id => ({ createdBy: id })) }
+    : { deletedAt: null, ...orgWhere };
+  const taskWhere = actor?.organizationId
+    ? { deletedAt: null, organizationId: actor.organizationId }
+    : actorIds.length > 0
+      ? { deletedAt: null, OR: actorIds.map((id) => ({ assignee: id })) }
+      : { id: -1 };
+  const collaboratorWhere = actor?.organizationId
+    ? {
+        deletedAt: null,
+        organizationId: actor.organizationId,
+        attendance: {
+          in: ["present", "remote", "late"],
+        },
+      }
+    : actorIds.length > 0
+      ? {
+          deletedAt: null,
+          attendance: {
+            in: ["present", "remote", "late"],
+          },
+          email: { in: actorIds },
+        }
+      : { id: -1 };
+  const teamAttendanceWhere = actor?.organizationId
+    ? { deletedAt: null, organizationId: actor.organizationId }
+    : { id: -1 };
 
   const [
     clientCounts,
@@ -130,7 +156,7 @@ async function buildStaffDashboard(actor?: AccessActor) {
     }),
     prisma.task.groupBy({
       by: ["column"],
-      where: { deletedAt: null },
+      where: taskWhere,
       _count: { _all: true },
     }),
     prisma.invoice.findMany({
@@ -140,23 +166,18 @@ async function buildStaffDashboard(actor?: AccessActor) {
       take: QUERY_LIMITS.DASHBOARD_ITEMS,
     }),
     prisma.teamMember.findMany({
-      where: {
-        deletedAt: null,
-        attendance: {
-          in: ["present", "remote", "late"],
-        },
-      },
+      where: collaboratorWhere,
       orderBy: { updatedAt: "desc" },
       take: 6,
       select: { id: true, name: true, designation: true, avatar: true, attendance: true, updatedAt: true },
     }),
-    getAuditLogs({ limit: 12, userId: actor?.userId, role: actor?.role }),
+    getAuditLogs({ limit: 12, userId: actor?.userId, role: actor?.role, organizationId: actor?.organizationId }),
     prisma.teamMember.groupBy({
       by: ["team", "attendance"],
-      where: { deletedAt: null },
+      where: teamAttendanceWhere,
       _count: { _all: true },
     }),
-    teamsService.list(),
+    teamsService.list(actor),
   ]);
 
   const totalClients = clientCounts.reduce((sum, entry) => sum + entry._count._all, 0);
@@ -236,18 +257,21 @@ async function buildStaffDashboard(actor?: AccessActor) {
     ? Math.round(((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100)
     : 0;
 
-  const unreadResult = await prisma.conversation.aggregate({
-    where: { deletedAt: null },
-    _sum: { unread: true },
-  });
-  const unreadMessages = unreadResult._sum.unread ?? 0;
+  const unreadMessages: number = 0;
 
   const twentyEightDaysAgo = new Date();
   twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 27);
   twentyEightDaysAgo.setHours(0, 0, 0, 0);
 
   const [recentTasks, recentClients, recentProjects, recentInvoices] = await Promise.all([
-    prisma.task.findMany({ where: { createdAt: { gte: twentyEightDaysAgo }, deletedAt: null }, select: { createdAt: true }, take: 1000 }),
+    prisma.task.findMany({
+      where: {
+        createdAt: { gte: twentyEightDaysAgo },
+        ...(taskWhere as any),
+      },
+      select: { createdAt: true },
+      take: 1000,
+    }),
     prisma.client.findMany({ where: { ...clientWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
     prisma.project.findMany({ where: { ...projectWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
     prisma.invoice.findMany({ where: { ...invoiceWhere, createdAt: { gte: twentyEightDaysAgo } }, select: { createdAt: true }, take: 500 }),
@@ -352,10 +376,23 @@ async function buildEmployeeDashboard(actor: AccessActor) {
     getEmployeeProjectScope(actor),
   ]);
 
-  const projectWhere: any = { deletedAt: null };
-  const taskWhere: any = { deletedAt: null };
+  const orgWhere = actor?.organizationId ? { organizationId: actor.organizationId } : { id: -1 };
+  const projectWhere: any = { deletedAt: null, ...orgWhere };
+  const taskWhere: any = { deletedAt: null, ...orgWhere };
+
+  if (employeeProjectScopes || employeeAssignees) {
+    projectWhere.OR = [
+      ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+      ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+    ];
+  } else {
+    projectWhere.id = -1;
+  }
+
   if (employeeAssignees && Array.isArray(employeeAssignees) && employeeAssignees.length > 0) {
     taskWhere.assignee = { in: employeeAssignees };
+  } else {
+    taskWhere.id = -1;
   }
 
   const [projects, tasks, member] = await Promise.all([
@@ -370,7 +407,11 @@ async function buildEmployeeDashboard(actor: AccessActor) {
       select: { id: true, title: true, column: true, dueDate: true, priority: true, createdAt: true, updatedAt: true },
     }),
     prisma.teamMember.findFirst({
-      where: { deletedAt: null, email: { equals: actor?.email, mode: "insensitive" } },
+      where: {
+        deletedAt: null,
+        ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
+        email: { equals: actor?.email, mode: "insensitive" },
+      },
       select: { id: true, name: true, designation: true, avatar: true, attendance: true, updatedAt: true },
     }),
   ]);
@@ -476,11 +517,13 @@ async function buildEmployeeDashboard(actor: AccessActor) {
 async function buildClientDashboard(actor: AccessActor) {
   const clientEmail = await getClientAccessEmail(actor);
   const invoiceLabels = await getInvoiceClientLabels(actor);
+  const orgWhere = actor?.organizationId ? { organizationId: actor.organizationId } : {};
 
   const [clients, invoices] = await Promise.all([
     prisma.client.findMany({
       where: {
         deletedAt: null,
+        ...orgWhere,
         ...(clientEmail ? { email: { equals: clientEmail, mode: "insensitive" } } : { id: -1 }),
       },
       orderBy: { updatedAt: "desc" },
@@ -489,6 +532,7 @@ async function buildClientDashboard(actor: AccessActor) {
     prisma.invoice.findMany({
       where: {
         deletedAt: null,
+        ...orgWhere,
         ...(invoiceLabels && invoiceLabels.length > 0 ? { client: { in: invoiceLabels } } : { id: "__no_match__" }),
       },
       orderBy: { updatedAt: "desc" },
@@ -582,7 +626,7 @@ async function buildClientDashboard(actor: AccessActor) {
 
 export const dashboardService = {
   async get(actor?: AccessActor) {
-    const cacheKey = `dashboard:${actor?.role || "staff"}:${actor?.userId || "anonymous"}`;
+    const cacheKey = `dashboard:${actor?.role || "staff"}:${actor?.userId || "anonymous"}:${actor?.organizationId || "global"}`;
     const cached = await cache.get(cacheKey);
     if (cached) return cached;
 

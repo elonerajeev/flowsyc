@@ -115,6 +115,13 @@ const mockPrisma = {
   auditLog: {
     create: jest.fn(async () => {}),
   },
+  organization: {
+    create: jest.fn(async ({ data }: { data: { id: string; name: string; updatedAt: Date } }) => ({
+      id: data.id,
+      name: data.name,
+      updatedAt: data.updatedAt,
+    })),
+  },
   $transaction: jest.fn(async (fn: (...args: any[]) => any) => fn(mockPrisma)),
 };
 

@@ -288,17 +288,28 @@ export async function authenticateWithGoogleProfile(
   if (!user) {
     const role = options?.role ?? "employee";
     const profile = buildProfile(role);
-    user = await prisma.user.create({
-      data: {
-        id: crypto.randomUUID(),
-        name: googleUser.name || googleUser.email.split("@")[0],
-        email: googleUser.email,
-        passwordHash: await hashPassword(`google_${crypto.randomUUID()}`),
-        role,
-        updatedAt: new Date(),
-        ...profile,
-        emailVerified: true, // override after spread to avoid duplicate
-      },
+    const displayName = googleUser.name || googleUser.email.split("@")[0];
+    user = await prisma.$transaction(async (tx) => {
+      const org = await (tx as any).organization.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: `${displayName}'s Organization`,
+          updatedAt: new Date(),
+        },
+      });
+      return tx.user.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: displayName,
+          email: googleUser.email,
+          passwordHash: await hashPassword(`google_${crypto.randomUUID()}`),
+          role,
+          organizationId: org.id,
+          updatedAt: new Date(),
+          ...profile,
+          emailVerified: true,
+        },
+      });
     });
   } else if (!user.emailVerified) {
     user = await prisma.user.update({

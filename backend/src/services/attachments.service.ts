@@ -68,6 +68,18 @@ export const attachmentsService = {
     return { data: attachments, total, limit, offset };
   },
 
+  async getById(id: number) {
+    const attachment = await prisma.attachment.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!attachment) {
+      throw new AppError("Attachment not found", 404, "NOT_FOUND");
+    }
+
+    return attachment;
+  },
+
   async delete(id: number, authorId: string) {
     const attachment = await prisma.attachment.findFirst({
       where: { id, deletedAt: null },

@@ -16,6 +16,7 @@ export const crmKeys = {
   messages: ["crm", "messages"] as const,
   invoices: ["crm", "invoices"] as const,
   reports: ["crm", "reports"] as const,
+  leads: ["crm", "leads"] as const,
   teams: ["crm", "teams"] as const,
   teamMembers: ["crm", "team-members"] as const,
   attendance: ["crm", "attendance"] as const,

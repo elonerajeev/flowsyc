@@ -87,7 +87,7 @@ const teamMemberSelect = {
   department: true,
   team: true,
   teamId: true,
-  adminId: true,
+  organizationId: true,
   designation: true,
   manager: true,
   workingHours: true,
@@ -127,15 +127,7 @@ function mapUserRoleToTeamRole(role: "admin" | "manager" | "employee" | "client"
 }
 
 export async function resolveOrgAdminId(access?: AccessScope): Promise<string | null> {
-  if (!access?.userId) return null;
-  if (access.role === "admin") return access.userId;
-
-  const user = await prisma.user.findUnique({
-    where: { id: access.userId },
-    select: { adminId: true },
-  });
-
-  return user?.adminId ?? access.userId;
+  return access?.organizationId ?? null;
 }
 
 export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string | null> {
@@ -143,14 +135,14 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
     return null;
   }
 
-  const orgAdminId = await resolveOrgAdminId(access);
-  if (!orgAdminId) return null;
+  const organizationId = access.organizationId;
+  if (!organizationId) return null;
 
   const users = await prisma.user.findMany({
     where: {
       deletedAt: null,
       role: { in: ["admin", "manager", "employee"] },
-      OR: [{ id: orgAdminId }, { adminId: orgAdminId }],
+      organizationId,
     },
     select: {
       id: true,
@@ -173,7 +165,7 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
   });
 
   if (users.length === 0) {
-    return orgAdminId;
+    return organizationId;
   }
 
   await prisma.$transaction(
@@ -196,7 +188,7 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
           paymentMode: user.paymentMode,
           location: user.location || "HQ",
           status: "active",
-          adminId: orgAdminId,
+          organizationId,
           updatedAt: new Date(),
         },
         create: {
@@ -220,14 +212,14 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
           checkIn: "-",
           location: user.location || "HQ",
           workload: 0,
-          adminId: orgAdminId,
+          organizationId,
           updatedAt: new Date(),
         },
       }),
     ),
   );
 
-  return orgAdminId;
+  return organizationId;
 }
 
 function mapMember(member: {
@@ -239,6 +231,7 @@ function mapMember(member: {
   avatar: string;
   department: string;
   team: string;
+  teamId: number | null;
   designation: string;
   manager: string;
   workingHours: string;
@@ -269,7 +262,7 @@ function mapMember(member: {
     avatar: member.avatar,
     department: member.department,
     team: member.team,
-    teamId: null,
+    teamId: member.teamId ?? null,
     designation: member.designation,
     manager: member.manager,
     workingHours: member.workingHours,
@@ -323,9 +316,9 @@ export const teamMembersService = {
     const orgAdminId = await ensureOrgTeamMembers(access);
     const where: Prisma.TeamMemberWhereInput = {
       deletedAt: null,
-      // Admin/Manager: scoped to their organization owner.
+      // Admin/Manager: scoped to their organization.
       ...(access?.role === "admin" || access?.role === "manager"
-        ? { adminId: orgAdminId ?? "__none__" }
+        ? { organizationId: orgAdminId ?? "__none__" }
         : {}),
       ...(query.role ? { role: query.role } : {}),
       ...(query.status ? { status: query.status } : {}),
@@ -395,8 +388,8 @@ export const teamMembersService = {
   },
 
   async create(input: TeamMemberCreateInput, access?: AccessScope) {
-    const adminId = (await resolveOrgAdminId(access)) ?? undefined;
-    
+    const organizationId = (await resolveOrgAdminId(access)) ?? undefined;
+
     const name = input.name.trim();
     const existing = await prisma.teamMember.findUnique({ where: { email: input.email } });
     if (existing) {
@@ -465,7 +458,7 @@ export const teamMembersService = {
           checkIn,
           location,
           workload: input.workload ?? 0,
-          adminId: adminId ?? null,
+          organizationId: organizationId ?? null,
           updatedAt: new Date(),
         },
         select: teamMemberSelect,

@@ -41,6 +41,7 @@ function toAuthUser(user: {
   payrollDueDate: string;
   joinedAt: string;
   location: string;
+  organizationId?: string | null;
 }): AuthUser {
   const paymentMode = fromDbPaymentMode(user.paymentMode);
 
@@ -67,12 +68,14 @@ function toAuthUser(user: {
       payrollDueDate: "",
       joinedAt: user.joinedAt,
       location: user.location,
+      organizationId: user.organizationId ?? undefined,
     };
   }
 
   return {
     ...user,
     paymentMode,
+    organizationId: user.organizationId ?? undefined,
   };
 }
 
@@ -93,8 +96,8 @@ async function persistRefreshToken(userId: string, token: string) {
   });
 }
 
-async function createSession(userId: string, email: string, role: AppUserRole): Promise<{ accessToken: string; refreshToken: string }> {
-  const payload: TokenPayload = { sub: userId, email, role };
+async function createSession(userId: string, email: string, role: AppUserRole, organizationId?: string): Promise<{ accessToken: string; refreshToken: string }> {
+  const payload: TokenPayload = { sub: userId, email, role, organizationId };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
   await persistRefreshToken(userId, refreshToken);
@@ -105,7 +108,7 @@ export const authService = {
   async createSession(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError("User not found", 404, "NOT_FOUND");
-    return createSession(user.id, user.email, user.role as AppUserRole);
+    return createSession(user.id, user.email, user.role as AppUserRole, user.organizationId ?? undefined);
   },
 
   async signup(input: { name: string; email: string; password: string; role: SignupRole }): Promise<AuthResponse> {
@@ -115,6 +118,14 @@ export const authService = {
     }
 
     const { user, session } = await prisma.$transaction(async (tx) => {
+      const org = await (tx as any).organization.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: `${input.name}'s Organization`,
+          updatedAt: new Date(),
+        },
+      });
+
       const profile = buildProfile(input.role);
       const newUser = await tx.user.create({
         data: {
@@ -123,13 +134,14 @@ export const authService = {
           email: input.email,
           passwordHash: await hashPassword(input.password),
           role: input.role,
+          organizationId: org.id,
           updatedAt: new Date(),
           ...profile,
         },
       });
 
       // Special session creation that uses the transaction client
-      const payload: TokenPayload = { sub: newUser.id, email: newUser.email, role: newUser.role };
+      const payload: TokenPayload = { sub: newUser.id, email: newUser.email, role: newUser.role, organizationId: org.id };
       const accessToken = signAccessToken(payload);
       const refreshToken = signRefreshToken(payload);
 
@@ -172,7 +184,7 @@ export const authService = {
       throw new AppError("Please verify your email before logging in", 403, "EMAIL_NOT_VERIFIED");
     }
 
-    const session = await createSession(user.id, user.email, user.role);
+    const session = await createSession(user.id, user.email, user.role, user.organizationId ?? undefined);
     return {
       user: toAuthUser(user),
       ...session,
@@ -260,7 +272,7 @@ export const authService = {
       throw new AppError("Invalid refresh token", 401, "UNAUTHORIZED");
     }
 
-    const session = await createSession(stored.User.id, stored.User.email, stored.User.role);
+    const session = await createSession(stored.User.id, stored.User.email, stored.User.role, stored.User.organizationId ?? undefined);
     await prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
@@ -272,19 +284,24 @@ export const authService = {
     };
   },
 
-  async switchRole(userId: string, targetRole: AppUserRole): Promise<AuthUser> {
+  async switchRole(userId: string, targetRole: AppUserRole): Promise<{ user: AuthUser; accessToken: string }> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) {
       throw new AppError("User not found", 404, "NOT_FOUND");
     }
 
-    // Only admin can switch to any role
     if (user.role !== "admin" && user.role !== targetRole) {
       throw new AppError("Access denied. Only admins can switch roles.", 403, "FORBIDDEN");
     }
 
-    // For admin, return user with target role (view-only switch, doesn't modify DB)
-    // For others, just return their actual role
-    return toAuthUser({ ...user, role: targetRole });
+    const payload: TokenPayload = {
+      sub: user.id,
+      email: user.email,
+      role: targetRole,
+      organizationId: user.organizationId ?? undefined,
+    };
+    const accessToken = signAccessToken(payload);
+
+    return { user: toAuthUser({ ...user, role: targetRole }), accessToken };
   },
 };

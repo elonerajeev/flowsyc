@@ -225,7 +225,8 @@ systemRouter.get("/audit", requireAuth, requireRole(["admin", "manager", "employ
     dateFrom,
     dateTo,
     userId: req.auth?.userId,
-    role: req.auth?.role
+    role: req.auth?.role,
+    organizationId: req.auth?.organizationId,
   });
   res.status(200).json(logs);
 }));

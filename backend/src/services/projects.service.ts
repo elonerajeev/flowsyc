@@ -42,6 +42,7 @@ type AccessScope = {
   role: UserRole;
   userId: string;
   email: string;
+  organizationId?: string;
 } | null | undefined;
 
 function toDbStatus(status: ProjectRecord["status"]): ProjectStatus {
@@ -113,12 +114,12 @@ export const projectsService = {
           id: projectId,
           OR: [
             ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees as any } } } }] : []),
+            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
           ],
         },
       });
     } else {
-      project = await prisma.project.findUnique({ where: { id: projectId } });
+      throw new AppError("Project not found", 404, "NOT_FOUND");
     }
 
     if (!project || project.deletedAt) {
@@ -133,27 +134,41 @@ export const projectsService = {
       getEmployeeAssigneeScope(access),
     ]);
 
-    // Build ownership filter for admin/manager
-    const adminManagerFilter: Prisma.ProjectWhereInput | null =
-      access?.role === "admin" || access?.role === "manager"
-        ? { createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) } }
-        : null;
-
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       ...(query.status ? { status: toDbStatus(query.status) } : {}),
-      ...(adminManagerFilter
-        ? adminManagerFilter
-        : employeeProjectScopes || employeeAssignees
-          ? {
-              OR: [
-                ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
-                ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees as any } } } }] : []),
-              ],
-            }
-          : {}
-      ),
     };
+
+    if (access?.organizationId) {
+      where.organizationId = access.organizationId;
+      if (access.role === "manager") {
+        where.createdBy = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+      } else if (access.role === "employee") {
+        if (employeeProjectScopes || employeeAssignees) {
+          where.OR = [
+            ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+            ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+          ];
+        } else {
+          where.id = -1;
+        }
+      }
+    } else {
+      // Backward-compat user-level isolation
+      const adminManagerFilter: Prisma.ProjectWhereInput | null =
+        access?.role === "admin" || access?.role === "manager"
+          ? { createdBy: { in: [access.email, access.userId ?? ""].filter(Boolean) } }
+          : null;
+
+      if (adminManagerFilter) {
+        Object.assign(where, adminManagerFilter);
+      } else if (employeeProjectScopes || employeeAssignees) {
+        where.OR = [
+          ...(employeeProjectScopes ? [{ team: { hasSome: employeeProjectScopes } }] : []),
+          ...(employeeAssignees ? [{ tasks: { some: { deletedAt: null, assignee: { in: employeeAssignees } } } }] : []),
+        ];
+      }
+    }
 
     const [total, projects] = await prisma.$transaction([
       prisma.project.count({ where }),
@@ -190,6 +205,7 @@ export const projectsService = {
         tasksDone: input.tasksDone ?? 0,
         tasksTotal: input.tasksTotal ?? 0,
         createdBy: access?.email ?? null,
+        organizationId: access?.organizationId ?? null,
         updatedAt: new Date(),
       },
     });

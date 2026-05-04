@@ -1,4 +1,6 @@
 import { prisma } from "../config/prisma";
+import type { AccessActor } from "../utils/access-control";
+import { AppError } from "../middleware/error.middleware";
 // import {
 //   conversationSeedRecords,
 //   messageSeedRecords,
@@ -65,7 +67,11 @@ function mapMessage(message: {
 }
 
 export const communicationService = {
-  async listConversations() {
+  async listConversations(actor?: AccessActor) {
+    if (actor?.organizationId) {
+      return [];
+    }
+
     const conversations = await prisma.conversation.findMany({
       where: { deletedAt: null },
       orderBy: { updatedAt: "desc" },
@@ -78,7 +84,11 @@ export const communicationService = {
     return conversations.map(mapConversation);
   },
 
-  async listMessages() {
+  async listMessages(actor?: AccessActor) {
+    if (actor?.organizationId) {
+      return [];
+    }
+
     const messages = await prisma.message.findMany({
       where: { deletedAt: null },
       orderBy: [{ conversationId: "asc" }, { createdAt: "asc" }],
@@ -91,7 +101,11 @@ export const communicationService = {
     return messages.map(mapMessage);
   },
 
-  async createMessage(data: { conversationId: number; text: string; sender: string; isMe: boolean }) {
+  async createMessage(data: { conversationId: number; text: string; sender: string; isMe: boolean }, actor?: AccessActor) {
+    if (actor?.organizationId) {
+      throw new AppError("Messaging is unavailable until conversation isolation is configured", 403, "FORBIDDEN");
+    }
+
     const message = await prisma.message.create({
       data: {
         conversationId: data.conversationId,
