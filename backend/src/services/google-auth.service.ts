@@ -23,7 +23,7 @@ const DEFAULT_LOGIN_REDIRECT_URI = "http://localhost:3000/api/auth/google/callba
 const DEFAULT_CALENDAR_REDIRECT_URI = "http://localhost:3000/api/auth/google/calendar-callback";
 
 type GoogleAuthIntent = "login" | "signup";
-type SignupRole = Extract<UserRole, "employee" | "client">;
+type SignupRole = Extract<UserRole, "admin" | "employee" | "client">;
 
 type GoogleAuthState = {
   intent: GoogleAuthIntent;
@@ -51,7 +51,14 @@ export function parseGoogleAuthState(rawState?: string | null): GoogleAuthState 
     const decoded = Buffer.from(rawState, "base64url").toString("utf8");
     const parsed = JSON.parse(decoded) as Partial<GoogleAuthState>;
     const intent = parsed.intent === "signup" ? "signup" : "login";
-    const role = parsed.role === "client" ? "client" : parsed.role === "employee" ? "employee" : undefined;
+    const role =
+      parsed.role === "admin"
+        ? "admin"
+        : parsed.role === "client"
+          ? "client"
+          : parsed.role === "employee"
+            ? "employee"
+            : undefined;
     return { intent, role };
   } catch {
     return { intent: "login" };

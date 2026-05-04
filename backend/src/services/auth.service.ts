@@ -17,7 +17,7 @@ type AuthResponse = {
   refreshToken?: string;
 };
 
-type SignupRole = "employee" | "client";
+type SignupRole = "admin" | "employee" | "client";
 
 function toAuthUser(user: {
   id: string;
