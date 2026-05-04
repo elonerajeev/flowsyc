@@ -242,8 +242,8 @@ export const authController = {
       return;
     }
     const { targetRole } = req.body;
-    const user = await authService.switchRole(req.auth.userId, targetRole);
-    res.status(200).json({ user });
+    const { user, accessToken } = await authService.switchRole(req.auth.userId, targetRole);
+    res.status(200).json({ user, accessToken });
   },
 
   googleLogin: async (req: Request, res: Response): Promise<void> => {

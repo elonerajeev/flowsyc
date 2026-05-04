@@ -79,7 +79,14 @@ authRouter.post("/google/disconnect", requireAuth, asyncHandler(async (req, res)
 authRouter.get("/google/login-url", asyncHandler(async (req, res) => {
   const { getLoginAuthUrl } = await import("../services/google-auth.service.js");
   const intent = req.query.intent === "signup" ? "signup" : "login";
-  const role = req.query.role === "client" ? "client" : req.query.role === "employee" ? "employee" : undefined;
+  const role =
+    req.query.role === "admin"
+      ? "admin"
+      : req.query.role === "client"
+        ? "client"
+        : req.query.role === "employee"
+          ? "employee"
+          : undefined;
   const authUrl = getLoginAuthUrl({ intent, role });
   res.json({ authUrl });
 }));

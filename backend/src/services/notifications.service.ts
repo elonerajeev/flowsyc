@@ -1,7 +1,7 @@
 import { logger } from "../utils/logger";
 import { getIO } from "../socket";
 import { prisma } from "../config/prisma";
-import type { NotificationType, NotificationPriority } from "@prisma/client";
+import { Prisma, type NotificationType, type NotificationPriority } from "@prisma/client";
 
 type CreateNotificationInput = {
   userId: string;
@@ -83,7 +83,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
       entityId: input.entityId,
       batchKey: input.batchKey,
       batchCount: 1,
-      metadata: metadata ? JSON.stringify(metadata) : {},
+      metadata: (metadata ?? {}) as Prisma.InputJsonValue,
     },
   });
 

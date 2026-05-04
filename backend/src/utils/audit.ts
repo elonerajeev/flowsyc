@@ -132,7 +132,7 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
     conditions.push(`"organizationId" = $${params.length}`);
   }
 
-  if (options.role === "employee" && options.userId) {
+  if ((options.role === "employee" || !options.organizationId) && options.userId) {
     params.push(options.userId);
     conditions.push(`"userId" = $${params.length}`);
   }

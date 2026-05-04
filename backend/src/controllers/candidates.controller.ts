@@ -26,6 +26,7 @@ export const candidatesController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "create",
         entity: "Candidate",
         entityId: candidate.id,
@@ -40,6 +41,7 @@ export const candidatesController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "Candidate",
         entityId: candidateId,
@@ -54,6 +56,7 @@ export const candidatesController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "delete",
         entity: "Candidate",
         entityId: candidateId,
@@ -68,6 +71,7 @@ export const candidatesController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "stage_change",
         entity: "Candidate",
         entityId: candidateId,
@@ -104,6 +108,7 @@ export const candidatesController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "Candidate",
         entityId: candidateId,
@@ -118,9 +123,10 @@ export const candidatesController = {
       return;
     }
     const candidateId = readCandidateId(req);
-    const data = await candidatesService.generateOfferLetter(candidateId, req.auth.userId, req.body);
+    const data = await candidatesService.generateOfferLetter(candidateId, req.auth.userId, req.body, req.auth);
     await logAudit({
       userId: req.auth.userId,
+      organizationId: req.auth.organizationId,
       action: "email_sent",
       entity: "Candidate",
       entityId: candidateId,
@@ -129,15 +135,16 @@ export const candidatesController = {
     res.status(200).json(data);
   },
   getTimeline: async (req: Request, res: Response): Promise<void> => {
-    const activities = await candidatesService.getTimeline(readCandidateId(req));
+    const activities = await candidatesService.getTimeline(readCandidateId(req), req.auth);
     res.status(200).json(activities);
   },
   addNote: async (req: Request, res: Response): Promise<void> => {
     if (!req.auth) { res.status(401).json({ error: { code: "UNAUTHORIZED" } }); return; }
     const candidateId = readCandidateId(req);
-    const candidate = await candidatesService.addNote(candidateId, req.body.note, req.auth.email);
+    const candidate = await candidatesService.addNote(candidateId, req.body.note, req.auth.email, req.auth);
     await logAudit({
       userId: req.auth.userId,
+      organizationId: req.auth.organizationId,
       action: "update",
       entity: "Candidate",
       entityId: candidateId,

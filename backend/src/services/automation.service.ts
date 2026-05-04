@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma";
+import type { AccessActor } from "../utils/access-control";
 
 type AlertType = "payroll_due" | "invoice_overdue" | "task_overdue" | "project_stalled" | "churn_risk";
 
@@ -14,25 +15,39 @@ interface Alert {
 }
 
 export const automationService = {
-  async checkAllAlerts(userEmail?: string, userRole?: string): Promise<Alert[]> {
-    const alerts: Alert[] = [];
+  async checkAllAlerts(actor?: AccessActor): Promise<Alert[]> {
+    if (!actor) {
+      return [];
+    }
     
     const [payrollAlerts, invoiceAlerts, taskAlerts, projectAlerts] = await Promise.all([
-      this.checkPayrollAlerts(userEmail, userRole),
-      this.checkInvoiceOverdue(userEmail),
-      this.checkTaskOverdue(userEmail, userRole),
-      this.checkProjectStalled(userEmail),
+      this.checkPayrollAlerts(actor),
+      this.checkInvoiceOverdue(actor),
+      this.checkTaskOverdue(actor),
+      this.checkProjectStalled(actor),
     ]);
     
     return [...payrollAlerts, ...invoiceAlerts, ...taskAlerts, ...projectAlerts];
   },
 
-  async checkPayrollAlerts(userEmail?: string, userRole?: string): Promise<Alert[]> {
-    const alerts: Alert[] = [];
+  async checkPayrollAlerts(actor?: AccessActor): Promise<Alert[]> {
+    if (!actor) return [];
 
-    // Get all active team members with salary
+    const alerts: Alert[] = [];
+    const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+    const scopedWhere = actor.organizationId
+      ? { organizationId: actor.organizationId }
+      : actor.email
+        ? { email: { equals: actor.email, mode: "insensitive" as const } }
+        : { id: -1 };
+
     const members = await prisma.teamMember.findMany({
-      where: { deletedAt: null, status: "active", baseSalary: { gt: 0 } },
+      where: {
+        deletedAt: null,
+        status: "active",
+        baseSalary: { gt: 0 },
+        ...scopedWhere,
+      },
       select: { id: true, name: true, baseSalary: true, department: true, email: true },
     });
     
@@ -42,14 +57,11 @@ export const automationService = {
     
     for (const member of members) {
       if (member.baseSalary > 0) {
-        // Filter: For admins, show all; For managers, show their team; For employees, show theirs
         let shouldShow = true;
-        if (userRole === "manager" && userEmail) {
-          // Managers see alerts for their team (simplified - check if member email is related)
-          shouldShow = true; // Show all for now, could filter by department mapping
-        } else if (userRole === "employee") {
-          // Employees only see their own
-          shouldShow = member.email === userEmail;
+        if (actor.role === "manager" && !actor.organizationId && actorIds.length > 0) {
+          shouldShow = actorIds.includes(member.email);
+        } else if (actor.role === "employee") {
+          shouldShow = member.email.toLowerCase() === actor.email.toLowerCase();
         }
         
         if (shouldShow) {
@@ -70,16 +82,25 @@ export const automationService = {
     return alerts;
   },
 
-  async checkInvoiceOverdue(userEmail?: string): Promise<Alert[]> {
+  async checkInvoiceOverdue(actor?: AccessActor): Promise<Alert[]> {
+    if (!actor) return [];
+
     const alerts: Alert[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+    const scopedWhere = actor.organizationId
+      ? { organizationId: actor.organizationId }
+      : actorIds.length > 0
+        ? { createdBy: { in: actorIds } }
+        : { id: "__no_match__" };
     
     const overdueInvoices = await prisma.invoice.findMany({
       where: {
         deletedAt: null,
         status: { in: ["pending", "active"] },
         due: { lt: today.toISOString().slice(0, 10) },
+        ...scopedWhere,
       },
       select: { id: true, client: true, amount: true, due: true, status: true },
       take: 100,
@@ -87,41 +108,47 @@ export const automationService = {
     
     for (const invoice of overdueInvoices) {
       const daysOverdue = Math.floor((today.getTime() - new Date(invoice.due).getTime()) / (1000 * 60 * 60 * 24));
-      // Filter: Show to admins/managers only (finance responsibility)
-      if (userEmail) {
-        alerts.push({
-          type: "invoice_overdue",
-          severity: daysOverdue > 30 ? "critical" : "warning",
-          title: `Invoice Overdue - ${invoice.client}`,
-          description: `${invoice.client} invoice (${invoice.amount}) is ${daysOverdue} days overdue`,
-          entityId: invoice.id,
-          entityType: "Invoice",
-          actionUrl: `/finance/invoices?id=${invoice.id}`,
-        });
-      }
+      alerts.push({
+        type: "invoice_overdue",
+        severity: daysOverdue > 30 ? "critical" : "warning",
+        title: `Invoice Overdue - ${invoice.client}`,
+        description: `${invoice.client} invoice (${invoice.amount}) is ${daysOverdue} days overdue`,
+        entityId: invoice.id,
+        entityType: "Invoice",
+        actionUrl: `/finance/invoices?id=${invoice.id}`,
+      });
     }
     
     return alerts;
   },
 
-  async checkTaskOverdue(userEmail?: string, userRole?: string): Promise<Alert[]> {
+  async checkTaskOverdue(actor?: AccessActor): Promise<Alert[]> {
+    if (!actor) return [];
+
     const alerts: Alert[] = [];
     const today = new Date().toISOString().slice(0, 10);
+    const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
     
-    // Build where clause based on user role
     const where: any = {
       deletedAt: null,
       column: { in: ["todo", "in_progress"] },
       dueDate: { lt: today },
     };
+
+    if (actor.organizationId) {
+      where.organizationId = actor.organizationId;
+    } else if (actorIds.length > 0) {
+      where.assignee = { in: actorIds };
+    } else {
+      where.id = -1;
+    }
     
-    // Filter tasks by user
-    if (userRole === "employee") {
-      where.assignee = userEmail;
-    } else if (userRole === "manager") {
+    if (actor.role === "employee") {
+      where.assignee = actor.email;
+    } else if (actor.role === "manager" && !actor.organizationId) {
       where.OR = [
-        { assignee: userEmail },
-        { tags: { has: "assigned" } }, // Could filter by team
+        { assignee: { in: actorIds } },
+        { tags: { has: "assigned" } },
       ];
     }
     
@@ -133,10 +160,9 @@ export const automationService = {
     });
     
     for (const task of overdueTasks) {
-      // Admin/manager sees all, employee sees only theirs
       let shouldShow = true;
-      if (userRole === "employee") {
-        shouldShow = task.assignee === userEmail;
+      if (actor.role === "employee") {
+        shouldShow = task.assignee.toLowerCase() === actor.email.toLowerCase();
       }
       
       if (shouldShow) {
@@ -156,16 +182,25 @@ export const automationService = {
     return alerts;
   },
 
-  async checkProjectStalled(userEmail?: string): Promise<Alert[]> {
+  async checkProjectStalled(actor?: AccessActor): Promise<Alert[]> {
+    if (!actor) return [];
+
     const alerts: Alert[] = [];
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
+    const scopedWhere = actor.organizationId
+      ? { organizationId: actor.organizationId }
+      : actorIds.length > 0
+        ? { createdBy: { in: actorIds } }
+        : { id: -1 };
     
     const stalledProjects = await prisma.project.findMany({
       where: {
         deletedAt: null,
         status: "active",
         updatedAt: { lt: oneWeekAgo },
+        ...scopedWhere,
       },
       select: { id: true, name: true, progress: true, stage: true },
     });
@@ -212,13 +247,39 @@ export const automationService = {
     }
   },
 
-  async getAlertsSummary(userEmail?: string, userRole?: string) {
+  async getAlertsSummary(actor?: AccessActor) {
+    if (!actor) {
+      return {
+        total: 0,
+        critical: 0,
+        warning: 0,
+        resolvedToday: 0,
+        byType: {
+          payroll_due: 0,
+          invoice_overdue: 0,
+          task_overdue: 0,
+          project_stalled: 0,
+        },
+      };
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const resolvedScope = actor.organizationId
+      ? { organizationId: actor.organizationId }
+      : actor.email
+        ? { resolvedBy: actor.email }
+        : { id: -1 };
 
     const [alerts, resolvedToday] = await Promise.all([
-      this.checkAllAlerts(userEmail, userRole),
-      prisma.alert.count({ where: { isResolved: true, resolvedAt: { gte: today } } }),
+      this.checkAllAlerts(actor),
+      prisma.alert.count({
+        where: {
+          isResolved: true,
+          resolvedAt: { gte: today },
+          ...resolvedScope,
+        },
+      }),
     ]);
 
     return {

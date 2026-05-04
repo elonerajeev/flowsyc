@@ -43,7 +43,7 @@ router.post(
   "/bulk/recalculate-scores",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const result = await leadsService.bulkRecalculateScores();
+    const result = await leadsService.bulkRecalculateScores(req.auth);
     res.json(result);
   }),
 );
@@ -117,7 +117,7 @@ router.post(
   "/:id/recalculate-score",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
-    const result = await leadsService.recalculateScore(Number(req.params.id));
+    const result = await leadsService.recalculateScore(Number(req.params.id), req.auth);
     res.json(result);
   }),
 );
@@ -127,7 +127,7 @@ router.post(
   "/:id/followup-sequence",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
-    const result = await leadsService.createFollowUpSequence(Number(req.params.id), req.auth?.email || "system");
+    const result = await leadsService.createFollowUpSequence(Number(req.params.id), req.auth?.email || "system", req.auth);
     res.json(result);
   }),
 );
@@ -137,7 +137,7 @@ router.post(
   "/:id/assign",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const result = await leadsService.assignToBestRep(Number(req.params.id));
+    const result = await leadsService.assignToBestRep(Number(req.params.id), req.auth);
     res.json(result);
   }),
 );
@@ -170,7 +170,7 @@ router.get(
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
     const limit = Number(req.query.limit) || 50;
-    const activities = await leadsService.getActivities(Number(req.params.id), limit);
+    const activities = await leadsService.getActivities(Number(req.params.id), limit, req.auth);
     res.json(activities);
   }),
 );
@@ -180,7 +180,7 @@ router.get(
   "/:id/meetings",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
-    const meetings = await leadsService.getMeetings(Number(req.params.id));
+    const meetings = await leadsService.getMeetings(Number(req.params.id), req.auth);
     res.json(meetings);
   }),
 );
@@ -199,6 +199,7 @@ router.post(
   requireRole(["admin", "manager", "employee"]),
   validateBody(sendEmailSchema),
   asyncHandler(async (req, res) => {
+    await leadsService.getById(Number(req.params.id), req.auth);
     await sendEmailToLead(Number(req.params.id), req.body, req.auth!.email);
     res.json({ message: "Email sent successfully" });
   }),
@@ -209,6 +210,7 @@ router.get(
   "/:id/emails",
   requireRole(["admin", "manager", "employee"]),
   asyncHandler(async (req, res) => {
+    await leadsService.getById(Number(req.params.id), req.auth);
     const history = await getLeadEmailHistory(Number(req.params.id));
     res.json(history);
   }),

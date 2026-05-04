@@ -116,7 +116,12 @@ export const dealsService = {
   },
 
   async getById(id: number, access?: AccessScope) {
-    const deal = await prisma.deal.findUnique({ where: { id } });
+    const deal = await prisma.deal.findFirst({
+      where: {
+        id,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
+    });
     if (!deal || deal.deletedAt) {
       throw new AppError("Deal not found", 404, "NOT_FOUND");
     }

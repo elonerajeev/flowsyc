@@ -101,9 +101,11 @@ function buildTaskWhere(
   employeeAssignees?: string[] | null,
   organizationId?: string,
 ): Prisma.TaskWhereInput {
+  // Require organizationId — never return cross-org data
+  if (!organizationId) return { id: -1 }; // returns nothing safely
   return {
     deletedAt: null,
-    ...(organizationId ? { organizationId } : {}),
+    organizationId,
     ...(query.column ? { column: toDbColumn(query.column) } : {}),
     ...(query.priority ? { priority: query.priority } : {}),
     ...(query.projectId ? { projectId: query.projectId } : {}),
@@ -152,15 +154,14 @@ async function syncProjectTaskStats(projectId?: number | null) {
 export const tasksService = {
   async getById(taskId: number, access?: AccessScope) {
     const employeeAssignees = await getEmployeeAssigneeScope(access);
-    const task = employeeAssignees
-      ? await prisma.task.findFirst({
-          where: {
-            deletedAt: null,
-            id: taskId,
-            assignee: { in: employeeAssignees },
-          },
-        })
-      : await prisma.task.findUnique({ where: { id: taskId } });
+    const task = await prisma.task.findFirst({
+      where: {
+        deletedAt: null,
+        id: taskId,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+        ...(employeeAssignees ? { assignee: { in: employeeAssignees } } : {}),
+      },
+    });
     if (!task || task.deletedAt) {
       throw new AppError("Task not found", 404, "NOT_FOUND");
     }

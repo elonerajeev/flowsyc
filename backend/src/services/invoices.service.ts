@@ -70,7 +70,7 @@ export const invoicesService = {
         },
       });
     } else {
-      invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+      throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
     if (!invoice || invoice.deletedAt) {

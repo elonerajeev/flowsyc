@@ -284,19 +284,24 @@ export const authService = {
     };
   },
 
-  async switchRole(userId: string, targetRole: AppUserRole): Promise<AuthUser> {
+  async switchRole(userId: string, targetRole: AppUserRole): Promise<{ user: AuthUser; accessToken: string }> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) {
       throw new AppError("User not found", 404, "NOT_FOUND");
     }
 
-    // Only admin can switch to any role
     if (user.role !== "admin" && user.role !== targetRole) {
       throw new AppError("Access denied. Only admins can switch roles.", 403, "FORBIDDEN");
     }
 
-    // For admin, return user with target role (view-only switch, doesn't modify DB)
-    // For others, just return their actual role
-    return toAuthUser({ ...user, role: targetRole });
+    const payload: TokenPayload = {
+      sub: user.id,
+      email: user.email,
+      role: targetRole,
+      organizationId: user.organizationId ?? undefined,
+    };
+    const accessToken = signAccessToken(payload);
+
+    return { user: toAuthUser({ ...user, role: targetRole }), accessToken };
   },
 };

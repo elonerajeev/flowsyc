@@ -150,11 +150,13 @@ model JobPosting {
   deadline       String?
   priority       String?     @default("normal")
   organizationId String?
+  createdBy      String?
   Candidate      Candidate[]
 
   @@index([deletedAt])
   @@index([status])
   @@index([organizationId])
+  @@index([createdBy])
 }
 
 model Message {
@@ -640,6 +642,11 @@ enum LeadSource {
   social
   email
   other
+  linkedin
+  inbound
+  cold_call
+  event
+  partner
 }
 
 enum DealStage {
@@ -796,14 +803,21 @@ enum PayrollStatus {
 }
 
 model Team {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?  @default("")
-  permissions Json     @default("{}") // Object of service permissions, e.g. {"clients": true, "tasks": false}
-  members     TeamMember[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  id             Int          @id @default(autoincrement())
+  name           String
+  description    String?      @default("")
+  permissions    Json         @default("{}")
+  organizationId String?
+  ownerId        String?
+  ownerEmail     String?
+  members        TeamMember[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([organizationId])
+  @@index([ownerEmail])
+  @@index([deletedAt])
 }
 
 // ============================================
@@ -1160,4 +1174,48 @@ model ImapAccount {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+enum NotificationType {
+  task
+  lead
+  deal
+  client
+  project
+  invoice
+  system
+  collaboration
+}
+
+enum NotificationPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model Notification {
+  id         Int                  @id @default(autoincrement())
+  userId     String
+  type       NotificationType
+  title      String
+  message    String
+  priority   NotificationPriority @default(medium)
+  linkUrl    String?
+  linkLabel  String?
+  entityType String?
+  entityId   Int?
+  batchKey   String?
+  batchCount Int                  @default(1)
+  metadata   Json                 @default("{}")
+  isRead     Boolean              @default(false)
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([batchKey])
 }

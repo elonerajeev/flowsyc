@@ -35,7 +35,9 @@ export function initializeIO(server: http.Server): SocketIOServer {
       });
 
       socket.on('join', (userId: string) => {
-        socket.join(`user_${userId}`);
+        if (userId === socket.data.userId) {
+          socket.join(`user_${userId}`);
+        }
       });
     });
   }

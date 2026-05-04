@@ -35,58 +35,44 @@ export const searchService = {
     const orgId = access?.organizationId;
     const actorIds = access ? [access.email, access.userId].filter(Boolean) as string[] : [];
 
-    // For admin within an org: see all org data. For manager/employee: further restrict.
+    // All scope functions require orgId — never return cross-org data
     function clientScope() {
-      if (orgId) {
-        if (access?.role === "admin") return { organizationId: orgId };
-        if (access?.role === "manager") return { organizationId: orgId, OR: actorIds.map(id => ({ assignedTo: id })) };
-        if (access?.role === "employee") return { organizationId: orgId, assignedTo: { in: actorIds } };
-      }
-      // Backward-compat: user-level scope when no orgId
-      if (actorIds.length > 0 && (access?.role === "admin" || access?.role === "manager")) {
-        return { OR: actorIds.map(id => ({ assignedTo: id })) };
-      }
-      return {};
+      if (!orgId) return { id: -1 };
+      if (access?.role === "admin") return { organizationId: orgId };
+      if (access?.role === "manager") return { organizationId: orgId, OR: actorIds.map(id => ({ assignedTo: id })) };
+      if (access?.role === "employee") return { organizationId: orgId, assignedTo: { in: actorIds } };
+      return { id: -1 };
     }
 
     function projectScope() {
-      if (orgId) {
-        if (access?.role === "admin") return { organizationId: orgId };
-        if (access?.role === "manager") return { organizationId: orgId, createdBy: { in: actorIds } };
-      }
-      if (actorIds.length > 0 && (access?.role === "admin" || access?.role === "manager")) {
-        return { createdBy: { in: actorIds } };
-      }
-      return {};
+      if (!orgId) return { id: -1 };
+      if (access?.role === "admin") return { organizationId: orgId };
+      if (access?.role === "manager") return { organizationId: orgId, createdBy: { in: actorIds } };
+      return { id: -1 };
     }
 
     function taskScope() {
-      if (orgId) {
-        if (access?.role === "admin") return { organizationId: orgId };
-        if (access?.role === "manager" || access?.role === "employee") {
-          return { organizationId: orgId, assignee: { in: actorIds } };
-        }
+      if (!orgId) return { id: -1 };
+      if (access?.role === "admin") return { organizationId: orgId };
+      if (access?.role === "manager" || access?.role === "employee") {
+        return { organizationId: orgId, assignee: { in: actorIds } };
       }
-      return {};
+      return { id: -1 };
     }
 
     function memberScope() {
-      return orgId ? { organizationId: orgId } : {};
+      return orgId ? { organizationId: orgId } : { id: -1 };
     }
 
     function invoiceScope() {
-      if (orgId) {
-        if (access?.role === "admin") return { organizationId: orgId };
-        if (access?.role === "manager") return { organizationId: orgId, createdBy: { in: actorIds } };
-      }
-      if (actorIds.length > 0 && (access?.role === "admin" || access?.role === "manager")) {
-        return { createdBy: { in: actorIds } };
-      }
-      return {};
+      if (!orgId) return { organizationId: "__none__" };
+      if (access?.role === "admin") return { organizationId: orgId };
+      if (access?.role === "manager") return { organizationId: orgId, createdBy: { in: actorIds } };
+      return { organizationId: "__none__" };
     }
 
     function jobScope() {
-      return orgId ? { organizationId: orgId } : {};
+      return orgId ? { organizationId: orgId } : { id: -1 };
     }
 
     const [clients, projects, tasks, members, invoices, jobs] = await Promise.all([

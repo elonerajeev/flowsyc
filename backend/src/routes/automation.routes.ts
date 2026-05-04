@@ -29,10 +29,7 @@ router.get(
   "/alerts",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const userEmail = req.auth?.email;
-    const userRole = req.auth?.role;
-    
-    const alerts = await automationService.checkAllAlerts(userEmail, userRole);
+    const alerts = await automationService.checkAllAlerts(req.auth);
     res.json(alerts);
   })
 );
@@ -42,9 +39,7 @@ router.get(
   "/alerts/summary",
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
-    const userEmail = req.auth?.email;
-    const userRole = req.auth?.role;
-    const summary = await automationService.getAlertsSummary(userEmail, userRole);
+    const summary = await automationService.getAlertsSummary(req.auth);
     res.json(summary);
   })
 );
@@ -457,7 +452,7 @@ router.get(
       failedToday,
       completedToday,
       sentToday,
-      alertsSummary: await automationService.getAlertsSummary()
+      alertsSummary: await automationService.getAlertsSummary(req.auth)
     });
   })
 );

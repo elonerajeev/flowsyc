@@ -183,7 +183,7 @@ const App = () => {
                                       <Route path="/finance/reports" element={<RouteAccessGuard><ReportsPage /></RouteAccessGuard>} />
                                       <Route path="/hr/hiring" element={<RouteAccessGuard><HiringPage /></RouteAccessGuard>} />
                                       <Route path="/hr/candidates" element={<RouteAccessGuard><CandidatesPage /></RouteAccessGuard>} />
-                                      <Route path="/hr/employees" element={<Navigate to="/people/members" replace />} />
+                                      <Route path="/hr/employees" element={<RouteAccessGuard><TeamPage /></RouteAccessGuard>} />
                                       <Route path="/hr/payroll" element={<RouteAccessGuard><PayrollPage /></RouteAccessGuard>} />
                                       <Route path="/insights/analytics" element={<RouteAccessGuard><AnalyticsPage /></RouteAccessGuard>} />
                                       <Route path="/automation/rules" element={<RouteAccessGuard><AutomationRulesPage /></RouteAccessGuard>} />
@@ -201,7 +201,7 @@ const App = () => {
                                       <Route path="/team" element={<Navigate to="/people/teams" replace />} />
                                       <Route path="/teams" element={<Navigate to="/people/teams" replace />} />
                                       <Route path="/members" element={<Navigate to="/people/members" replace />} />
-                                      <Route path="/employees" element={<Navigate to="/people/members" replace />} />
+                                      <Route path="/employees" element={<Navigate to="/hr/employees" replace />} />
                                       <Route path="/clients" element={<Navigate to="/sales/clients" replace />} />
                                       <Route path="/leads" element={<Navigate to="/sales/leads" replace />} />
                                       <Route path="/deals" element={<Navigate to="/sales/pipelines" replace />} />

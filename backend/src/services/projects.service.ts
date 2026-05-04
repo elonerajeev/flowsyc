@@ -119,7 +119,7 @@ export const projectsService = {
         },
       });
     } else {
-      project = await prisma.project.findUnique({ where: { id: projectId } });
+      throw new AppError("Project not found", 404, "NOT_FOUND");
     }
 
     if (!project || project.deletedAt) {

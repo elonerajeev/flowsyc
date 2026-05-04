@@ -40,10 +40,10 @@ function normalizeScopes(values: Array<string | null | undefined>) {
   );
 }
 
-export async function getEmployeeAssigneeScope(actor: AccessActor) {
+export async function getEmployeeAssigneeScope(actor: AccessActor): Promise<string[] | null> {
   // Cache key for this actor's scope (works for all roles)
-  const cacheKey = `actor:scope:${actor?.userId || actor?.email}`;
-  const cached = await cache.get(cacheKey);
+  const cacheKey = `actor:scope:${actor?.userId || actor?.email}:${actor?.organizationId || "global"}`;
+  const cached = await cache.get<string[] | null>(cacheKey);
   if (cached !== null) return cached;
 
   if (!actor || actor.role !== "employee") {
@@ -60,6 +60,7 @@ export async function getEmployeeAssigneeScope(actor: AccessActor) {
   const member = await prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       OR: [
         { email: { equals: actor.email, mode: "insensitive" } },
         ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
@@ -99,6 +100,7 @@ export async function getEmployeeProjectScope(actor: AccessActor) {
   const member = await prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       OR: [
         { email: { equals: actor.email, mode: "insensitive" } },
         ...(user?.name ? [{ name: { equals: user.name, mode: "insensitive" as const } }] : []),
@@ -127,6 +129,7 @@ export async function getEmployeeMemberRecord(actor: AccessActor) {
   return prisma.teamMember.findFirst({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       email: { equals: actor.email, mode: "insensitive" },
     },
     select: { id: true, name: true, department: true },
@@ -170,6 +173,7 @@ export async function getInvoiceClientLabels(actor: AccessActor) {
   const clientRecords = await prisma.client.findMany({
     where: {
       deletedAt: null,
+      ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
       email: { equals: actor.email, mode: "insensitive" },
     },
     select: {
