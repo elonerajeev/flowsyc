@@ -249,25 +249,43 @@ describe("auth API", () => {
     expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
   });
 
-  it("rejects privileged role during public signup", async () => {
+  it("allows admin signup and still rejects unsupported privileged role", async () => {
     const app = createApp();
 
-    const signupResponse = await dispatch(app, {
+    const adminSignupResponse = await dispatch(app, {
       method: "POST",
       url: "/api/auth/signup",
       body: {
-        name: "Privileged User",
-        email: "privileged@example.com",
+        name: "Admin User",
+        email: "admin@example.com",
         password: "Password123!",
         role: "admin",
       },
     });
 
-    expect(signupResponse.statusCode).toBe(400);
-    const signupBody = signupResponse._getJSONData() as {
+    expect(adminSignupResponse.statusCode).toBe(201);
+    const adminSignupBody = adminSignupResponse._getJSONData() as {
+      user: { role: UserRole; email: string };
+    };
+    expect(adminSignupBody.user.role).toBe("admin");
+    expect(adminSignupBody.user.email).toBe("admin@example.com");
+
+    const managerSignupResponse = await dispatch(app, {
+      method: "POST",
+      url: "/api/auth/signup",
+      body: {
+        name: "Manager User",
+        email: "manager@example.com",
+        password: "Password123!",
+        role: "manager",
+      },
+    });
+
+    expect(managerSignupResponse.statusCode).toBe(400);
+    const managerSignupBody = managerSignupResponse._getJSONData() as {
       error: { code: string; message: string };
     };
-    expect(signupBody.error.code).toBe("VALIDATION_ERROR");
-    expect(mockState.users).toHaveLength(0);
+    expect(managerSignupBody.error.code).toBe("VALIDATION_ERROR");
+    expect(mockState.users).toHaveLength(1);
   });
 });
