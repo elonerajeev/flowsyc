@@ -1,0 +1,10 @@
+# Flowsyc API Robots.txt
+# API endpoints should not be indexed
+
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Disallow: /
+
+Sitemap: https://flowsyc.com/sitemap.xml

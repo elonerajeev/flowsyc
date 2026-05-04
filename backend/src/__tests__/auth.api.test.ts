@@ -7,7 +7,7 @@ import type { UserRole } from "../config/types";
 
 process.env.NODE_ENV = "test";
 process.env.PORT = "3000";
-process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/focal_point_compass_test";
+process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/flowsyc_test";
 process.env.JWT_ACCESS_SECRET = "a".repeat(64);
 process.env.JWT_REFRESH_SECRET = "b".repeat(64);
 process.env.FRONTEND_URL = "http://localhost:8080";

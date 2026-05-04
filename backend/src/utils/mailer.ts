@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 import { AppError } from "../middleware/error.middleware";
+import { logger } from "./logger";
 
 type SendMailInput = {
   to: string;

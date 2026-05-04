@@ -73,11 +73,11 @@ export function createApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://flowsyc-svuj.vercel.app"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'"],
-        frameSrc: ["'none'"],
+        imgSrc: ["'self'", "data:", "https:", "https://flowsyc-svuj.vercel.app"],
+        connectSrc: ["'self'", "https://flowsyc-svuj.vercel.app", "wss://flowsyc-svuj.vercel.app", "http://185.27.134.55", "ws://185.27.134.55"],
+        frameSrc: ["'self'", "https://accounts.google.com"],
         objectSrc: ["'none'"],
       },
     },
@@ -87,7 +87,7 @@ export function createApp() {
   app.use(compression());
   app.use(
     cors({
-      origin: env.FRONTEND_URL,
+      origin: [env.FRONTEND_URL, env.FRONTEND_URL?.replace("https://", "https://www."), "https://flowsyc-svuj.vercel.app", "https://flowsyc.com"],
       credentials: true,
     }),
   );
@@ -118,7 +118,7 @@ export function createApp() {
   app.get(["/health", "/api/health"], (_req, res) => {
     res.status(200).json({
       status: "ok",
-      service: "focal-point-compass-backend",
+      service: "flowsyc-backend",
       timestamp: new Date().toISOString(),
     });
   });

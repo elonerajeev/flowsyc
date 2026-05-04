@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit";
 import { sendMail } from "./mailer";
 import { logger } from "./logger";
 
-const APP_NAME = "Focal Point Compass";
+const APP_NAME = "Flowsyc";
 
 function generateSalarySlipPDF(salary: { name: string; period: string; baseSalary: number; allowances: number; deductions: number; netPay: number; paidAt: Date }) {
   const doc = new PDFDocument();

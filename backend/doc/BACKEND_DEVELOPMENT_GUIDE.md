@@ -1,5 +1,5 @@
 # Backend Development Guide
-## Focal Point Compass - Complete Backend Integration Manual
+## Flowsyc - Complete Backend Integration Manual
 
 **Version:** 1.0  
 **Date:** March 27, 2026  
