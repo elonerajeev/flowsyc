@@ -34,7 +34,7 @@ jobs:
         run: cd backend && npm ci
 
       - name: 🗄️ Validate Prisma schema
-        run: cd backend && npx prisma validate --skip-generate
+        run: cd backend && npx prisma validate
         env:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
