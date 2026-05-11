@@ -3,9 +3,11 @@ import { useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import MasterSidebar from "./MasterSidebar";
 import Sidebar from "./Sidebar";
+import DevOpsSidebar from "./DevOpsSidebar";
 import Navbar from "./Navbar";
 import MobileBottomNav from "./MobileBottomNav";
 import { getSectionForPath, type SidebarSectionKey } from "./sidebarConfig";
+import { getDevOpsSectionForPath } from "./devopsConfig";
 import { readStoredString, writeStoredString } from "@/lib/preferences";
 
 const MASTER_WIDTH = 72;
@@ -15,6 +17,7 @@ const MAX_DETAIL_WIDTH = 360;
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const isDevOps = location.pathname.startsWith("/devops");
   const [activeSection, setActiveSection] = useState<SidebarSectionKey>(() => getSectionForPath(location.pathname));
   const [detailWidth, setDetailWidth] = useState(() => {
     const saved = Number(readStoredString("crm-detail-sidebar-width", ""));
@@ -60,7 +63,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="relative min-h-screen overflow-hidden bg-transparent">
       <div className="hidden md:block">
         <MasterSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
-        <Sidebar activeSection={activeSection} width={detailWidth} onResizeStart={beginResize} />
+        {isDevOps
+          ? <DevOpsSidebar activeSection={getDevOpsSectionForPath(location.pathname)} width={detailWidth} />
+          : <Sidebar activeSection={activeSection} width={detailWidth} onResizeStart={beginResize} />
+        }
       </div>
       <div
         className="sidebar-transition relative z-10 min-h-screen md:ml-[var(--sidebar-offset)]"

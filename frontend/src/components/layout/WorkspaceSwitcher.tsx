@@ -1,40 +1,63 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Building2, ChevronRight, LogOut, Settings, ShieldCheck,
-  Sparkles, UserCircle, Users, Check,
+  BarChart3, Building2, ChevronRight,
+  LogOut, Server, Settings, Sparkles, Check,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
-import type { UserRole } from "@/contexts/ThemeContext";
 
-const ROLE_META: Record<UserRole, { label: string; color: string; icon: React.ElementType }> = {
-  admin:    { label: "Admin",    color: "text-violet-400",  icon: ShieldCheck },
-  manager:  { label: "Manager",  color: "text-blue-400",    icon: Users },
-  employee: { label: "Employee", color: "text-emerald-400", icon: UserCircle },
-  client:   { label: "Client",   color: "text-amber-400",   icon: Building2 },
-};
+type WorkspaceId = "crm" | "devops";
+
+const WORKSPACES: {
+  id: WorkspaceId;
+  label: string;
+  description: string;
+  route: string;
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+}[] = [
+  {
+    id: "crm",
+    label: "Flowsyc CRM",
+    description: "Clients, leads, deals, HR & finance",
+    route: "/overview",
+    icon: BarChart3,
+    color: "text-violet-400",
+    bg: "bg-violet-500/15",
+  },
+  {
+    id: "devops",
+    label: "DevOps Hub",
+    description: "Infrastructure, health & deployments",
+    route: "/devops/health",
+    icon: Server,
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/15",
+  },
+];
+
+function getActiveWorkspace(pathname: string): WorkspaceId {
+  return pathname.startsWith("/devops") ? "devops" : "crm";
+}
 
 export default function WorkspaceSwitcher() {
   const [open, setOpen] = useState(false);
-  const { user, logout, switchRole } = useAuth();
-  const { role } = useTheme();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
+  const activeId = getActiveWorkspace(pathname);
   const displayName = user?.name ?? "Guest";
   const email = user?.email ?? "";
-  const orgName = user?.organizationId ? "Flowsyc Org" : "Personal Workspace";
   const initials = displayName.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "GU";
 
-  const currentRole = ROLE_META[role] ?? ROLE_META.employee;
-  const RoleIcon = currentRole.icon;
-
-  const handleSwitchRole = async (target: UserRole) => {
-    if (target === role) return;
-    await switchRole(target);
+  const handleSwitch = (ws: typeof WORKSPACES[number]) => {
+    if (ws.id === activeId) return;
+    navigate(ws.route);
     setOpen(false);
   };
 
@@ -45,7 +68,7 @@ export default function WorkspaceSwitcher() {
 
   return (
     <div className="relative px-2 pb-3">
-      {/* Trigger button */}
+      {/* Trigger */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -56,8 +79,8 @@ export default function WorkspaceSwitcher() {
             : "border-sidebar-border bg-sidebar-hover/40 text-sidebar-foreground hover:border-sidebar-active/30 hover:bg-sidebar-active/10",
           RADIUS.lg,
         )}
-        aria-label="Workspace switcher"
-        title="Workspace & account"
+        aria-label="Switch workspace"
+        title="Switch workspace"
       >
         <div className={cn(
           "relative flex h-9 w-9 items-center justify-center overflow-hidden border border-sidebar-active/30 bg-gradient-to-br from-sidebar-active/28 to-sidebar-primary/16",
@@ -68,10 +91,9 @@ export default function WorkspaceSwitcher() {
         </div>
       </button>
 
-      {/* Popup panel */}
+      {/* Panel */}
       {open && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
           <div className={cn(
@@ -79,7 +101,7 @@ export default function WorkspaceSwitcher() {
             RADIUS.xl,
           )}>
 
-            {/* Workspace header */}
+            {/* User header */}
             <div className="border-b border-sidebar-border p-4">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -100,52 +122,40 @@ export default function WorkspaceSwitcher() {
                   Live
                 </span>
               </div>
-
-              {/* Current workspace */}
-              <div className={cn(
-                "mt-3 flex items-center gap-2 border border-sidebar-border bg-sidebar-hover/50 px-3 py-2",
-                RADIUS.lg,
-              )}>
-                <Building2 className="h-4 w-4 shrink-0 text-sidebar-active" />
-                <div className="min-w-0 flex-1">
-                  <p className={cn("font-semibold text-sidebar-foreground", TEXT.meta)}>{orgName}</p>
-                  <p className={cn("text-sidebar-muted", TEXT.meta)}>Current workspace</p>
-                </div>
-                <span className={cn(
-                  "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-400",
-                  TEXT.meta,
-                )}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Active
-                </span>
-              </div>
             </div>
 
-            {/* Role switcher */}
+            {/* Workspace switcher */}
             <div className="border-b border-sidebar-border p-3">
               <p className={cn("mb-2 px-1 font-semibold uppercase tracking-widest text-sidebar-muted", TEXT.meta)}>
-                Switch Role
+                Workspaces
               </p>
-              <div className="space-y-0.5">
-                {(Object.entries(ROLE_META) as [UserRole, typeof ROLE_META[UserRole]][]).map(([r, meta]) => {
-                  const Icon = meta.icon;
-                  const isActive = r === role;
+              <div className="space-y-1">
+                {WORKSPACES.map((ws) => {
+                  const Icon = ws.icon;
+                  const isActive = ws.id === activeId;
                   return (
                     <button
-                      key={r}
+                      key={ws.id}
                       type="button"
-                      onClick={() => handleSwitchRole(r)}
+                      onClick={() => handleSwitch(ws)}
                       className={cn(
-                        "flex w-full items-center gap-3 px-3 py-2 transition",
+                        "flex w-full items-center gap-3 px-3 py-2.5 transition",
                         RADIUS.lg,
                         isActive
-                          ? "bg-sidebar-active/12 text-sidebar-foreground"
-                          : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground",
+                          ? "bg-sidebar-active/10 ring-1 ring-sidebar-active/20"
+                          : "hover:bg-sidebar-hover",
                       )}
                     >
-                      <Icon className={cn("h-4 w-4 shrink-0", isActive ? meta.color : "")} />
-                      <span className={cn("flex-1 text-left font-medium", TEXT.body)}>{meta.label}</span>
-                      {isActive && <Check className={cn("h-3.5 w-3.5", meta.color)} />}
+                      <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center", RADIUS.lg, ws.bg)}>
+                        <Icon className={cn("h-4 w-4", ws.color)} />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className={cn("font-semibold", TEXT.body, isActive ? "text-sidebar-foreground" : "text-sidebar-muted group-hover:text-sidebar-foreground")}>
+                          {ws.label}
+                        </p>
+                        <p className={cn("text-sidebar-muted", TEXT.meta)}>{ws.description}</p>
+                      </div>
+                      {isActive && <Check className={cn("h-3.5 w-3.5 shrink-0", ws.color)} />}
                     </button>
                   );
                 })}
