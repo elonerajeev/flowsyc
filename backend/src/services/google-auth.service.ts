@@ -1,11 +1,14 @@
 import { google } from "googleapis";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { prisma } from "../config/prisma";
 import { buildProfile } from "../utils/employee-profile";
 import { hashPassword } from "../utils/password";
 import { AppError } from "../middleware/error.middleware";
 import { authService } from "./auth.service";
 import type { UserRole } from "../config/types";
+import { cache } from "../utils/cache";
+import { env } from "../config/env";
 
 // For Calendar integration (meetings)
 const CALENDAR_SCOPES = [
@@ -23,12 +26,88 @@ const DEFAULT_LOGIN_REDIRECT_URI = "http://localhost:3000/api/auth/google/callba
 const DEFAULT_CALENDAR_REDIRECT_URI = "http://localhost:3000/api/auth/google/calendar-callback";
 
 type GoogleAuthIntent = "login" | "signup";
-type SignupRole = Extract<UserRole, "admin" | "employee" | "client">;
+type SignupRole = Extract<UserRole, "admin">;
 
 type GoogleAuthState = {
   intent: GoogleAuthIntent;
   role?: SignupRole;
 };
+
+type ParsedGoogleCalendarState = {
+  email: string;
+  userId: string;
+  organizationId?: string;
+};
+
+type GoogleOAuthStatePayload = {
+  type: "google_auth_state";
+  nonce: string;
+  intent: GoogleAuthIntent;
+  role?: SignupRole;
+};
+
+type GoogleCalendarStatePayload = {
+  type: "google_calendar_state";
+  nonce: string;
+  email: string;
+  userId: string;
+  organizationId?: string;
+};
+
+const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
+
+function oauthNonceCacheKey(prefix: "auth" | "calendar", nonce: string) {
+  return `oauth-state:${prefix}:${nonce}`;
+}
+
+async function storeOAuthNonce(prefix: "auth" | "calendar", nonce: string) {
+  await Promise.resolve(cache.set(oauthNonceCacheKey(prefix, nonce), true, GOOGLE_STATE_TTL_MS));
+}
+
+async function consumeOAuthNonce(prefix: "auth" | "calendar", nonce: string) {
+  const key = oauthNonceCacheKey(prefix, nonce);
+  const exists = await Promise.resolve(cache.get<boolean>(key));
+  if (!exists) return false;
+  await Promise.resolve(cache.invalidate(key));
+  return true;
+}
+
+function normalizeGoogleIntent(value: unknown): GoogleAuthIntent {
+  return value === "signup" ? "signup" : "login";
+}
+
+function normalizeGoogleSignupRole(value: unknown): SignupRole | undefined {
+  return value === "admin" ? "admin" : undefined;
+}
+
+async function signGoogleAuthStateToken(input: GoogleAuthState) {
+  const nonce = crypto.randomUUID();
+  await storeOAuthNonce("auth", nonce);
+  const payload: GoogleOAuthStatePayload = {
+    type: "google_auth_state",
+    nonce,
+    intent: normalizeGoogleIntent(input.intent),
+    role: normalizeGoogleSignupRole(input.role),
+  };
+  return jwt.sign(payload, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET, {
+    expiresIn: "10m",
+  });
+}
+
+async function signGoogleCalendarStateToken(input: { email: string; userId: string; organizationId?: string }) {
+  const nonce = crypto.randomUUID();
+  await storeOAuthNonce("calendar", nonce);
+  const payload: GoogleCalendarStatePayload = {
+    type: "google_calendar_state",
+    nonce,
+    email: input.email,
+    userId: input.userId,
+    organizationId: input.organizationId,
+  };
+  return jwt.sign(payload, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET, {
+    expiresIn: "10m",
+  });
+}
 
 function getLoginRedirectUri() {
   return process.env.GOOGLE_REDIRECT_URI || DEFAULT_LOGIN_REDIRECT_URI;
@@ -38,31 +117,57 @@ function getCalendarRedirectUri() {
   return process.env.GOOGLE_CALENDAR_REDIRECT_URI || DEFAULT_CALENDAR_REDIRECT_URI;
 }
 
-function encodeGoogleAuthState(state: GoogleAuthState) {
-  return Buffer.from(JSON.stringify(state), "utf8").toString("base64url");
+export async function parseGoogleAuthState(rawState?: string | null): Promise<GoogleAuthState> {
+  if (!rawState) {
+    throw new AppError("Missing OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+
+  let payload: GoogleOAuthStatePayload;
+  try {
+    payload = jwt.verify(rawState, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET) as GoogleOAuthStatePayload;
+  } catch {
+    throw new AppError("Invalid OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+
+  if (!payload?.nonce || payload.type !== "google_auth_state") {
+    throw new AppError("Invalid OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+  const consumed = await consumeOAuthNonce("auth", payload.nonce);
+  if (!consumed) {
+    throw new AppError("Expired OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+
+  return {
+    intent: normalizeGoogleIntent(payload.intent),
+    role: normalizeGoogleSignupRole(payload.role),
+  };
 }
 
-export function parseGoogleAuthState(rawState?: string | null): GoogleAuthState {
+export async function parseGoogleCalendarState(rawState?: string | null): Promise<ParsedGoogleCalendarState> {
   if (!rawState) {
-    return { intent: "login" };
+    throw new AppError("Missing calendar OAuth state", 400, "GOOGLE_AUTH_FAILED");
   }
 
+  let payload: GoogleCalendarStatePayload;
   try {
-    const decoded = Buffer.from(rawState, "base64url").toString("utf8");
-    const parsed = JSON.parse(decoded) as Partial<GoogleAuthState>;
-    const intent = parsed.intent === "signup" ? "signup" : "login";
-    const role =
-      parsed.role === "admin"
-        ? "admin"
-        : parsed.role === "client"
-          ? "client"
-          : parsed.role === "employee"
-            ? "employee"
-            : undefined;
-    return { intent, role };
+    payload = jwt.verify(rawState, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET) as GoogleCalendarStatePayload;
   } catch {
-    return { intent: "login" };
+    throw new AppError("Invalid calendar OAuth state", 400, "GOOGLE_AUTH_FAILED");
   }
+
+  if (!payload?.nonce || payload.type !== "google_calendar_state" || !payload.email || !payload.userId) {
+    throw new AppError("Invalid calendar OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+  const consumed = await consumeOAuthNonce("calendar", payload.nonce);
+  if (!consumed) {
+    throw new AppError("Expired calendar OAuth state", 400, "GOOGLE_AUTH_FAILED");
+  }
+
+  return {
+    email: payload.email,
+    userId: payload.userId,
+    organizationId: payload.organizationId,
+  };
 }
 
 function getOAuth2Client() {
@@ -82,27 +187,29 @@ export function getAuthUrl() {
   });
 }
 
-export function getLoginAuthUrl(options?: { intent?: GoogleAuthIntent; role?: SignupRole }) {
+export async function getLoginAuthUrl(options?: { intent?: GoogleAuthIntent; role?: SignupRole }) {
   const oauth2Client = getOAuth2Client();
+  const state = await signGoogleAuthStateToken({
+    intent: options?.intent ?? "login",
+    role: options?.role,
+  });
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: LOGIN_SCOPES,
     prompt: "consent",
     redirect_uri: getLoginRedirectUri(),
-    state: encodeGoogleAuthState({
-      intent: options?.intent ?? "login",
-      role: options?.role,
-    }),
+    state,
   });
 }
 
-export function getGoogleAuthUrl(userEmail: string) {
+export async function getGoogleAuthUrl(input: { email: string; userId: string; organizationId?: string }) {
   const oauth2Client = getOAuth2Client();
+  const state = await signGoogleCalendarStateToken(input);
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: CALENDAR_SCOPES,
     prompt: "consent",
-    state: userEmail,
+    state,
     redirect_uri: getCalendarRedirectUri(),
   });
 }
@@ -141,7 +248,21 @@ async function setGoogleTokens(userEmail: string, tokens: { googleAccessToken?: 
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleGoogleCallback(userEmail: string, code: string) {
+export async function handleGoogleCallback(input: { email: string; userId: string; organizationId?: string }, code: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, email: true, organizationId: true, deletedAt: true },
+  });
+  if (!user || user.deletedAt) {
+    throw new AppError("User not found for calendar OAuth callback", 404, "NOT_FOUND");
+  }
+  if (user.email.toLowerCase() !== input.email.toLowerCase()) {
+    throw new AppError("OAuth state mismatch for calendar callback", 400, "GOOGLE_AUTH_FAILED");
+  }
+  if (input.organizationId && user.organizationId && input.organizationId !== user.organizationId) {
+    throw new AppError("OAuth organization mismatch", 400, "GOOGLE_AUTH_FAILED");
+  }
+
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -149,13 +270,13 @@ export async function handleGoogleCallback(userEmail: string, code: string) {
   );
   const { tokens } = await oauth2Client.getToken(code);
 
-  await setGoogleTokens(userEmail, {
+  await setGoogleTokens(user.email, {
     googleAccessToken: tokens.access_token,
     googleRefreshToken: tokens.refresh_token ?? null,
     googleTokenExpiry: tokens.expiry_date ?? null,
   });
 
-  return { success: true, email: userEmail };
+  return { success: true, email: user.email };
 }
 
 export async function disconnectGoogle(userEmail: string) {
@@ -284,7 +405,7 @@ export async function getGoogleUserInfo(code: string): Promise<GoogleUserInfo> {
 
 export async function authenticateWithGoogleProfile(
   googleUser: GoogleUserInfo,
-  options?: { role?: SignupRole },
+  options?: { intent?: GoogleAuthIntent; role?: SignupRole },
 ) {
   if (!googleUser.email) {
     throw new AppError("Failed to get Google user info", 400, "GOOGLE_AUTH_FAILED");
@@ -292,8 +413,12 @@ export async function authenticateWithGoogleProfile(
 
   let user = await prisma.user.findUnique({ where: { email: googleUser.email } });
 
+  const intent = normalizeGoogleIntent(options?.intent);
   if (!user) {
-    const role = options?.role ?? "employee";
+    if (intent !== "signup") {
+      throw new AppError("Account not found. Please sign up first.", 404, "NOT_FOUND");
+    }
+    const role = "admin";
     const profile = buildProfile(role);
     const displayName = googleUser.name || googleUser.email.split("@")[0];
     user = await prisma.$transaction(async (tx) => {
@@ -318,6 +443,8 @@ export async function authenticateWithGoogleProfile(
         },
       });
     });
+  } else if (intent === "signup") {
+    throw new AppError("User already exists. Please login with Google.", 400, "USER_EXISTS");
   } else if (!user.emailVerified) {
     user = await prisma.user.update({
       where: { id: user.id },

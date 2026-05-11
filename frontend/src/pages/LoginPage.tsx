@@ -18,6 +18,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const pendingSwitchRole = searchParams.get("switchRole") as UserRole | null;
+  const nextPath = searchParams.get("next") || "/overview";
 
   const { login, switchRole } = useAuth();
   const { setRole } = useTheme();
@@ -84,11 +85,78 @@ export default function LoginPage() {
       if (!response.ok) throw new Error("Failed to get auth URL");
       const data = await response.json();
       if (data.authUrl) {
-        window.location.href = data.authUrl;
+        const popup = window.open(
+          data.authUrl,
+          "google-auth",
+          "width=520,height=700,menubar=no,toolbar=no,status=no,resizable=yes,scrollbars=yes",
+        );
+
+        if (!popup) {
+          window.location.href = data.authUrl;
+          return;
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          const timeoutMs = 120000;
+          const timeout = window.setTimeout(() => {
+            cleanup();
+            reject(new Error("Google authentication timed out."));
+          }, timeoutMs);
+
+          const poll = window.setInterval(() => {
+            if (popup.closed) {
+              cleanup();
+              resolve();
+            }
+          }, 400);
+
+          const onMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data?.type === "google-auth-success") {
+              cleanup();
+              try {
+                popup.close();
+              } catch {
+                // no-op
+              }
+              resolve();
+              return;
+            }
+            if (event.data?.type === "google-auth-failed") {
+              cleanup();
+              try {
+                popup.close();
+              } catch {
+                // no-op
+              }
+              reject(new Error("Google authentication failed."));
+            }
+          };
+
+          function cleanup() {
+            window.clearTimeout(timeout);
+            window.clearInterval(poll);
+            window.removeEventListener("message", onMessage);
+          }
+
+          window.addEventListener("message", onMessage);
+        });
+
+        const session = await authService.me();
+        if (!session?.user) {
+          throw new Error("No authenticated session found");
+        }
+        setRole(session.user.role);
+        if (pendingSwitchRole && pendingSwitchRole !== session.user.role) {
+          const result = await switchRole(pendingSwitchRole);
+          if (result.success) setRole(pendingSwitchRole);
+        }
+        navigate(nextPath);
       }
     } catch (err) {
       console.error("Google login error:", err);
       setError("Google login not available. Use email/password.");
+    } finally {
       setLoadingGoogle(false);
     }
   };

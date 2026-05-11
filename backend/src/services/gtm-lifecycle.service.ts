@@ -198,9 +198,14 @@ async function ensureContactFromLead(lead: {
   jobTitle: string | null;
   company: string;
   convertedToClientId: number | null;
+  organizationId?: string | null;
 }) {
-  const existing = await prisma.contact.findUnique({
-    where: { email: lead.email },
+  const normalizedEmail = lead.email.trim().toLowerCase();
+  const existing = await prisma.contact.findFirst({
+    where: {
+      email: normalizedEmail,
+      organizationId: lead.organizationId ?? null,
+    },
   });
 
   if (existing) {
@@ -209,10 +214,12 @@ async function ensureContactFromLead(lead: {
       data: {
         firstName: lead.firstName,
         lastName: lead.lastName,
+        email: normalizedEmail,
         phone: lead.phone,
         jobTitle: lead.jobTitle,
         clientId: lead.convertedToClientId ?? existing.clientId,
         leadId: lead.id, // Track the original lead
+        organizationId: lead.organizationId ?? existing.organizationId,
         deletedAt: null,
       },
     });
@@ -223,12 +230,13 @@ async function ensureContactFromLead(lead: {
     data: {
       firstName: lead.firstName,
       lastName: lead.lastName,
-      email: lead.email,
+      email: normalizedEmail,
       phone: lead.phone,
       jobTitle: lead.jobTitle,
       department: "Sales",
       clientId: lead.convertedToClientId ?? undefined,
       leadId: lead.id, // Track the original lead
+      organizationId: lead.organizationId ?? null,
     },
   });
 }
@@ -671,13 +679,16 @@ export const gtmLifecycleService = {
     const cached = cache.get<object>(CACHE_KEY);
     if (cached) return cached;
 
-    // Build user-specific filters
-    const leadWhere = { deletedAt: null };
-    const dealWhere = { deletedAt: null };
-    const clientWhere = { deletedAt: null };
-    const contactWhere = { deletedAt: null };
+    const orgId = access?.organizationId ?? null;
+    const actorIds = [access?.email, access?.userId].filter(Boolean) as string[];
 
-    if (access?.role === "admin" || access?.role === "manager") {
+    // Build user-specific filters
+    const leadWhere: any = { deletedAt: null, ...(orgId ? { organizationId: orgId } : {}) };
+    const dealWhere: any = { deletedAt: null, ...(orgId ? { organizationId: orgId } : {}) };
+    const clientWhere: any = { deletedAt: null, ...(orgId ? { organizationId: orgId } : {}) };
+    const contactWhere: any = { deletedAt: null, ...(orgId ? { organizationId: orgId } : {}) };
+
+    if ((access?.role === "admin" || access?.role === "manager") && !orgId) {
       // Filter leads: user's created or assigned
       (leadWhere as any).OR = [
         { createdBy: access.email },
@@ -724,17 +735,61 @@ export const gtmLifecycleService = {
       // Filter clients: user's assigned
       (clientWhere as any).assignedTo = { in: [access.email, access.userId ?? ""] };
 
-      // Filter contacts: from user's assigned clients
-      const assignedClients = await prisma.client.findMany({
-        where: (clientWhere as any),
-        select: { id: true },
-      });
-      const assignedClientIds = assignedClients.map(c => c.id);
-      (contactWhere as any).OR = [
-        { clientId: { in: assignedClientIds } },
-        { clientId: null },
+      // Legacy fallback when org context is unavailable.
+      if (!orgId) {
+        const assignedClients = await prisma.client.findMany({
+          where: (clientWhere as any),
+          select: { id: true },
+        });
+        const assignedClientIds = assignedClients.map(c => c.id);
+        (contactWhere as any).OR = [
+          { clientId: { in: assignedClientIds } },
+          { clientId: null },
+        ];
+      }
+    }
+
+    const pendingTaskWhere: Record<string, unknown> = {
+      column: { not: "done" },
+      ...(orgId ? { organizationId: orgId } : {}),
+    };
+    if (access?.role === "admin" || access?.role === "manager") {
+      (pendingTaskWhere as any).OR = [
+        { tags: { has: FOLLOWUP_TAG }, assignee: access?.email },
+        { tags: { has: FOLLOWUP_TAG }, assignee: access?.userId ?? "" },
+        { valueStream: "sales", assignee: access?.email },
+        { valueStream: "sales", assignee: access?.userId ?? "" },
+      ];
+    } else if (access?.role === "employee") {
+      (pendingTaskWhere as any).OR = [
+        { tags: { has: FOLLOWUP_TAG }, assignee: { in: [access.email, access.userId ?? ""] } },
+        { valueStream: "sales", assignee: { in: [access.email, access.userId ?? ""] } },
       ];
     }
+
+    const pendingJobsWhere: Record<string, unknown> = {
+      status: "pending",
+      ...(orgId ? { organizationId: orgId } : actorIds.length > 0 ? { createdBy: { in: actorIds } } : {}),
+    };
+
+    const recentLogsWhere: Record<string, unknown> =
+      orgId
+        ? { rule: { organizationId: orgId } }
+        : actorIds.length > 0
+          ? { rule: { createdBy: { in: actorIds } } }
+          : {};
+
+    const recentActivityWhere: Record<string, unknown> = {
+      isVisible: true,
+      entityType: { in: ["Lead", "Deal", "Client", "Contact"] },
+      ...(orgId ? { organizationId: orgId } : actorIds.length > 0 ? { performedBy: { in: actorIds } } : {}),
+    };
+
+    const alertsWhere: Record<string, unknown> = {
+      isResolved: false,
+      entityType: { in: ["Lead", "Deal", "Client"] },
+      ...(orgId ? { organizationId: orgId } : {}),
+    };
 
     const [leads, deals, clients, contacts, pendingTasks, pendingJobs, recentLogs, recentActivities, alerts] = await Promise.all([
       prisma.lead.findMany({ where: leadWhere, orderBy: { updatedAt: "desc" }, take: 500 }),
@@ -742,46 +797,28 @@ export const gtmLifecycleService = {
       prisma.client.findMany({ where: clientWhere, orderBy: { updatedAt: "desc" }, take: 200 }),
       prisma.contact.findMany({ where: contactWhere, orderBy: { updatedAt: "desc" }, take: 200 }),
       prisma.task.findMany({
-        where: {
-          column: { not: "done" },
-          ...(access?.role === "admin" || access?.role === "manager" ? {
-            OR: [
-              { tags: { has: FOLLOWUP_TAG }, assignee: access.email },
-              { tags: { has: FOLLOWUP_TAG }, assignee: access.userId ?? "" },
-              { valueStream: "sales", assignee: access.email },
-              { valueStream: "sales", assignee: access.userId ?? "" },
-            ],
-          } : access?.role === "employee" ? {
-            OR: [
-              { tags: { has: FOLLOWUP_TAG }, assignee: { in: [access.email, access.userId ?? ""] } },
-              { valueStream: "sales", assignee: { in: [access.email, access.userId ?? ""] } },
-            ],
-          } : {}),
-        },
+        where: pendingTaskWhere as any,
         orderBy: { updatedAt: "desc" },
         take: 12,
       }),
       prisma.scheduledJob.findMany({
-        where: { status: "pending" },
+        where: pendingJobsWhere as any,
         orderBy: { scheduledFor: "asc" },
         take: 12,
       }),
       prisma.automationLog.findMany({
+        where: recentLogsWhere as any,
         orderBy: { startedAt: "desc" },
         include: { rule: { select: { name: true } } },
         take: 10,
       }),
       prisma.activityLog.findMany({
-        where: { isVisible: true, entityType: { in: ["Lead", "Deal", "Client", "Contact"] } },
+        where: recentActivityWhere as any,
         orderBy: { createdAt: "desc" },
         take: 12,
       }),
       prisma.alert.findMany({
-        where: { 
-          isResolved: false, 
-          entityType: { in: ["Lead", "Deal", "Client"] },
-          ...(access?.role === "employee" ? {} : {}),
-        },
+        where: alertsWhere as any,
         orderBy: { createdAt: "desc" },
         take: 12,
       }),

@@ -32,16 +32,25 @@ export const teamMembersController = {
     res.status(200).json(members);
   },
   getOne: async (req: Request, res: Response): Promise<void> => {
-    const member = await teamMembersService.getById(readMemberId(req));
+    const member = await teamMembersService.getById(readMemberId(req), req.auth);
     res.status(200).json(member);
   },
   create: async (req: Request, res: Response): Promise<void> => {
     const member = await teamMembersService.create(req.body, req.auth);
+    if (req.auth) {
+      await logAudit({
+        userId: req.auth.userId,
+        action: "create",
+        entity: "TeamMember",
+        entityId: member.id,
+        detail: `Created team member ${member.name} (${member.email})`,
+      });
+    }
     res.status(201).json(member);
   },
   update: async (req: Request, res: Response): Promise<void> => {
     const memberId = readMemberId(req);
-    const member = await teamMembersService.update(memberId, req.body);
+    const member = await teamMembersService.update(memberId, req.body, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
@@ -55,7 +64,7 @@ export const teamMembersController = {
   },
   remove: async (req: Request, res: Response): Promise<void> => {
     const memberId = readMemberId(req);
-    await teamMembersService.delete(memberId);
+    await teamMembersService.delete(memberId, req.auth);
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
