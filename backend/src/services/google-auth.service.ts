@@ -89,7 +89,7 @@ async function signGoogleAuthStateToken(input: GoogleAuthState) {
     intent: normalizeGoogleIntent(input.intent),
     role: normalizeGoogleSignupRole(input.role),
   };
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+  return jwt.sign(payload, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET, {
     expiresIn: "10m",
   });
 }
@@ -104,7 +104,7 @@ async function signGoogleCalendarStateToken(input: { email: string; userId: stri
     userId: input.userId,
     organizationId: input.organizationId,
   };
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+  return jwt.sign(payload, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET, {
     expiresIn: "10m",
   });
 }
@@ -124,7 +124,7 @@ export async function parseGoogleAuthState(rawState?: string | null): Promise<Go
 
   let payload: GoogleOAuthStatePayload;
   try {
-    payload = jwt.verify(rawState, env.JWT_ACCESS_SECRET) as GoogleOAuthStatePayload;
+    payload = jwt.verify(rawState, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET) as GoogleOAuthStatePayload;
   } catch {
     throw new AppError("Invalid OAuth state", 400, "GOOGLE_AUTH_FAILED");
   }
@@ -150,7 +150,7 @@ export async function parseGoogleCalendarState(rawState?: string | null): Promis
 
   let payload: GoogleCalendarStatePayload;
   try {
-    payload = jwt.verify(rawState, env.JWT_ACCESS_SECRET) as GoogleCalendarStatePayload;
+    payload = jwt.verify(rawState, env.JWT_OAUTH_STATE_SECRET || env.JWT_REFRESH_SECRET) as GoogleCalendarStatePayload;
   } catch {
     throw new AppError("Invalid calendar OAuth state", 400, "GOOGLE_AUTH_FAILED");
   }

@@ -587,7 +587,7 @@ export const authService = {
   },
 
   async login(input: { email: string; password: string }): Promise<AuthResponse> {
-    const user = await prisma.user.findUnique({ where: { email: input.email } });
+    const user = await prisma.user.findUnique({ where: { email: normalizeEmail(input.email) } });
     if (!user || user.deletedAt) {
       throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
     }
