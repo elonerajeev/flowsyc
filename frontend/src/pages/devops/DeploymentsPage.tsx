@@ -14,6 +14,7 @@ import {
   useDeployments, useCreateDeployment, useDeleteDeployment,
   useUpdateDeploymentStatus, type Deployment, type DeploymentStatus,
 } from "@/services/deployments";
+import { useSyncPipelines } from "@/services/pipelines";
 import { cn } from "@/lib/utils";
 import { TEXT } from "@/lib/design-tokens";
 import { Button } from "@/components/ui/button";
@@ -142,15 +143,17 @@ export default function DevOpsDeploymentsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const canCreate = user?.role === "admin" || user?.role === "manager";
+  const canSync = user?.role === "admin" || user?.role === "manager";
   const { data: deployments, isLoading, error, refetch, isFetching } = useDeployments();
   const deleteDeployment = useDeleteDeployment();
   const updateStatus = useUpdateDeploymentStatus();
+  const syncPipelines = useSyncPipelines();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   if (isLoading) return <PageLoader />;
-  if (error) return <ErrorFallback error={error as Error} resetErrorBoundary={() => refetch()} />;
+  if (error) return <ErrorFallback error={error as Error} onRetry={() => { void refetch(); }} />;
 
   const list = deployments ?? [];
   const counts = {
@@ -158,6 +161,7 @@ export default function DevOpsDeploymentsPage() {
     failed:    list.filter((d) => d.status === "failed").length,
     running:   list.filter((d) => d.status === "running").length,
   };
+  const githubSyncedCount = list.filter((d) => d.version?.startsWith("gh-")).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -173,7 +177,7 @@ export default function DevOpsDeploymentsPage() {
             <div>
               <h1 className="font-display text-3xl font-semibold text-foreground">Deployments</h1>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Track every release across all services and environments.
+                Track every release across all services and environments, including GitHub Actions workflow runs.
               </p>
             </div>
           </div>
@@ -189,6 +193,12 @@ export default function DevOpsDeploymentsPage() {
               <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
               <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{counts.success} succeeded</span>
             </div>
+            {githubSyncedCount > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2">
+                <GitBranch className="h-4 w-4 text-violet-500 shrink-0" />
+                <span className="text-sm font-medium text-violet-600 dark:text-violet-400">{githubSyncedCount} from GitHub</span>
+              </div>
+            )}
             {counts.failed > 0 && (
               <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2">
                 <XCircle className="h-4 w-4 text-red-500 shrink-0" />
@@ -207,6 +217,21 @@ export default function DevOpsDeploymentsPage() {
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Refresh
             </Button>
+            {canSync && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const result = await syncPipelines.mutateAsync(50);
+                  toast.success(`Synced ${result.data.processed} GitHub runs`);
+                }}
+                disabled={syncPipelines.isPending}
+                className="gap-2"
+              >
+                {syncPipelines.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Sync GitHub
+              </Button>
+            )}
             {canCreate && (
               <Button size="sm" onClick={() => setDialogOpen(true)} className="gap-2">
                 <Plus className="h-3.5 w-3.5" /> Record Deploy
@@ -262,7 +287,12 @@ export default function DevOpsDeploymentsPage() {
                       <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", envClass)}>
                         {d.environment}
                       </span>
-                      {d.version && <Badge variant="outline" className="text-[10px] font-mono">{d.version}</Badge>}
+                      {d.version?.startsWith("gh-") && (
+                        <Badge variant="secondary" className="text-[10px]">GitHub Actions</Badge>
+                      )}
+                      {d.version && !d.version.startsWith("gh-") && (
+                        <Badge variant="outline" className="text-[10px] font-mono">{d.version}</Badge>
+                      )}
                     </div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                       {d.commitHash && (

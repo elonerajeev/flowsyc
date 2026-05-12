@@ -1353,3 +1353,29 @@ model Deployment {
   @@index([environment])
   @@index([startedAt])
 }
+
+enum DevOpsAlertSeverity {
+  critical
+  warning
+  info
+}
+
+model DevOpsAlert {
+  id             Int                 @id @default(autoincrement())
+  organizationId String?
+  title          String
+  service        String
+  severity       DevOpsAlertSeverity @default(warning)
+  description    String?
+  resolved       Boolean             @default(false)
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  createdBy      String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([resolved])
+  @@index([severity])
+  @@index([createdAt])
+}

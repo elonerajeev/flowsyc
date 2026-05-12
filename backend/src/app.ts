@@ -65,6 +65,7 @@ import { notificationsRouter } from "./routes/notifications.routes";
 import { monitoringRouter } from "./routes/monitoring.routes";
 import { serversRouter } from "./routes/servers.routes";
 import { deploymentsRouter } from "./routes/deployments.routes";
+import { devopsAlertsRouter } from "./routes/devops-alerts.routes";
 import { pipelinesRouter } from "./routes/pipelines.routes";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { logger } from "./utils/logger";
@@ -167,6 +168,7 @@ export function createApp() {
   app.use("/api/monitoring", monitoringRouter);
   app.use("/api/servers", serversRouter);
   app.use("/api/deployments", deploymentsRouter);
+  app.use("/api/devops/alerts", devopsAlertsRouter);
   app.use("/api/pipelines", pipelinesRouter);
 
   app.use(notFound);
