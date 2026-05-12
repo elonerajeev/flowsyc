@@ -1323,3 +1323,33 @@ model MonitoredServer {
   @@index([isActive])
   @@index([deletedAt])
 }
+
+enum DeploymentStatus {
+  success
+  failed
+  running
+  cancelled
+}
+
+model Deployment {
+  id             Int              @id @default(autoincrement())
+  organizationId String?
+  service        String           // e.g. "Backend API", "Frontend"
+  environment    String           // e.g. "production", "staging"
+  status         DeploymentStatus @default(running)
+  commitHash     String?
+  commitMessage  String?
+  branch         String?
+  deployedBy     String?
+  version        String?
+  notes          String?
+  startedAt      DateTime         @default(now())
+  finishedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([environment])
+  @@index([startedAt])
+}
