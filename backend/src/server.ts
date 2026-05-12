@@ -7,6 +7,8 @@ import http from "http";
 import { startAutomationCron, stopAutomationCron } from "./services/automation-engine";
 import { startInboxScheduler, stopInboxScheduler } from "./services/inbox-scheduler.service";
 import { purgeOldAuditLogs } from "./utils/audit";
+import { monitoringService } from "./services/monitoring.service";
+import cron from "node-cron";
 
 process.on("unhandledRejection", (reason) => {
   logger.error("Unhandled rejection", { reason });
@@ -38,6 +40,12 @@ async function start() {
   startAutomationCron();
   logger.info("Automation engine started");
 
+  // Health checker — runs every 30s
+  const healthCron = cron.schedule("*/30 * * * * *", () => {
+    monitoringService.runAllChecks().catch((err) => logger.error("Health check cron error", { err }));
+  });
+  logger.info("Health checker started (30s interval)");
+
   // Start IMAP inbox background sync
   if (env.NODE_ENV !== "test") {
     startInboxScheduler();
@@ -49,6 +57,7 @@ async function start() {
     // Stop automation cron
     stopAutomationCron();
     stopInboxScheduler();
+    healthCron.stop();
     
     server.close(async () => {
       await prisma.$disconnect();

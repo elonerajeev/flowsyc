@@ -1251,3 +1251,55 @@ model Notification {
   @@index([userId, isRead])
   @@index([batchKey])
 }
+
+enum ServiceCheckType {
+  http
+  tcp
+  ping
+}
+
+enum ServiceStatus {
+  up
+  down
+  degraded
+  unknown
+}
+
+model MonitoredService {
+  id             Int               @id @default(autoincrement())
+  organizationId String?
+  name           String
+  url            String
+  checkType      ServiceCheckType  @default(http)
+  intervalSecs   Int               @default(30)
+  timeoutMs      Int               @default(5000)
+  expectedStatus Int?              @default(200)  // for http checks
+  tags           String[]          @default([])
+  isActive       Boolean           @default(true)
+  createdBy      String?
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  checks         ServiceCheck[]
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model ServiceCheck {
+  id          Int            @id @default(autoincrement())
+  serviceId   Int
+  status      ServiceStatus
+  responseMs  Int?
+  statusCode  Int?
+  error       String?
+  checkedAt   DateTime       @default(now())
+
+  service     MonitoredService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@index([checkedAt])
+  @@index([serviceId, checkedAt])
+}
