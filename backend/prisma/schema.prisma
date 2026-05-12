@@ -1303,3 +1303,23 @@ model ServiceCheck {
   @@index([checkedAt])
   @@index([serviceId, checkedAt])
 }
+
+model MonitoredServer {
+  id             Int       @id @default(autoincrement())
+  organizationId String?
+  name           String
+  ip             String
+  port           Int       @default(22)
+  provider       String?
+  region         String?
+  tags           String[]  @default([])
+  isActive       Boolean   @default(true)
+  createdBy      String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
+}
