@@ -1,4 +1,6 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
+import type { MouseEvent as ReactMouseEvent } from "react";
+
 import { cn } from "@/lib/utils";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
 import { devopsSections, type DevOpsSectionKey } from "./devopsConfig";
@@ -6,48 +8,82 @@ import { devopsSections, type DevOpsSectionKey } from "./devopsConfig";
 interface DevOpsSidebarProps {
   activeSection: DevOpsSectionKey;
   width: number;
+  onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
-export default function DevOpsSidebar({ activeSection, width }: DevOpsSidebarProps) {
+export default function DevOpsSidebar({ activeSection, width, onResizeStart }: DevOpsSidebarProps) {
+  const location = useLocation();
   const section = devopsSections.find((s) => s.key === activeSection) ?? devopsSections[0];
   const compact = width < 180;
 
   return (
     <aside
-      className="fixed left-[72px] top-0 z-30 flex h-screen flex-col border-r border-sidebar-border bg-sidebar"
+      className="fixed left-[72px] top-0 z-30 flex h-screen flex-col border-r border-sidebar-border bg-sidebar shadow-[4px_0_12px_hsl(var(--sidebar-border)/0.4)]"
       style={{ width }}
     >
-      {/* Header */}
-      <div className="flex h-16 items-center border-b border-sidebar-border px-4">
-        {!compact && (
-          <div>
-            <p className="text-sm font-bold text-sidebar-foreground">{section.label}</p>
-            <p className={cn("text-sidebar-muted", TEXT.meta)}>DevOps Hub</p>
-          </div>
-        )}
+      {/* Resize handle */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={onResizeStart}
+        className="absolute right-[-5px] top-0 z-20 h-full w-3 cursor-col-resize touch-none"
+      >
+        <div className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sidebar-border/70 transition" />
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {section.items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 px-3 py-2 transition",
-                RADIUS.lg,
-                TEXT.body,
-                isActive
-                  ? "bg-sidebar-active/14 font-semibold text-sidebar-active"
-                  : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground",
-              )
-            }
-          >
-            {!compact && <span>{item.label}</span>}
-          </NavLink>
-        ))}
-      </nav>
+      {/* Header — identical to CRM Sidebar */}
+      <div className={cn("relative flex items-center border-b border-sidebar-border", compact ? "h-14 px-3" : "h-16 px-4")}>
+        {!compact && (
+          <div>
+            <p className={cn("font-semibold uppercase tracking-[0.22em] text-sidebar-muted", TEXT.meta)}>DevOps Hub</p>
+            <h2 className="mt-1 font-display text-lg font-semibold text-sidebar-foreground">{section.label}</h2>
+          </div>
+        )}
+        <div className={cn("ml-auto flex items-center justify-center bg-sidebar-hover text-sidebar-active", RADIUS.lg, compact ? "h-10 w-10" : "h-9 w-9")}>
+          <section.icon className="h-4.5 w-4.5" />
+        </div>
+      </div>
+
+      {/* Nav items — identical structure to CRM Sidebar */}
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        {!compact && (
+          <p className={cn("px-2 font-medium text-sidebar-muted", TEXT.meta)}>{section.description}</p>
+        )}
+        <div className="mt-4 space-y-1.5">
+          {section.items.map((item) => {
+            const isActive = location.pathname === item.to;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "group flex items-center rounded-2xl py-2.5 text-sm font-medium transition",
+                  compact ? "justify-center px-2" : "gap-3 px-3",
+                  isActive
+                    ? "bg-sidebar-active/16 text-sidebar-active shadow-[0_10px_24px_hsl(222_58%_5%_/_0.16)]"
+                    : "text-sidebar-foreground/92 hover:bg-sidebar-hover hover:text-sidebar-foreground",
+                )}
+              >
+                <div className={cn(
+                  "flex h-9 w-9 items-center justify-center border transition",
+                  RADIUS.md,
+                  isActive
+                    ? "border-sidebar-active/30 bg-sidebar-active/12"
+                    : "border-sidebar-border/80 bg-sidebar-hover/40",
+                )}>
+                  <item.icon className={cn(
+                    "h-4.5 w-4.5",
+                    isActive ? "text-sidebar-active" : "text-sidebar-muted group-hover:text-sidebar-foreground",
+                  )} />
+                </div>
+                {!compact && (
+                  <span className="truncate">{item.label}</span>
+                )}
+              </NavLink>
+            );
+          })}
+        </div>
+      </div>
     </aside>
   );
 }

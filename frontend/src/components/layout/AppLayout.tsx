@@ -64,7 +64,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="hidden md:block">
         <MasterSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
         {isDevOps
-          ? <DevOpsSidebar activeSection={getDevOpsSectionForPath(location.pathname)} width={detailWidth} />
+          ? <DevOpsSidebar activeSection={getDevOpsSectionForPath(location.pathname)} width={detailWidth} onResizeStart={beginResize} />
           : <Sidebar activeSection={activeSection} width={detailWidth} onResizeStart={beginResize} />
         }
       </div>
