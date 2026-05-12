@@ -3,6 +3,7 @@ import { Activity, CheckCircle, Clock, Edit2, Loader2, Plus, RefreshCw, Trash2, 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { motion } from "framer-motion";
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -10,7 +11,8 @@ import {
   useDeleteService, useManualCheck, type MonitoredService,
 } from "@/services/monitoring";
 import { cn } from "@/lib/utils";
-import { RADIUS } from "@/lib/design-tokens";
+import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
+import { Button } from "@/components/ui/button";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 
@@ -142,49 +144,65 @@ export default function DevOpsHealthPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Service Health</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Real-time status · checks every 30s</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className={cn("flex items-center gap-1.5 border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/50 hover:text-foreground disabled:opacity-50", RADIUS.lg)}
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-            Refresh
-          </button>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setDialog({ open: true })}
-              className={cn("flex items-center gap-1.5 bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:brightness-110", RADIUS.lg)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Service
-            </button>
-          )}
-        </div>
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: "Online",   count: counts.up,       color: "text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Degraded", count: counts.degraded,  color: "text-amber-400",   bg: "bg-amber-500/10" },
-          { label: "Offline",  count: counts.down,      color: "text-red-400",     bg: "bg-red-500/10" },
-        ].map((s) => (
-          <div key={s.label} className={cn("border border-border p-4", RADIUS.xl)}>
-            <p className={cn("text-3xl font-bold", s.color)}>{s.count}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{s.label}</p>
+      {/* Page header — matches CRM page style */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-card"
+      >
+        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-emerald-500 via-blue-500 to-violet-500" />
+        <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-gradient-to-br from-emerald-500/5 to-blue-500/5 blur-3xl" />
+
+        <div className={cn("relative", SPACING.card)}>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                DevOps Hub
+              </div>
+              <h1 className="font-display text-3xl font-semibold text-foreground">
+                <span className="bg-gradient-to-r from-emerald-500 to-blue-500 bg-clip-text text-transparent">Service</span> Health
+              </h1>
+              <p className={cn("max-w-xl text-muted-foreground", TEXT.bodyRelaxed)}>
+                Real-time uptime monitoring for all your services, APIs and infrastructure endpoints.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
+                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                Refresh
+              </Button>
+              {isAdmin && (
+                <Button size="sm" onClick={() => setDialog({ open: true })} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Service
+                </Button>
+              )}
+            </div>
           </div>
-        ))}
-      </div>
+
+          {/* Summary stats inline */}
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-border/60 pt-5">
+            {[
+              { label: "Online",   count: counts.up,       color: "text-emerald-500", bg: "bg-emerald-500/10", dot: "bg-emerald-500" },
+              { label: "Degraded", count: counts.degraded,  color: "text-amber-500",   bg: "bg-amber-500/10",   dot: "bg-amber-500" },
+              { label: "Offline",  count: counts.down,      color: "text-red-500",     bg: "bg-red-500/10",     dot: "bg-red-500" },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-3">
+                <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", s.bg)}>
+                  <span className={cn("h-2.5 w-2.5 rounded-full", s.dot)} />
+                </div>
+                <div>
+                  <p className={cn("text-2xl font-bold", s.color)}>{s.count}</p>
+                  <p className={cn("text-muted-foreground", TEXT.meta)}>{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.section>
 
       {/* Services list */}
       <div className={cn("border border-border overflow-hidden", RADIUS.xl)}>
@@ -316,6 +334,6 @@ export default function DevOpsHealthPage() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
