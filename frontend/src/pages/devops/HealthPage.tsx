@@ -70,7 +70,21 @@ function ServiceIcon({ url, statusKey }: { url: string; statusKey: keyof typeof 
   );
 }
 
-// ─── Add/Edit dialog ──────────────────────────────────────────────────────────
+// ─── Form schema with URL validation per checkType ───────────────────────────
+function validateUrlForType(url: string, checkType: string): boolean {
+  if (checkType === "http") {
+    try { const u = new URL(url); return u.protocol === "http:" || u.protocol === "https:"; } catch { return false; }
+  }
+  if (checkType === "tcp") {
+    const clean = url.replace(/^tcp:\/\//, "");
+    const [host, portStr] = clean.split(":");
+    const port = parseInt(portStr ?? "");
+    return !!host && !isNaN(port) && port > 0 && port <= 65535;
+  }
+  if (checkType === "ping") return /^[a-zA-Z0-9._-]+$/.test(url);
+  return false;
+}
+
 const schema = z.object({
   name:           z.string().min(1, "Required").max(100),
   url:            z.string().min(1, "Required").max(500),
@@ -78,6 +92,18 @@ const schema = z.object({
   intervalSecs:   z.coerce.number().int().min(10).max(3600).default(30),
   timeoutMs:      z.coerce.number().int().min(500).max(30000).default(5000),
   expectedStatus: z.coerce.number().int().min(100).max(599).default(200),
+}).superRefine(({ url, checkType }, ctx) => {
+  if (!validateUrlForType(url, checkType)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["url"],
+      message: checkType === "http"
+        ? "Must be a valid http:// or https:// URL"
+        : checkType === "tcp"
+        ? "Must be host:port (e.g. localhost:5432)"
+        : "Must be a hostname or IP (e.g. 8.8.8.8)",
+    });
+  }
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -115,8 +141,20 @@ function ServiceDialog({ service, onClose }: { service?: MonitoredService; onClo
           </div>
           <div className="space-y-1.5">
             <Label>URL / Endpoint</Label>
-            <Input {...register("url")} placeholder="https://api.example.com/health" />
+            <Input
+              {...register("url")}
+              placeholder={
+                watch("checkType") === "http" ? "https://api.example.com/health"
+                : watch("checkType") === "tcp" ? "localhost:5432"
+                : "8.8.8.8"
+              }
+            />
             {errors.url && <p className="text-xs text-destructive">{errors.url.message}</p>}
+            <p className={cn("text-muted-foreground", TEXT.meta)}>
+              {watch("checkType") === "http" && "Full URL including protocol (http:// or https://)"}
+              {watch("checkType") === "tcp"  && "host:port — e.g. localhost:5432 or 10.0.0.1:3306"}
+              {watch("checkType") === "ping" && "Hostname or IP address — e.g. 8.8.8.8 or api.example.com"}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -180,6 +218,14 @@ export default function DevOpsHealthPage() {
     down:     list.filter((s) => !s.latestCheck || s.latestCheck.status === "down").length,
   };
 
+  const activeServices = list.filter((s) => s.isActive);
+  const minIntervalSecs = activeServices.length
+    ? Math.min(...activeServices.map((s) => s.intervalSecs))
+    : 30;
+  const intervalLabel = minIntervalSecs < 60
+    ? `${minIntervalSecs}s`
+    : `${Math.round(minIntervalSecs / 60)}m`;
+
   const togglePause = async (svc: MonitoredService) => {
     await update.mutateAsync({ id: svc.id, isActive: !svc.isActive });
     toast.success(svc.isActive ? "Monitoring paused" : "Monitoring resumed");
@@ -226,7 +272,7 @@ export default function DevOpsHealthPage() {
 
         <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
           <p className={cn("text-muted-foreground", TEXT.meta)}>
-            {list.length} service{list.length !== 1 ? "s" : ""} · auto-refresh every 30s
+            {list.length} service{list.length !== 1 ? "s" : ""} · auto-refresh every {intervalLabel}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">

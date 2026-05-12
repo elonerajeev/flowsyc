@@ -1,9 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { Lock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { RADIUS, TEXT } from "@/lib/design-tokens";
-import { devopsSections, type DevOpsSectionKey } from "./devopsConfig";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { canAccessDevOpsItem, devopsSections, type DevOpsSectionKey } from "./devopsConfig";
 
 interface DevOpsSidebarProps {
   activeSection: DevOpsSectionKey;
@@ -13,6 +16,9 @@ interface DevOpsSidebarProps {
 
 export default function DevOpsSidebar({ activeSection, width, onResizeStart }: DevOpsSidebarProps) {
   const location = useLocation();
+  const { role } = useTheme();
+  const { user } = useAuth();
+  const effectiveRole = user?.role ?? role;
   const section = devopsSections.find((s) => s.key === activeSection) ?? devopsSections[0];
   const compact = width < 180;
 
@@ -52,34 +58,60 @@ export default function DevOpsSidebar({ activeSection, width, onResizeStart }: D
         <div className="mt-4 space-y-1.5">
           {section.items.map((item) => {
             const isActive = location.pathname === item.to;
+            const isLocked = !canAccessDevOpsItem(item.roles, effectiveRole);
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "group flex items-center rounded-2xl py-2.5 text-sm font-medium transition",
-                  compact ? "justify-center px-2" : "gap-3 px-3",
-                  isActive
-                    ? "bg-sidebar-active/16 text-sidebar-active shadow-[0_10px_24px_hsl(222_58%_5%_/_0.16)]"
-                    : "text-sidebar-foreground/92 hover:bg-sidebar-hover hover:text-sidebar-foreground",
-                )}
-              >
-                <div className={cn(
-                  "flex h-9 w-9 items-center justify-center border transition",
-                  RADIUS.md,
-                  isActive
-                    ? "border-sidebar-active/30 bg-sidebar-active/12"
-                    : "border-sidebar-border/80 bg-sidebar-hover/40",
-                )}>
-                  <item.icon className={cn(
-                    "h-4.5 w-4.5",
-                    isActive ? "text-sidebar-active" : "text-sidebar-muted group-hover:text-sidebar-foreground",
-                  )} />
-                </div>
-                {!compact && (
-                  <span className="truncate">{item.label}</span>
-                )}
-              </NavLink>
+              isLocked ? (
+                <button
+                  key={item.to}
+                  type="button"
+                  title={`${item.label} - locked for this role`}
+                  className={cn(
+                    "group flex w-full items-center rounded-2xl py-2.5 text-sm font-medium transition",
+                    compact ? "justify-center px-2" : "gap-3 px-3",
+                    "text-sidebar-muted/90 hover:bg-sidebar-hover",
+                  )}
+                >
+                  <div className={cn(
+                    "relative flex h-9 w-9 items-center justify-center border",
+                    RADIUS.md,
+                    "border-sidebar-border/80 bg-sidebar-hover/40",
+                  )}>
+                    <item.icon className="h-4.5 w-4.5 text-sidebar-muted" />
+                    <Lock className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-sidebar-bg p-0.5 text-sidebar-muted" />
+                  </div>
+                  {!compact && (
+                    <span className="truncate">{item.label}</span>
+                  )}
+                </button>
+              ) : (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    "group flex items-center rounded-2xl py-2.5 text-sm font-medium transition",
+                    compact ? "justify-center px-2" : "gap-3 px-3",
+                    isActive
+                      ? "bg-sidebar-active/16 text-sidebar-active shadow-[0_10px_24px_hsl(222_58%_5%_/_0.16)]"
+                      : "text-sidebar-foreground/92 hover:bg-sidebar-hover hover:text-sidebar-foreground",
+                  )}
+                >
+                  <div className={cn(
+                    "flex h-9 w-9 items-center justify-center border transition",
+                    RADIUS.md,
+                    isActive
+                      ? "border-sidebar-active/30 bg-sidebar-active/12"
+                      : "border-sidebar-border/80 bg-sidebar-hover/40",
+                  )}>
+                    <item.icon className={cn(
+                      "h-4.5 w-4.5",
+                      isActive ? "text-sidebar-active" : "text-sidebar-muted group-hover:text-sidebar-foreground",
+                    )} />
+                  </div>
+                  {!compact && (
+                    <span className="truncate">{item.label}</span>
+                  )}
+                </NavLink>
+              )
             );
           })}
         </div>

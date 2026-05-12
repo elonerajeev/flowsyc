@@ -234,12 +234,12 @@ const App = () => {
                                       <Route path="/billing" element={<Navigate to="/finance" replace />} />
                                       <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
                                       <Route path="/restricted" element={<RestrictedPage />} />
-                                      <Route path="/devops/health"      element={<Suspense fallback={<PageLoader />}><DevOpsHealthPage /></Suspense>} />
-                                      <Route path="/devops/servers"     element={<Suspense fallback={<PageLoader />}><DevOpsServersPage /></Suspense>} />
-                                      <Route path="/devops/deployments" element={<Suspense fallback={<PageLoader />}><DevOpsDeploymentsPage /></Suspense>} />
-                                      <Route path="/devops/pipelines"   element={<Suspense fallback={<PageLoader />}><DevOpsPipelinesPage /></Suspense>} />
-                                      <Route path="/devops/logs"        element={<Suspense fallback={<PageLoader />}><DevOpsLogsPage /></Suspense>} />
-                                      <Route path="/devops/alerts"      element={<Suspense fallback={<PageLoader />}><DevOpsAlertsPage /></Suspense>} />
+                                      <Route path="/devops/health"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsHealthPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/servers"     element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsServersPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/deployments" element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsDeploymentsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/pipelines"   element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsPipelinesPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/logs"        element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsLogsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/alerts"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsAlertsPage /></Suspense></RouteAccessGuard>} />
                                       <Route path="/devops"             element={<Navigate to="/devops/health" replace />} />
                                       <Route path="*" element={<NotFound />} />
                                     </Routes>

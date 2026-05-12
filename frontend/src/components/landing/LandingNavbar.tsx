@@ -2,20 +2,20 @@ import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+const NAV_LINKS = [
+  { label: "Product", id: "product", type: "scroll" as const },
+  { label: "Features", id: "features", type: "scroll" as const },
+  { label: "Pricing", id: "pricing", type: "scroll" as const },
+  { label: "Integrations", id: "integrations", type: "scroll" as const },
+  { label: "About", id: "/about", type: "page" as const },
+  { label: "Contact", id: "/contact", type: "page" as const },
+];
+
 export default function LandingNavbar() {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("");
-
-  const navLinks = [
-    { label: "Product", id: "product", type: "scroll" as const },
-    { label: "Features", id: "features", type: "scroll" as const },
-    { label: "Pricing", id: "pricing", type: "scroll" as const },
-    { label: "Integrations", id: "integrations", type: "scroll" as const },
-    { label: "About", id: "/about", type: "page" as const },
-    { label: "Contact", id: "/contact", type: "page" as const },
-  ];
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -24,7 +24,7 @@ export default function LandingNavbar() {
   }, []);
 
   useEffect(() => {
-    const sections = navLinks
+    const sections = NAV_LINKS
       .filter((l) => l.type === "scroll")
       .map((l) => l.id)
       .map((id) => document.getElementById(id))
@@ -55,7 +55,7 @@ export default function LandingNavbar() {
     setMobileOpen(false);
   };
 
-  const handleNavClick = (link: (typeof navLinks)[0]) => {
+  const handleNavClick = (link: (typeof NAV_LINKS)[0]) => {
     if (link.type === "page") {
       navigate(link.id);
       setMobileOpen(false);
@@ -85,7 +85,7 @@ export default function LandingNavbar() {
 
           {/* Desktop Nav */}
           <nav className="hidden items-center gap-8 md:flex">
-            {navLinks.map((link) => (
+            {NAV_LINKS.map((link) => (
               <button
                 key={link.label}
                 onClick={() => handleNavClick(link)}
@@ -132,7 +132,7 @@ export default function LandingNavbar() {
             <span className="text-xl font-bold tracking-tight text-white">Flowsyc</span>
           </div>
           <nav className="flex flex-col gap-4">
-            {navLinks.map((link) => (
+            {NAV_LINKS.map((link) => (
               <button
                 key={link.label}
                 onClick={() => handleNavClick(link)}

@@ -69,7 +69,7 @@ function AlertDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="space-y-1.5">
               <Label>Severity</Label>
-              <Select defaultValue={watch("severity")} onValueChange={(v) => setValue("severity", v as any)}>
+              <Select defaultValue={watch("severity")} onValueChange={(v) => setValue("severity", v as FormValues["severity"])}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="critical">Critical</SelectItem>

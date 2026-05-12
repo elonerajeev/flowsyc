@@ -9,6 +9,7 @@ declare global {
         role: UserRole;
         organizationId?: string;
       };
+      rawBody?: string;
     }
   }
 }

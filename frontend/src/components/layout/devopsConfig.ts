@@ -1,15 +1,31 @@
 import { Activity, AlertTriangle, GitBranch, Rocket, Server, Terminal } from "lucide-react";
+import type { UserRole } from "@/contexts/ThemeContext";
 
 export type DevOpsSectionKey = "health" | "servers" | "deployments" | "pipelines" | "logs" | "alerts";
 
-export const devopsSections = [
+export interface DevOpsItem {
+  to: string;
+  label: string;
+  icon: typeof Activity;
+  roles: UserRole[];
+}
+
+export interface DevOpsSection {
+  key: DevOpsSectionKey;
+  label: string;
+  description: string;
+  icon: typeof Activity;
+  items: DevOpsItem[];
+}
+
+export const devopsSections: DevOpsSection[] = [
   {
     key: "health" as DevOpsSectionKey,
     label: "Health",
     description: "Monitor uptime and response times",
     icon: Activity,
     items: [
-      { to: "/devops/health", label: "Service Health", icon: Activity },
+      { to: "/devops/health", label: "Service Health", icon: Activity, roles: ["admin", "manager"] },
     ],
   },
   {
@@ -18,7 +34,7 @@ export const devopsSections = [
     description: "CPU, memory and disk across nodes",
     icon: Server,
     items: [
-      { to: "/devops/servers", label: "Servers", icon: Server },
+      { to: "/devops/servers", label: "Servers", icon: Server, roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -27,7 +43,7 @@ export const devopsSections = [
     description: "Latest releases across all services",
     icon: Rocket,
     items: [
-      { to: "/devops/deployments", label: "Deployments", icon: Rocket },
+      { to: "/devops/deployments", label: "Deployments", icon: Rocket, roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -36,7 +52,7 @@ export const devopsSections = [
     description: "CI/CD workflow runs and status",
     icon: GitBranch,
     items: [
-      { to: "/devops/pipelines", label: "CI/CD Pipelines", icon: GitBranch },
+      { to: "/devops/pipelines", label: "CI/CD Pipelines", icon: GitBranch, roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -45,7 +61,7 @@ export const devopsSections = [
     description: "Live log stream from all services",
     icon: Terminal,
     items: [
-      { to: "/devops/logs", label: "Live Logs", icon: Terminal },
+      { to: "/devops/logs", label: "Live Logs", icon: Terminal, roles: ["admin", "manager", "employee"] },
     ],
   },
   {
@@ -54,7 +70,7 @@ export const devopsSections = [
     description: "Active incidents and notifications",
     icon: AlertTriangle,
     items: [
-      { to: "/devops/alerts", label: "Alerts", icon: AlertTriangle },
+      { to: "/devops/alerts", label: "Alerts", icon: AlertTriangle, roles: ["admin", "manager"] },
     ],
   },
 ];
@@ -62,4 +78,20 @@ export const devopsSections = [
 export function getDevOpsSectionForPath(pathname: string): DevOpsSectionKey {
   const seg = pathname.split("/")[2];
   return (devopsSections.find((s) => s.key === seg)?.key) ?? "health";
+}
+
+export function canAccessDevOpsItem(roles: UserRole[], role: UserRole) {
+  return roles.includes(role);
+}
+
+export function getAllowedDevOpsRolesForPath(pathname: string) {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  for (const section of devopsSections) {
+    for (const item of section.items) {
+      if (normalized === item.to || normalized.startsWith(`${item.to}/`)) {
+        return item.roles;
+      }
+    }
+  }
+  return null;
 }

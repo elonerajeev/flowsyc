@@ -41,11 +41,18 @@ export const monitoringKeys = {
 };
 
 export function useMonitoredServices() {
-  return useQuery({
+  const { data, ...rest } = useQuery({
     queryKey: monitoringKeys.list(),
     queryFn: () => requestJson<{ data: MonitoredService[] }>(BASE).then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: (query) => {
+      // Use the minimum intervalSecs across active services, floor at 10s
+      const services = query.state.data;
+      if (!services?.length) return 30_000;
+      const minSecs = Math.min(...services.filter((s) => s.isActive).map((s) => s.intervalSecs));
+      return Math.max(10, minSecs) * 1000;
+    },
   });
+  return { data, ...rest };
 }
 
 export function useServiceDetail(id: number) {
