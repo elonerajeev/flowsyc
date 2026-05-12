@@ -70,7 +70,7 @@ export const monitoringService = {
       include: {
         checks: {
           orderBy: { checkedAt: "desc" },
-          take: 1,
+          take: 20,
           select: { status: true, responseMs: true, statusCode: true, checkedAt: true, error: true },
         },
       },
@@ -78,7 +78,7 @@ export const monitoringService = {
 
     return services.map((svc) => {
       const latest = svc.checks[0] ?? null;
-      return { ...svc, checks: undefined, latestCheck: latest };
+      return { ...svc, latestCheck: latest, recentChecks: svc.checks };
     });
   },
 

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import {
   Activity, CheckCircle, Clock, Edit2, Loader2,
-  Plus, RefreshCw, Server, Trash2, XCircle, Wifi,
+  Pause, Play, Plus, RefreshCw, Server, Trash2, XCircle, Wifi,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,25 +15,62 @@ import {
   useDeleteService, useManualCheck, type MonitoredService,
 } from "@/services/monitoring";
 import { cn } from "@/lib/utils";
-import { RADIUS, TEXT } from "@/lib/design-tokens";
+import { TEXT } from "@/lib/design-tokens";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getFaviconUrl(url: string) {
+  try { return `${new URL(url).origin}/favicon.ico`; } catch { return ""; }
+}
+
+function computeStats(checks: MonitoredService["recentChecks"]) {
+  if (!checks.length) return { uptime: null, avgMs: null };
+  const up = checks.filter((c) => c.status === "up").length;
+  const withMs = checks.filter((c) => c.responseMs != null);
+  return {
+    uptime: Math.round((up / checks.length) * 100),
+    avgMs: withMs.length ? Math.round(withMs.reduce((s, c) => s + (c.responseMs ?? 0), 0) / withMs.length) : null,
+  };
+}
+
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS = {
-  up:       { icon: CheckCircle, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", label: "Online",   dot: "bg-emerald-500" },
-  degraded: { icon: Clock,       color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   label: "Degraded", dot: "bg-amber-500" },
-  down:     { icon: XCircle,     color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     label: "Offline",  dot: "bg-red-500" },
-  unknown:  { icon: Activity,    color: "text-muted-foreground", bg: "bg-muted/30",   border: "border-border",         label: "Unknown",  dot: "bg-muted-foreground" },
+  up:       { icon: CheckCircle, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", label: "Online",   dot: "bg-emerald-500",        spark: "hsl(142 71% 45%)" },
+  degraded: { icon: Clock,       color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   label: "Degraded", dot: "bg-amber-500",          spark: "hsl(38 92% 50%)" },
+  down:     { icon: XCircle,     color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     label: "Offline",  dot: "bg-red-500",            spark: "hsl(0 72% 51%)" },
+  unknown:  { icon: Activity,    color: "text-muted-foreground", bg: "bg-muted/30",   border: "border-border",         label: "Unknown",  dot: "bg-muted-foreground",   spark: "hsl(var(--muted-foreground))" },
 } as const;
 
-// ─── Form ─────────────────────────────────────────────────────────────────────
+// ─── Favicon with fallback ────────────────────────────────────────────────────
+function ServiceIcon({ url, statusKey }: { url: string; statusKey: keyof typeof STATUS }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const meta = STATUS[statusKey];
+  const Icon = meta.icon;
+  const faviconUrl = getFaviconUrl(url);
+
+  return (
+    <div className="relative shrink-0">
+      <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border overflow-hidden", meta.bg, meta.border)}>
+        {faviconUrl && !imgFailed ? (
+          <img src={faviconUrl} alt="" className="h-5 w-5 object-contain" onError={() => setImgFailed(true)} />
+        ) : (
+          <Icon className={cn("h-4 w-4", meta.color)} />
+        )}
+      </div>
+      <span className={cn("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card", meta.dot)} />
+    </div>
+  );
+}
+
+// ─── Add/Edit dialog ──────────────────────────────────────────────────────────
 const schema = z.object({
   name:           z.string().min(1, "Required").max(100),
   url:            z.string().min(1, "Required").max(500),
@@ -58,17 +95,10 @@ function ServiceDialog({ service, onClose }: { service?: MonitoredService; onClo
 
   const onSubmit = async (values: FormValues) => {
     try {
-      if (service) {
-        await update.mutateAsync({ id: service.id, ...values });
-        toast.success("Service updated");
-      } else {
-        await create.mutateAsync(values);
-        toast.success("Service added — first check running");
-      }
+      if (service) { await update.mutateAsync({ id: service.id, ...values }); toast.success("Service updated"); }
+      else { await create.mutateAsync(values); toast.success("Service added — first check running"); }
       onClose();
-    } catch {
-      toast.error("Something went wrong");
-    }
+    } catch { toast.error("Something went wrong"); }
   };
 
   return (
@@ -133,6 +163,7 @@ export default function DevOpsHealthPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { data: services, isLoading, error, refetch, isFetching } = useMonitoredServices();
+  const update = useUpdateService();
   const deleteService = useDeleteService();
   const manualCheck = useManualCheck();
 
@@ -149,29 +180,30 @@ export default function DevOpsHealthPage() {
     down:     list.filter((s) => !s.latestCheck || s.latestCheck.status === "down").length,
   };
 
+  const togglePause = async (svc: MonitoredService) => {
+    await update.mutateAsync({ id: svc.id, isActive: !svc.isActive });
+    toast.success(svc.isActive ? "Monitoring paused" : "Monitoring resumed");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Header */}
+      {/* ── Header ── */}
       <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-card">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
-            <div className={cn(
-              "inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground",
-              TEXT.eyebrow,
-            )}>
+            <div className={cn("inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 font-medium text-muted-foreground", TEXT.eyebrow)}>
               <Server className="h-3.5 w-3.5 text-emerald-500" />
               DevOps Hub · Health
             </div>
             <div>
               <h1 className="font-display text-3xl font-semibold text-foreground">Service Health</h1>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Monitor uptime, response times and availability across all your services and infrastructure endpoints.
+                Monitor uptime, response times and availability across all your services and infrastructure.
               </p>
             </div>
           </div>
 
-          {/* Stat pills */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
               <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -192,10 +224,9 @@ export default function DevOpsHealthPage() {
           </div>
         </div>
 
-        {/* Action bar */}
         <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
           <p className={cn("text-muted-foreground", TEXT.meta)}>
-            {list.length} service{list.length !== 1 ? "s" : ""} monitored · auto-refresh every 30s
+            {list.length} service{list.length !== 1 ? "s" : ""} · auto-refresh every 30s
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
@@ -204,19 +235,16 @@ export default function DevOpsHealthPage() {
             </Button>
             {isAdmin && (
               <Button size="sm" onClick={() => setDialog({ open: true })} className="gap-2">
-                <Plus className="h-3.5 w-3.5" />
-                Add Service
+                <Plus className="h-3.5 w-3.5" /> Add Service
               </Button>
             )}
           </div>
         </div>
       </section>
 
-      {/* Services table */}
+      {/* ── Services list ── */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="rounded-[1.75rem] border border-border bg-card shadow-card overflow-hidden"
       >
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
@@ -248,45 +276,63 @@ export default function DevOpsHealthPage() {
             {list.map((svc) => {
               const statusKey = (svc.latestCheck?.status ?? "unknown") as keyof typeof STATUS;
               const meta = STATUS[statusKey];
-              const Icon = meta.icon;
               const isChecking = manualCheck.isPending && manualCheck.variables === svc.id;
+              const sparkData = [...(svc.recentChecks ?? [])].reverse().map((c) => c.responseMs ?? 0);
+              const { uptime, avgMs } = computeStats(svc.recentChecks ?? []);
 
               return (
-                <motion.div
-                  key={svc.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center gap-4 px-6 py-4 transition hover:bg-muted/20"
-                >
-                  {/* Status icon */}
-                  <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border", meta.bg, meta.border)}>
-                    <Icon className={cn("h-4.5 w-4.5", meta.color)} />
-                  </div>
+                <div key={svc.id} className={cn("flex items-center gap-4 px-6 py-4 transition hover:bg-muted/20", !svc.isActive && "opacity-60")}>
+
+                  {/* Favicon / status icon */}
+                  <ServiceIcon url={svc.url} statusKey={statusKey} />
 
                   {/* Name + URL */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-foreground">{svc.name}</p>
                       <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">{svc.checkType}</Badge>
-                      {!svc.isActive && <Badge variant="outline" className="text-[10px]">Paused</Badge>}
+                      {!svc.isActive && <Badge variant="outline" className="text-[10px] text-muted-foreground">Paused</Badge>}
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground truncate">{svc.url}</p>
                   </div>
 
-                  {/* Status + response */}
-                  <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                  {/* Uptime + avg response */}
+                  {uptime !== null && (
+                    <div className="hidden md:block text-right shrink-0 w-20">
+                      <p className={cn("text-sm font-semibold", uptime >= 99 ? "text-emerald-500" : uptime >= 90 ? "text-amber-500" : "text-red-500")}>
+                        {uptime}%
+                      </p>
+                      <p className={cn("text-muted-foreground", TEXT.meta)}>uptime</p>
+                    </div>
+                  )}
+
+                  {/* Sparkline */}
+                  {sparkData.length > 2 && (
+                    <div className="hidden lg:block w-28 shrink-0">
+                      <SimpleSparkline
+                        data={sparkData}
+                        stroke={meta.spark}
+                        fill={`${meta.spark} / 0.12`}
+                      />
+                    </div>
+                  )}
+
+                  {/* Status label */}
+                  <div className="hidden sm:flex items-center gap-1.5 shrink-0 w-20">
                     <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
                     <span className={cn("text-sm font-medium", meta.color)}>{meta.label}</span>
                   </div>
 
+                  {/* Response time */}
                   <div className="hidden md:block text-right shrink-0 w-16">
                     <p className="text-sm font-semibold text-foreground">
-                      {svc.latestCheck?.responseMs != null ? `${svc.latestCheck.responseMs}ms` : "—"}
+                      {svc.latestCheck?.responseMs != null ? `${svc.latestCheck.responseMs}ms` : avgMs != null ? `~${avgMs}ms` : "—"}
                     </p>
                     <p className={cn("text-muted-foreground", TEXT.meta)}>response</p>
                   </div>
 
-                  <div className="hidden lg:block text-right shrink-0 w-20">
+                  {/* Last check time */}
+                  <div className="hidden lg:block text-right shrink-0 w-16">
                     <p className={cn("text-muted-foreground", TEXT.meta)}>
                       {svc.latestCheck
                         ? new Date(svc.latestCheck.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -297,69 +343,45 @@ export default function DevOpsHealthPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost" size="icon"
-                      title="Check now"
-                      disabled={isChecking}
-                      onClick={() => manualCheck.mutate(svc.id)}
-                      className="h-8 w-8"
-                    >
+                    <Button variant="ghost" size="icon" title="Check now" disabled={isChecking} onClick={() => manualCheck.mutate(svc.id)} className="h-8 w-8">
                       <RefreshCw className={cn("h-3.5 w-3.5", isChecking && "animate-spin")} />
                     </Button>
                     {isAdmin && (
                       <>
-                        <Button
-                          variant="ghost" size="icon"
-                          title="Edit"
-                          onClick={() => setDialog({ open: true, service: svc })}
-                          className="h-8 w-8"
-                        >
+                        <Button variant="ghost" size="icon" title={svc.isActive ? "Pause" : "Resume"} onClick={() => togglePause(svc)} className="h-8 w-8">
+                          {svc.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button variant="ghost" size="icon" title="Edit" onClick={() => setDialog({ open: true, service: svc })} className="h-8 w-8">
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost" size="icon"
-                          title="Remove"
-                          onClick={() => setConfirmDelete(svc.id)}
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        >
+                        <Button variant="ghost" size="icon" title="Remove" onClick={() => setConfirmDelete(svc.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </>
                     )}
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
         )}
       </motion.div>
 
-      {/* Add/Edit dialog */}
-      {dialog.open && (
-        <ServiceDialog service={dialog.service} onClose={() => setDialog({ open: false })} />
-      )}
+      {/* Dialogs */}
+      {dialog.open && <ServiceDialog service={dialog.service} onClose={() => setDialog({ open: false })} />}
 
-      {/* Delete confirm */}
       <Dialog open={confirmDelete !== null} onOpenChange={() => setConfirmDelete(null)}>
         <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Remove service?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This will stop monitoring and permanently delete all check history for this service.
-          </p>
+          <DialogHeader><DialogTitle>Remove service?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This will stop monitoring and permanently delete all check history.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              disabled={deleteService.isPending}
-              onClick={async () => {
-                if (confirmDelete === null) return;
-                await deleteService.mutateAsync(confirmDelete);
-                toast.success("Service removed");
-                setConfirmDelete(null);
-              }}
-            >
+            <Button variant="destructive" disabled={deleteService.isPending} onClick={async () => {
+              if (confirmDelete === null) return;
+              await deleteService.mutateAsync(confirmDelete);
+              toast.success("Service removed");
+              setConfirmDelete(null);
+            }}>
               {deleteService.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Remove
             </Button>

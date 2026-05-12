@@ -20,6 +20,11 @@ export interface MonitoredService {
     checkedAt: string;
     error: string | null;
   } | null;
+  recentChecks: {
+    status: string;
+    responseMs: number | null;
+    checkedAt: string;
+  }[];
 }
 
 export interface ServiceDetail extends MonitoredService {
