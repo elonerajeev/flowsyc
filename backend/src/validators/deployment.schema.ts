@@ -19,3 +19,7 @@ export const updateDeploymentSchema = z.object({
   finishedAt: z.string().datetime().optional(),
   notes:      z.string().max(1000).optional(),
 });
+
+export const listDeploymentsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});

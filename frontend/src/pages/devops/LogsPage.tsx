@@ -15,17 +15,16 @@ interface LogEntry {
 }
 
 const LEVEL_COLOR: Record<string, string> = {
-  error:  "text-red-400",
-  warn:   "text-amber-400",
-  info:   "text-blue-400",
-  http:   "text-emerald-400",
-  debug:  "text-slate-500",
-  verbose:"text-slate-500",
+  error:   "text-red-400",
+  warn:    "text-amber-400",
+  info:    "text-blue-400",
+  http:    "text-emerald-400",
+  debug:   "text-slate-500",
+  verbose: "text-slate-500",
 };
 
 const LEVELS = ["all", "error", "warn", "info", "http", "debug"] as const;
 type LevelFilter = typeof LEVELS[number];
-
 const MAX_LOGS = 500;
 
 export default function DevOpsLogsPage() {
@@ -36,7 +35,6 @@ export default function DevOpsLogsPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Listen for real log events from backend
   useEffect(() => {
     if (!socket) return;
     const handler = (entry: LogEntry) => {
@@ -49,26 +47,24 @@ export default function DevOpsLogsPage() {
     return () => { socket.off("devops:log", handler); };
   }, [socket]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs, autoScroll]);
 
-  // Detect manual scroll up → disable auto-scroll
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    setAutoScroll(atBottom);
+    setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
   };
 
   const filtered = filter === "all" ? logs : logs.filter((l) => l.level === filter);
 
   const exportLogs = () => {
-    const text = filtered.map((l) => `[${l.timestamp}] ${l.level.toUpperCase().padEnd(7)} ${l.message}`).join("\n");
-    const blob = new Blob([text], { type: "text/plain" });
+    const text = filtered.map((l) =>
+      `[${l.timestamp}] ${l.level.toUpperCase().padEnd(7)} ${l.message}`
+    ).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     a.download = `flowsyc-logs-${new Date().toISOString().slice(0, 19)}.txt`;
     a.click();
   };
@@ -95,9 +91,7 @@ export default function DevOpsLogsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className={cn(
               "flex items-center gap-2 rounded-full border px-4 py-2",
-              isConnected
-                ? "border-emerald-500/30 bg-emerald-500/10"
-                : "border-muted/50 bg-muted/30",
+              isConnected ? "border-emerald-500/30 bg-emerald-500/10" : "border-muted/50 bg-muted/30",
             )}>
               <span className={cn("h-1.5 w-1.5 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground")} />
               <span className={cn("text-sm font-medium", isConnected ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
@@ -105,7 +99,7 @@ export default function DevOpsLogsPage() {
               </span>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-border bg-muted/30 px-4 py-2">
-              <span className={cn("text-sm font-medium text-muted-foreground", TEXT.meta)}>{filtered.length} lines</span>
+              <span className={cn("text-sm font-medium text-muted-foreground")}>{filtered.length} lines</span>
             </div>
           </div>
         </div>
@@ -114,9 +108,7 @@ export default function DevOpsLogsPage() {
           <div className="flex items-center gap-2">
             <Filter className="h-3.5 w-3.5 text-muted-foreground" />
             <Select value={filter} onValueChange={(v) => setFilter(v as LevelFilter)}>
-              <SelectTrigger className="h-8 w-32 text-xs">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {LEVELS.map((l) => (
                   <SelectItem key={l} value={l} className="text-xs capitalize">{l}</SelectItem>
@@ -135,7 +127,7 @@ export default function DevOpsLogsPage() {
         </div>
       </section>
 
-      {/* Log terminal */}
+      {/* Terminal */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="rounded-[1.75rem] border border-border overflow-hidden shadow-card"
@@ -143,15 +135,13 @@ export default function DevOpsLogsPage() {
         <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
           <Terminal className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">backend · stdout</span>
-          <div className="ml-auto flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setAutoScroll((v) => !v)}
-              className={cn("text-xs font-medium transition", autoScroll ? "text-emerald-500" : "text-muted-foreground hover:text-foreground")}
-            >
-              {autoScroll ? "↓ Auto-scroll on" : "↓ Auto-scroll off"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setAutoScroll((v) => !v)}
+            className={cn("ml-auto text-xs font-medium transition", autoScroll ? "text-emerald-500" : "text-muted-foreground hover:text-foreground")}
+          >
+            {autoScroll ? "↓ Auto-scroll on" : "↓ Auto-scroll off"}
+          </button>
         </div>
 
         <div

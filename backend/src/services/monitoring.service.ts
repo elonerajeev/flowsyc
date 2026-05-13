@@ -59,6 +59,27 @@ async function checkTcp(host: string, port: number, timeoutMs: number): Promise<
   });
 }
 
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+) {
+  let cursor = 0;
+  const laneCount = Math.max(1, Math.min(concurrency, items.length));
+  const lanes = Array.from({ length: laneCount }, async () => {
+    while (cursor < items.length) {
+      const current = items[cursor];
+      cursor += 1;
+      try {
+        await worker(current);
+      } catch {
+        // non-blocking, each check is isolated
+      }
+    }
+  });
+  await Promise.all(lanes);
+}
+
 // ─── Service layer ────────────────────────────────────────────────────────────
 
 export const monitoringService = {
@@ -190,7 +211,9 @@ export const monitoringService = {
       where: { isActive: true, deletedAt: null },
       select: { id: true },
     });
-    await Promise.allSettled(services.map((s) => this.runCheck(s.id)));
+    await runWithConcurrency(services, 10, async (service) => {
+      await this.runCheck(service.id);
+    });
     logger.debug(`[HealthChecker] Checked ${services.length} services`);
   },
 

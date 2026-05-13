@@ -29,6 +29,22 @@ type PipelinesResponse = {
   };
 };
 
+export type GitHubConfigStatus = {
+  configured: boolean;
+  source: "env" | "user" | "none";
+  owner: string | null;
+  repo: string | null;
+  webhookConfigured: boolean;
+};
+
+export type UpsertGitHubConfigInput = {
+  owner: string;
+  repo: string;
+  token: string;
+  webhookSecret?: string;
+  webhookOrganizationId?: string;
+};
+
 type ListParams = {
   limit?: number;
   branch?: string;
@@ -62,13 +78,53 @@ export function usePipelines(params: ListParams = {}) {
 
 export function useSyncPipelines() {
   const queryClient = useQueryClient();
-  return useMutation<{ data: { processed: number; fetched: number } }, Error, number>({
+  return useMutation<{ data: { processed: number; fetched: number; source: "env" | "user" } }, Error, number>({
     mutationFn: (limit: number) =>
-      requestJson<{ data: { processed: number; fetched: number } }>("/pipelines/github/sync", {
+      requestJson<{ data: { processed: number; fetched: number; source: "env" | "user" } }>("/pipelines/github/sync", {
         method: "POST",
         body: JSON.stringify({ limit }),
       }),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+      await queryClient.invalidateQueries({ queryKey: deploymentKeys.all });
+    },
+  });
+}
+
+export function useGitHubConfigStatus(enabled = true) {
+  return useQuery({
+    queryKey: [...pipelineKeys.all, "github-config"],
+    queryFn: () => requestJson<{ data: GitHubConfigStatus }>("/pipelines/github/config").then((response) => response.data),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useUpsertGitHubConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpsertGitHubConfigInput) =>
+      requestJson<{ data: GitHubConfigStatus }>("/pipelines/github/config", {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }).then((response) => response.data),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, "github-config"] });
+      await queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+      await queryClient.invalidateQueries({ queryKey: deploymentKeys.all });
+    },
+  });
+}
+
+export function useClearGitHubConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      requestJson<{ data: GitHubConfigStatus }>("/pipelines/github/config", {
+        method: "DELETE",
+      }).then((response) => response.data),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, "github-config"] });
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
       await queryClient.invalidateQueries({ queryKey: deploymentKeys.all });
     },

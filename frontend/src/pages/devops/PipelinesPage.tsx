@@ -8,9 +8,19 @@ import { TEXT } from "@/lib/design-tokens";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import DevOpsDialogHeader from "@/components/devops/DevOpsDialogHeader";
+import { Label } from "@/components/ui/label";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
-import { type PipelineStatus, usePipelines, useSyncPipelines } from "@/services/pipelines";
+import {
+  type PipelineStatus,
+  useClearGitHubConfig,
+  useGitHubConfigStatus,
+  usePipelines,
+  useSyncPipelines,
+  useUpsertGitHubConfig,
+} from "@/services/pipelines";
 
 const STATUS_META: Record<PipelineStatus, { icon: typeof CheckCircle; color: string; label: string }> = {
   success: { icon: CheckCircle, color: "text-emerald-500", label: "Passed" },
@@ -44,10 +54,19 @@ function formatAgo(isoString: string | null) {
 export default function DevOpsPipelinesPage() {
   const { user } = useAuth();
   const canSync = user?.role === "admin" || user?.role === "manager";
+  const canConfigure = user?.role === "admin" || user?.role === "manager" || user?.role === "employee";
 
   const [status, setStatus] = useState<"all" | PipelineStatus>("all");
   const [branchFilter, setBranchFilter] = useState("");
   const [workflowFilter, setWorkflowFilter] = useState("");
+
+  const [configOpen, setConfigOpen] = useState(false);
+  const [ownerInput, setOwnerInput] = useState("");
+  const [repoInput, setRepoInput] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
+  const [webhookSecretInput, setWebhookSecretInput] = useState("");
+  const [webhookOrgInput, setWebhookOrgInput] = useState("");
+  const [configError, setConfigError] = useState("");
 
   const { data, isLoading, error, refetch, isFetching } = usePipelines({
     limit: 50,
@@ -55,18 +74,38 @@ export default function DevOpsPipelinesPage() {
     branch: branchFilter.trim() || undefined,
     workflow: workflowFilter.trim() || undefined,
   });
+
+  const { data: githubConfigStatus } = useGitHubConfigStatus(canConfigure);
   const syncPipelines = useSyncPipelines();
+  const upsertGitHubConfig = useUpsertGitHubConfig();
+  const clearGitHubConfig = useClearGitHubConfig();
 
   if (isLoading) return <PageLoader />;
   if (error) return <ErrorFallback error={error as Error} onRetry={() => { void refetch(); }} />;
 
   const runs = data?.data ?? [];
   const source = data?.meta.source ?? "deployments";
-
   const counts = {
     success: runs.filter((run) => run.status === "success").length,
     failed: runs.filter((run) => run.status === "failed").length,
     running: runs.filter((run) => run.status === "running" || run.status === "queued").length,
+  };
+
+  const configSourceText =
+    githubConfigStatus?.source === "env"
+      ? "Environment"
+      : githubConfigStatus?.source === "user"
+      ? "Your token"
+      : "Not configured";
+
+  const openConfig = () => {
+    setOwnerInput(githubConfigStatus?.owner ?? "");
+    setRepoInput(githubConfigStatus?.repo ?? "");
+    setTokenInput("");
+    setWebhookSecretInput("");
+    setWebhookOrgInput("");
+    setConfigError("");
+    setConfigOpen(true);
   };
 
   return (
@@ -129,12 +168,26 @@ export default function DevOpsPipelinesPage() {
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Refresh
             </Button>
+            {canConfigure && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openConfig}
+              >
+                {githubConfigStatus?.configured ? "Update GitHub" : "Connect GitHub"}
+              </Button>
+            )}
             {canSync && (
               <Button
                 size="sm"
                 onClick={async () => {
-                  const result = await syncPipelines.mutateAsync(50);
-                  toast.success(`Synced ${result.data.processed} runs`);
+                  try {
+                    const result = await syncPipelines.mutateAsync(50);
+                    toast.success(`Synced ${result.data.processed} runs (${result.data.source})`);
+                  } catch (error) {
+                    const message = error instanceof Error ? error.message : "Unable to sync pipelines right now";
+                    toast.error(message);
+                  }
                 }}
                 disabled={syncPipelines.isPending}
                 className="gap-2"
@@ -148,6 +201,10 @@ export default function DevOpsPipelinesPage() {
 
         <p className={cn("mt-3 text-muted-foreground", TEXT.meta)}>
           Source: {source === "github" ? "GitHub Actions API" : "Deployment records"} · Auto-refresh every 30s
+        </p>
+        <p className={cn("mt-1 text-muted-foreground", TEXT.meta)}>
+          GitHub config: {configSourceText}
+          {githubConfigStatus?.owner && githubConfigStatus?.repo ? ` (${githubConfigStatus.owner}/${githubConfigStatus.repo})` : ""}
         </p>
       </section>
 
@@ -197,6 +254,107 @@ export default function DevOpsPipelinesPage() {
           </div>
         )}
       </section>
+
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent className="w-[95vw] max-w-xl">
+          <DialogHeader>
+            <DevOpsDialogHeader
+              icon={GitBranch}
+              iconColor="text-indigo-500"
+              iconBg="bg-indigo-500/10 border-indigo-500/30"
+              title="Connect GitHub"
+              description="Link your repository to pull CI/CD runs automatically every 5 minutes."
+            />
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className={cn("text-muted-foreground", TEXT.meta)}>
+              Add your repository and developer token to fetch latest CI/CD runs.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Owner</Label>
+                <Input value={ownerInput} onChange={(event) => setOwnerInput(event.target.value)} placeholder="org-or-username" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Repository</Label>
+                <Input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="repo-name" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Developer Token</Label>
+              <Input
+                type="password"
+                value={tokenInput}
+                onChange={(event) => setTokenInput(event.target.value)}
+                placeholder="github token"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Webhook Secret (optional)</Label>
+                <Input value={webhookSecretInput} onChange={(event) => setWebhookSecretInput(event.target.value)} placeholder="secret" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Webhook Org ID (optional)</Label>
+                <Input value={webhookOrgInput} onChange={(event) => setWebhookOrgInput(event.target.value)} placeholder="organization id" />
+              </div>
+            </div>
+            {configError ? <p className="text-sm text-destructive">{configError}</p> : null}
+          </div>
+
+          <DialogFooter>
+            {githubConfigStatus?.source === "user" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await clearGitHubConfig.mutateAsync();
+                    toast.success("GitHub config removed");
+                    setConfigOpen(false);
+                  } catch {
+                    setConfigError("Unable to remove GitHub config");
+                  }
+                }}
+                disabled={clearGitHubConfig.isPending || upsertGitHubConfig.isPending}
+              >
+                Remove
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={() => setConfigOpen(false)} disabled={upsertGitHubConfig.isPending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={async () => {
+                if (!ownerInput.trim() || !repoInput.trim() || !tokenInput.trim()) {
+                  setConfigError("Owner, repository and token are required.");
+                  return;
+                }
+
+                try {
+                  await upsertGitHubConfig.mutateAsync({
+                    owner: ownerInput.trim(),
+                    repo: repoInput.trim(),
+                    token: tokenInput.trim(),
+                    ...(webhookSecretInput.trim() ? { webhookSecret: webhookSecretInput.trim() } : {}),
+                    ...(webhookOrgInput.trim() ? { webhookOrganizationId: webhookOrgInput.trim() } : {}),
+                  });
+                  toast.success("GitHub connected");
+                  setConfigOpen(false);
+                } catch {
+                  setConfigError("Failed to save GitHub config.");
+                }
+              }}
+              disabled={upsertGitHubConfig.isPending}
+            >
+              {upsertGitHubConfig.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

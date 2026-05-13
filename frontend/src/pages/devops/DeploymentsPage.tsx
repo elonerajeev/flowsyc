@@ -14,7 +14,6 @@ import {
   useDeployments, useCreateDeployment, useDeleteDeployment,
   useUpdateDeploymentStatus, type Deployment, type DeploymentStatus,
 } from "@/services/deployments";
-import { useSyncPipelines } from "@/services/pipelines";
 import { cn } from "@/lib/utils";
 import { TEXT } from "@/lib/design-tokens";
 import { Button } from "@/components/ui/button";
@@ -152,11 +151,9 @@ export default function DevOpsDeploymentsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const canCreate = user?.role === "admin" || user?.role === "manager";
-  const canSync = user?.role === "admin" || user?.role === "manager";
   const { data: deployments, isLoading, error, refetch, isFetching } = useDeployments();
   const deleteDeployment = useDeleteDeployment();
   const updateStatus = useUpdateDeploymentStatus();
-  const syncPipelines = useSyncPipelines();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -226,21 +223,6 @@ export default function DevOpsDeploymentsPage() {
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Refresh
             </Button>
-            {canSync && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  const result = await syncPipelines.mutateAsync(50);
-                  toast.success(`Synced ${result.data.processed} GitHub runs`);
-                }}
-                disabled={syncPipelines.isPending}
-                className="gap-2"
-              >
-                {syncPipelines.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Sync GitHub
-              </Button>
-            )}
             {canCreate && (
               <Button size="sm" onClick={() => setDialogOpen(true)} className="gap-2">
                 <Plus className="h-3.5 w-3.5" /> Record Deploy

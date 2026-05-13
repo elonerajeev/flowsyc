@@ -2,6 +2,7 @@ import crypto from "crypto";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
+import { decrypt, encrypt } from "../utils/crypto";
 import type { AccessActor } from "../utils/access-control";
 import { orgFilter } from "../utils/access-control";
 import { cache, TTL } from "../utils/cache";
@@ -52,6 +53,40 @@ type GitHubRunsResponse = {
   workflow_runs?: GitHubWorkflowRun[];
 };
 
+type GitHubErrorResponse = {
+  message?: string;
+};
+
+type GitHubWebhookPayload = {
+  repository?: {
+    name?: string | null;
+    owner?: { login?: string | null } | null;
+  } | null;
+  workflow_run?: GitHubWorkflowRun;
+};
+
+type RuntimeGitHubConfig = {
+  owner: string;
+  repo: string;
+  token: string;
+  webhookSecret?: string;
+  webhookOrganizationId?: string;
+  source: "env" | "user";
+  cacheScope: string;
+};
+
+type GitHubConfigInput = {
+  owner: string;
+  repo: string;
+  token: string;
+  webhookSecret?: string;
+  webhookOrganizationId?: string;
+};
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "").trim();
+}
+
 function mapGitHubStatus(status: string | null | undefined, conclusion: string | null | undefined): PipelineStatus {
   const normalizedStatus = String(status ?? "").toLowerCase();
   const normalizedConclusion = String(conclusion ?? "").toLowerCase();
@@ -92,17 +127,30 @@ function fromDeploymentStatus(status: string): PipelineStatus {
   return "unknown";
 }
 
-function getGitHubConfig() {
+function getEnvGitHubConfig(): RuntimeGitHubConfig | null {
   const owner = process.env.GITHUB_REPO_OWNER?.trim();
   const repo = process.env.GITHUB_REPO_NAME?.trim();
   const token = process.env.GITHUB_TOKEN?.trim();
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
-  return { owner, repo, token, webhookSecret };
+  const webhookOrganizationId = process.env.GITHUB_WEBHOOK_ORGANIZATION_ID?.trim();
+
+  if (!owner || !repo || !token) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo,
+    token,
+    webhookSecret,
+    webhookOrganizationId,
+    source: "env",
+    cacheScope: `env:${owner}/${repo}`,
+  };
 }
 
-function isGitHubConfigured() {
-  const { owner, repo, token } = getGitHubConfig();
-  return Boolean(owner && repo && token);
+function normalizeRepoValue(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function getGitHubStatusFilter(status?: PipelineStatus) {
@@ -140,12 +188,78 @@ function mapGitHubRun(run: GitHubWorkflowRun): PipelineRun {
   };
 }
 
-async function fetchGitHubRuns(options: ListOptions): Promise<PipelineRun[]> {
-  const { owner, repo, token } = getGitHubConfig();
-  if (!owner || !repo || !token) {
-    return [];
-  }
+function readUserGitHubConfig(data: unknown): {
+  owner: string;
+  repo: string;
+  tokenEncrypted: string;
+  webhookSecret?: string;
+  webhookOrganizationId?: string;
+} | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
 
+  const root = data as Record<string, unknown>;
+  const integrations = root.integrations;
+  if (!integrations || typeof integrations !== "object" || Array.isArray(integrations)) return null;
+
+  const github = (integrations as Record<string, unknown>).github;
+  if (!github || typeof github !== "object" || Array.isArray(github)) return null;
+
+  const payload = github as Record<string, unknown>;
+  const owner = normalizeText(payload.owner as string | undefined);
+  const repo = normalizeText(payload.repo as string | undefined);
+  const tokenEncrypted = normalizeText(payload.tokenEncrypted as string | undefined);
+  const webhookSecret = normalizeText(payload.webhookSecret as string | undefined);
+  const webhookOrganizationId = normalizeText(payload.webhookOrganizationId as string | undefined);
+
+  if (!owner || !repo || !tokenEncrypted) return null;
+
+  return {
+    owner,
+    repo,
+    tokenEncrypted,
+    ...(webhookSecret ? { webhookSecret } : {}),
+    ...(webhookOrganizationId ? { webhookOrganizationId } : {}),
+  };
+}
+
+async function getUserGitHubConfig(actor: AccessActor): Promise<RuntimeGitHubConfig | null> {
+  if (!actor?.userId) return null;
+
+  const preference = await prisma.userPreference.findUnique({
+    where: { userId: actor.userId },
+    select: { data: true },
+  });
+  if (!preference) return null;
+
+  const config = readUserGitHubConfig(preference.data);
+  if (!config) return null;
+
+  try {
+    const token = decrypt(config.tokenEncrypted).trim();
+    if (!token) return null;
+
+    return {
+      owner: config.owner,
+      repo: config.repo,
+      token,
+      webhookSecret: config.webhookSecret,
+      webhookOrganizationId: config.webhookOrganizationId,
+      source: "user",
+      cacheScope: `user:${actor.userId}:${config.owner}/${config.repo}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRuntimeGitHubConfig(actor?: AccessActor): Promise<RuntimeGitHubConfig | null> {
+  const envConfig = getEnvGitHubConfig();
+  if (envConfig) return envConfig;
+  if (!actor) return null;
+  return getUserGitHubConfig(actor);
+}
+
+async function fetchGitHubRuns(config: RuntimeGitHubConfig, options: ListOptions): Promise<PipelineRun[]> {
   const statusFilter = getGitHubStatusFilter(options.status);
   const search = new URLSearchParams({
     per_page: String(Math.min(100, options.limit)),
@@ -153,9 +267,9 @@ async function fetchGitHubRuns(options: ListOptions): Promise<PipelineRun[]> {
   if (options.branch) search.set("branch", options.branch);
   if (statusFilter) search.set("status", statusFilter);
 
-  const url = `https://api.github.com/repos/${owner}/${repo}/actions/runs?${search.toString()}`;
+  const url = `https://api.github.com/repos/${config.owner}/${config.repo}/actions/runs?${search.toString()}`;
 
-  const cacheKey = `pipelines:github:${search.toString()}`;
+  const cacheKey = `pipelines:github:${config.cacheScope}:${search.toString()}`;
   const cached = await cache.get<PipelineRun[]>(cacheKey);
   if (cached) {
     return cached;
@@ -165,19 +279,55 @@ async function fetchGitHubRuns(options: ListOptions): Promise<PipelineRun[]> {
   const timeout = setTimeout(() => controller.abort(), 7000);
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "flowsyc-crm",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "flowsyc-crm",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new AppError("GitHub API request timed out", 504, "GITHUB_TIMEOUT");
+      }
+      throw new AppError("Unable to reach GitHub API", 502, "GITHUB_UNAVAILABLE");
+    }
 
     if (!response.ok) {
-      throw new Error(`GitHub API ${response.status}`);
+      let remoteMessage = "";
+      try {
+        const payload = (await response.json()) as GitHubErrorResponse;
+        remoteMessage = String(payload?.message ?? "").trim();
+      } catch {
+        remoteMessage = "";
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new AppError(
+          "GitHub token is invalid or missing required Actions read access",
+          400,
+          "GITHUB_AUTH_FAILED",
+        );
+      }
+
+      if (response.status === 404) {
+        throw new AppError("GitHub repository not found or access denied", 400, "GITHUB_REPO_NOT_FOUND");
+      }
+
+      if (response.status === 429) {
+        throw new AppError("GitHub API rate limit exceeded. Try again shortly.", 429, "GITHUB_RATE_LIMITED");
+      }
+
+      throw new AppError(
+        remoteMessage ? `GitHub API error: ${remoteMessage}` : `GitHub API error (${response.status})`,
+        502,
+        "GITHUB_API_ERROR",
+      );
     }
 
     const payload = (await response.json()) as GitHubRunsResponse;
@@ -234,59 +384,96 @@ async function fetchDeploymentBackfill(actor: AccessActor, options: ListOptions)
   }));
 }
 
-async function persistGitHubRunsToDeployments(runs: PipelineRun[]): Promise<number> {
-  let processed = 0;
-
+async function persistGitHubRunsToDeployments(runs: PipelineRun[], organizationId: string): Promise<number> {
+  const dedupedByMarker = new Map<string, PipelineRun>();
   for (const run of runs) {
     if (!run.id.startsWith("gh-")) continue;
-    const marker = run.id;
-
-    const existing = await prisma.deployment.findFirst({
-      where: { version: marker },
-      select: { id: true },
-    });
-
-    if (existing) {
-      await prisma.deployment.update({
-        where: { id: existing.id },
-        data: {
-          service: run.workflow,
-          environment: "ci-cd",
-          branch: run.branch,
-          status: toDeploymentStatus(run.status),
-          commitHash: run.commitHash,
-          commitMessage: run.commitMessage,
-          deployedBy: run.actor,
-          startedAt: run.startedAt ? new Date(run.startedAt) : new Date(),
-          finishedAt: run.finishedAt ? new Date(run.finishedAt) : null,
-          notes: run.url ?? null,
-          updatedAt: new Date(),
-        },
-      });
-    } else {
-      await prisma.deployment.create({
-        data: {
-          organizationId: null,
-          service: run.workflow,
-          environment: "ci-cd",
-          status: toDeploymentStatus(run.status),
-          commitHash: run.commitHash,
-          commitMessage: run.commitMessage,
-          branch: run.branch,
-          deployedBy: run.actor,
-          version: marker,
-          notes: run.url ?? null,
-          startedAt: run.startedAt ? new Date(run.startedAt) : new Date(),
-          finishedAt: run.finishedAt ? new Date(run.finishedAt) : null,
-          updatedAt: new Date(),
-        },
-      });
-    }
-
-    processed += 1;
+    dedupedByMarker.set(run.id, run);
   }
 
-  return processed;
+  const markers = Array.from(dedupedByMarker.keys());
+  if (markers.length === 0) return 0;
+
+  const existingRows = await prisma.deployment.findMany({
+    where: {
+      organizationId,
+      version: { in: markers },
+    },
+    select: { id: true, version: true },
+  });
+  const existingByVersion = new Map(existingRows.map((row) => [row.version ?? "", row.id]));
+
+  const updates: Array<Promise<unknown>> = [];
+  const creates: Array<{
+    organizationId: string;
+    service: string;
+    environment: string;
+    status: "success" | "failed" | "running" | "cancelled";
+    commitHash: string | null;
+    commitMessage: string | null;
+    branch: string;
+    deployedBy: string | null;
+    version: string;
+    notes: string | null;
+    startedAt: Date;
+    finishedAt: Date | null;
+    updatedAt: Date;
+  }> = [];
+
+  for (const marker of markers) {
+    const run = dedupedByMarker.get(marker)!;
+    const existingId = existingByVersion.get(marker);
+    const payload = {
+      service: run.workflow,
+      environment: "ci-cd",
+      branch: run.branch,
+      status: toDeploymentStatus(run.status),
+      commitHash: run.commitHash,
+      commitMessage: run.commitMessage,
+      deployedBy: run.actor,
+      startedAt: run.startedAt ? new Date(run.startedAt) : new Date(),
+      finishedAt: run.finishedAt ? new Date(run.finishedAt) : null,
+      notes: run.url ?? null,
+      updatedAt: new Date(),
+    };
+
+    if (existingId) {
+      updates.push(
+        prisma.deployment.update({
+          where: { id: existingId },
+          data: payload,
+        }),
+      );
+    } else {
+      creates.push({
+        organizationId,
+        ...payload,
+        version: marker,
+      });
+    }
+  }
+
+  if (creates.length > 0) {
+    await prisma.deployment.createMany({ data: creates });
+  }
+  if (updates.length > 0) {
+    await Promise.all(updates);
+  }
+
+  return markers.length;
+}
+
+function isMatchingRepository(payload: GitHubWebhookPayload, config: RuntimeGitHubConfig): boolean {
+  const expectedOwner = normalizeRepoValue(config.owner);
+  const expectedRepo = normalizeRepoValue(config.repo);
+  const actualOwner = normalizeRepoValue(payload.repository?.owner?.login);
+  const actualRepo = normalizeRepoValue(payload.repository?.name);
+
+  return actualOwner === expectedOwner && actualRepo === expectedRepo;
+}
+
+function isWebhookConfigured(config: RuntimeGitHubConfig | null) {
+  return Boolean(config?.webhookSecret && config?.webhookOrganizationId);
 }
 
 export const pipelinesService = {
@@ -295,13 +482,15 @@ export const pipelinesService = {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
 
-    if (isGitHubConfigured()) {
+    const githubConfig = await resolveRuntimeGitHubConfig(actor);
+    if (githubConfig) {
       try {
-        const data = await fetchGitHubRuns(options);
+        const data = await fetchGitHubRuns(githubConfig, options);
         return { data, source: "github" };
       } catch (error) {
         logger.warn("Pipelines: GitHub API unavailable, falling back to deployments", {
           error: error instanceof Error ? error.message : String(error),
+          source: githubConfig.source,
         });
       }
     }
@@ -314,24 +503,172 @@ export const pipelinesService = {
     if (actor?.role !== "admin" && actor?.role !== "manager") {
       throw new AppError("Admin or manager only", 403, "FORBIDDEN");
     }
-    if (!isGitHubConfigured()) {
+    if (!actor?.organizationId) {
+      throw new AppError("Organization context is required", 400, "ORG_REQUIRED");
+    }
+
+    const githubConfig = await resolveRuntimeGitHubConfig(actor);
+    if (!githubConfig) {
       throw new AppError("GitHub integration is not configured", 400, "GITHUB_NOT_CONFIGURED");
     }
 
-    const runs = await fetchGitHubRuns({ limit: Math.min(100, Math.max(1, limit)) });
-    const processed = await persistGitHubRunsToDeployments(runs);
+    try {
+      const runs = await fetchGitHubRuns(githubConfig, { limit: Math.min(100, Math.max(1, limit)) });
+      const processed = await persistGitHubRunsToDeployments(runs, actor.organizationId);
+      await cache.invalidatePrefix("pipelines:github:");
+      return {
+        processed,
+        fetched: runs.length,
+        source: githubConfig.source,
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      logger.error("Pipelines sync failed", {
+        error: error instanceof Error ? error.message : String(error),
+        organizationId: actor.organizationId,
+      });
+      throw new AppError("Failed to sync pipelines from GitHub", 500, "PIPELINE_SYNC_FAILED");
+    }
+  },
+
+  async getGitHubConfigStatus(actor: AccessActor) {
+    if (!actor) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    const config = await resolveRuntimeGitHubConfig(actor);
+    if (!config) {
+      return {
+        configured: false,
+        source: "none" as const,
+        owner: null,
+        repo: null,
+        webhookConfigured: false,
+      };
+    }
+
     return {
-      processed,
-      fetched: runs.length,
+      configured: true,
+      source: config.source,
+      owner: config.owner,
+      repo: config.repo,
+      webhookConfigured: isWebhookConfigured(config),
     };
   },
 
-  isWebhookConfigured() {
-    return Boolean(getGitHubConfig().webhookSecret);
+  async upsertUserGitHubConfig(actor: AccessActor, input: GitHubConfigInput) {
+    if (!actor) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    const owner = normalizeText(input.owner);
+    const repo = normalizeText(input.repo);
+    const token = normalizeText(input.token);
+    if (!owner || !repo || !token) {
+      throw new AppError("Invalid GitHub configuration", 400, "VALIDATION_ERROR");
+    }
+
+    const existing = await prisma.userPreference.findUnique({
+      where: { userId: actor.userId },
+      select: { id: true, data: true },
+    });
+
+    const currentData =
+      existing?.data && typeof existing.data === "object" && !Array.isArray(existing.data)
+        ? (existing.data as Record<string, unknown>)
+        : {};
+
+    const currentIntegrations =
+      currentData.integrations && typeof currentData.integrations === "object" && !Array.isArray(currentData.integrations)
+        ? (currentData.integrations as Record<string, unknown>)
+        : {};
+
+    const updatedData = {
+      ...currentData,
+      integrations: {
+        ...currentIntegrations,
+        github: {
+          owner,
+          repo,
+          tokenEncrypted: encrypt(token),
+          ...(input.webhookSecret ? { webhookSecret: normalizeText(input.webhookSecret) } : {}),
+          ...(input.webhookOrganizationId ? { webhookOrganizationId: normalizeText(input.webhookOrganizationId) } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    };
+
+    if (existing?.id) {
+      await prisma.userPreference.update({
+        where: { userId: actor.userId },
+        data: {
+          data: updatedData,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.userPreference.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: actor.userId!,
+          data: updatedData,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    await cache.invalidatePrefix("pipelines:github:");
+    return this.getGitHubConfigStatus(actor);
   },
 
-  verifyWebhookSignature(rawBody: string | undefined, signatureHeader: string | undefined): boolean {
-    const secret = getGitHubConfig().webhookSecret;
+  async clearUserGitHubConfig(actor: AccessActor) {
+    if (!actor) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    const existing = await prisma.userPreference.findUnique({
+      where: { userId: actor.userId },
+      select: { data: true },
+    });
+    if (!existing || !existing.data || typeof existing.data !== "object" || Array.isArray(existing.data)) {
+      return this.getGitHubConfigStatus(actor);
+    }
+
+    const currentData = existing.data as Record<string, unknown>;
+    const currentIntegrations =
+      currentData.integrations && typeof currentData.integrations === "object" && !Array.isArray(currentData.integrations)
+        ? (currentData.integrations as Record<string, unknown>)
+        : {};
+
+    const { github: _githubRemoved, ...remainingIntegrations } = currentIntegrations;
+    const updatedData = {
+      ...currentData,
+      integrations: remainingIntegrations,
+    };
+
+    await prisma.userPreference.update({
+      where: { userId: actor.userId },
+      data: {
+        data: updatedData as any,
+        updatedAt: new Date(),
+      },
+    });
+
+    await cache.invalidatePrefix("pipelines:github:");
+    return this.getGitHubConfigStatus(actor);
+  },
+
+  async isWebhookConfigured() {
+    const config = getEnvGitHubConfig();
+    return isWebhookConfigured(config);
+  },
+
+  async verifyWebhookSignature(rawBody: string | undefined, signatureHeader: string | undefined): Promise<boolean> {
+    const config = getEnvGitHubConfig();
+    const secret = config?.webhookSecret;
     if (!secret || !rawBody || !signatureHeader?.startsWith("sha256=")) {
       return false;
     }
@@ -356,13 +693,29 @@ export const pipelinesService = {
       return { processed: 0, ignored: true };
     }
 
-    const body = payload as { workflow_run?: GitHubWorkflowRun };
+    const config = getEnvGitHubConfig();
+    if (!config) {
+      logger.warn("Pipelines webhook ignored: GitHub env config missing");
+      return { processed: 0, ignored: true };
+    }
+
+    const body = payload as GitHubWebhookPayload;
     if (!body?.workflow_run) {
+      return { processed: 0, ignored: true };
+    }
+    if (!isMatchingRepository(body, config)) {
+      logger.warn("Pipelines webhook ignored: repository mismatch");
+      return { processed: 0, ignored: true };
+    }
+
+    const webhookOrganizationId = config.webhookOrganizationId;
+    if (!webhookOrganizationId) {
+      logger.warn("Pipelines webhook ignored: GITHUB_WEBHOOK_ORGANIZATION_ID is missing");
       return { processed: 0, ignored: true };
     }
 
     const run = mapGitHubRun(body.workflow_run);
-    const processed = await persistGitHubRunsToDeployments([run]);
+    const processed = await persistGitHubRunsToDeployments([run], webhookOrganizationId);
     await cache.invalidatePrefix("pipelines:github:");
     return { processed, ignored: false };
   },

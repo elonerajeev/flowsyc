@@ -1352,6 +1352,7 @@ model Deployment {
   @@index([status])
   @@index([environment])
   @@index([startedAt])
+  @@index([organizationId, version])
 }
 
 enum DevOpsAlertSeverity {
@@ -1378,4 +1379,26 @@ model DevOpsAlert {
   @@index([resolved])
   @@index([severity])
   @@index([createdAt])
+}
+
+model DevOpsLogSource {
+  id             Int      @id @default(autoincrement())
+  organizationId String?
+  name           String
+  provider       String   @default("generic")
+  environment    String   @default("production")
+  endpoint       String?
+  authType       String   @default("api_key")
+  authConfig     Json     @default("{}")
+  ingestKeyHash  String
+  isActive       Boolean  @default(true)
+  createdBy      String?
+  lastIngestAt   DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
 }

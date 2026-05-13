@@ -5,7 +5,11 @@ import { AppError } from "../middleware/error.middleware";
 import { asyncHandler } from "../utils/async-handler";
 import { validateBody, validateQuery } from "../middleware/validate.middleware";
 import { pipelinesService } from "../services/pipelines.service";
-import { listPipelinesQuerySchema, syncPipelinesBodySchema } from "../validators/pipeline.schema";
+import {
+  listPipelinesQuerySchema,
+  syncPipelinesBodySchema,
+  upsertGitHubConfigSchema,
+} from "../validators/pipeline.schema";
 
 export const pipelinesRouter = Router();
 
@@ -46,18 +50,49 @@ pipelinesRouter.post(
   }),
 );
 
+pipelinesRouter.get(
+  "/github/config",
+  requireAuth,
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req, res) => {
+    const data = await pipelinesService.getGitHubConfigStatus(req.auth);
+    res.json({ data });
+  }),
+);
+
+pipelinesRouter.put(
+  "/github/config",
+  requireAuth,
+  requireRole(["admin", "manager", "employee"]),
+  validateBody(upsertGitHubConfigSchema),
+  asyncHandler(async (req, res) => {
+    const data = await pipelinesService.upsertUserGitHubConfig(req.auth, req.body);
+    res.json({ data });
+  }),
+);
+
+pipelinesRouter.delete(
+  "/github/config",
+  requireAuth,
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req, res) => {
+    const data = await pipelinesService.clearUserGitHubConfig(req.auth);
+    res.json({ data });
+  }),
+);
+
 pipelinesRouter.post(
   "/github/webhook",
   asyncHandler(async (req, res) => {
-    if (!pipelinesService.isWebhookConfigured()) {
-      throw new AppError("GitHub webhook secret is not configured", 503, "WEBHOOK_NOT_CONFIGURED");
+    if (!(await pipelinesService.isWebhookConfigured())) {
+      throw new AppError("GitHub webhook is not fully configured", 503, "WEBHOOK_NOT_CONFIGURED");
     }
 
     const signatureHeader = req.header("x-hub-signature-256") ?? undefined;
     const event = req.header("x-github-event") ?? undefined;
     const rawBody = req.rawBody ?? "";
 
-    if (!pipelinesService.verifyWebhookSignature(rawBody, signatureHeader)) {
+    if (!(await pipelinesService.verifyWebhookSignature(rawBody, signatureHeader))) {
       throw new AppError("Invalid GitHub webhook signature", 401, "INVALID_SIGNATURE");
     }
 

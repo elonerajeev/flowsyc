@@ -34,7 +34,7 @@ export const devopsSections: DevOpsSection[] = [
     description: "CPU, memory and disk across nodes",
     icon: Server,
     items: [
-      { to: "/devops/servers", label: "Servers", icon: Server, roles: ["admin", "manager", "employee"] },
+      { to: "/devops/servers", label: "Servers", icon: Server, roles: ["admin", "manager"] },
     ],
   },
   {
@@ -58,10 +58,10 @@ export const devopsSections: DevOpsSection[] = [
   {
     key: "logs" as DevOpsSectionKey,
     label: "Logs",
-    description: "Live log stream from all services",
+    description: "Configured app logs and ingest health",
     icon: Terminal,
     items: [
-      { to: "/devops/logs", label: "Live Logs", icon: Terminal, roles: ["admin", "manager", "employee"] },
+      { to: "/devops/logs", label: "Service Logs", icon: Terminal, roles: ["admin", "manager"] },
     ],
   },
   {
