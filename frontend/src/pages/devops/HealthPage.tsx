@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import DevOpsDialogHeader from "@/components/devops/DevOpsDialogHeader";
 import { Badge } from "@/components/ui/badge";
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
 import PageLoader from "@/components/shared/PageLoader";
@@ -131,7 +132,13 @@ function ServiceDialog({ service, onClose }: { service?: MonitoredService; onClo
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{service ? "Edit Service" : "Add Monitored Service"}</DialogTitle>
+          <DevOpsDialogHeader
+            icon={Wifi}
+            iconColor="text-emerald-500"
+            iconBg="bg-emerald-500/10 border-emerald-500/30"
+            title={service ? "Edit Service" : "Add Monitored Service"}
+            description={service ? "Update the service configuration and monitoring settings." : "Add a URL or endpoint to monitor its uptime and response time."}
+          />
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">

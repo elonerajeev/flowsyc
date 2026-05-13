@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import DevOpsDialogHeader from "@/components/devops/DevOpsDialogHeader";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 
@@ -54,7 +55,15 @@ function AlertDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Create Alert</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DevOpsDialogHeader
+            icon={AlertTriangle}
+            iconColor="text-red-500"
+            iconBg="bg-red-500/10 border-red-500/30"
+            title="Create Alert"
+            description="Manually raise an incident or infrastructure notification."
+          />
+        </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Title</Label>

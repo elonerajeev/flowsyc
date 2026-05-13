@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import DevOpsDialogHeader from "@/components/devops/DevOpsDialogHeader";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 
@@ -80,7 +81,15 @@ function DeploymentDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Record Deployment</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DevOpsDialogHeader
+            icon={Rocket}
+            iconColor="text-violet-500"
+            iconBg="bg-violet-500/10 border-violet-500/30"
+            title="Record Deployment"
+            description="Log a release across any service and environment."
+          />
+        </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

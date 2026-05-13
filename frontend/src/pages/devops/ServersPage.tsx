@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import DevOpsDialogHeader from "@/components/devops/DevOpsDialogHeader";
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
 
@@ -62,7 +63,13 @@ function ServerDialog({ server, onClose }: { server?: MonitoredServer; onClose: 
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{server ? "Edit Server" : "Add Server"}</DialogTitle>
+          <DevOpsDialogHeader
+            icon={Server}
+            iconColor="text-blue-500"
+            iconBg="bg-blue-500/10 border-blue-500/30"
+            title={server ? "Edit Server" : "Add Server"}
+            description={server ? "Update this server's connection details." : "Add an infrastructure node to track its reachability."}
+          />
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
