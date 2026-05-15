@@ -61,7 +61,7 @@ const schema = z.object({
   endpoint:    z.string().url("Must be a valid URL").optional().or(z.literal("")),
   // CloudWatch fields
   region:      z.string().optional(),
-  roleArn:     z.string().optional(),
+  roleArn:     z.string().regex(/^arn:aws:iam::\d+:role\/.+$/, "Must be a role ARN: arn:aws:iam::ACCOUNT:role/NAME").optional().or(z.literal("")),
   logGroupName:z.string().optional(),
   // Generic auth
   authType:    z.enum(["api_key", "bearer", "custom_header"]).default("api_key"),
@@ -107,7 +107,7 @@ function SourceDialog({ source, onClose }: { source?: DevOpsLogSource; onClose: 
 
     const payload: CreateLogSourceInput = {
       name: v.name, provider: v.provider, environment: v.environment,
-      authType: isCloudWatch ? "custom_header" : v.authType,
+      authType: isCloudWatch ? "bearer" : v.authType,  // CloudWatch uses IAM, not header auth
       ...(v.endpoint ? { endpoint: v.endpoint } : {}),
       ...(Object.keys(authConfig).length ? { authConfig } : {}),
     };
@@ -173,7 +173,10 @@ function SourceDialog({ source, onClose }: { source?: DevOpsLogSource; onClose: 
               <div className="space-y-1.5">
                 <Label>IAM Role ARN</Label>
                 <Input {...register("roleArn")} placeholder="arn:aws:iam::123456789:role/LogsReadRole" className="font-mono text-xs" />
-                <p className={cn("text-muted-foreground", TEXT.meta)}>The backend will assume this role to read CloudWatch logs securely.</p>
+                {errors.roleArn && <p className="text-xs text-destructive">{errors.roleArn.message}</p>}
+                <p className={cn("text-muted-foreground", TEXT.meta)}>
+                  Must be a <strong>role</strong> ARN (e.g. <code>arn:aws:iam::123:role/Name</code>), not a user ARN.
+                </p>
               </div>
             </div>
           )}
