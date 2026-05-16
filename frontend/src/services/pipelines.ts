@@ -33,17 +33,26 @@ export type GitHubConfigStatus = {
   configured: boolean;
   source: "env" | "user" | "none";
   owner: string | null;
-  repo: string | null;
+  repos: string[];
+  scope: "org" | "user";
   webhookConfigured: boolean;
 };
 
 export type UpsertGitHubConfigInput = {
   owner: string;
-  repo: string;
+  repos: string[];
   token: string;
+  scope: "org" | "user";
   webhookSecret?: string;
   webhookOrganizationId?: string;
 };
+
+export interface GitHubRepo {
+  name: string;
+  fullName: string;
+  private: boolean;
+  description: string | null;
+}
 
 type ListParams = {
   limit?: number;
@@ -128,5 +137,18 @@ export function useClearGitHubConfig() {
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
       await queryClient.invalidateQueries({ queryKey: deploymentKeys.all });
     },
+  });
+}
+
+export function useListGitHubRepos(token: string, owner: string, isOrg: boolean, enabled: boolean) {
+  return useQuery({
+    queryKey: ["github-repos", owner, isOrg],
+    queryFn: () => {
+      const params = new URLSearchParams({ token, owner, scope: isOrg ? "org" : "user" });
+      return requestJson<{ data: GitHubRepo[] }>(`/pipelines/github/repos?${params}`).then((r) => r.data);
+    },
+    enabled: enabled && token.length > 10 && owner.length > 0,
+    staleTime: 60_000,
+    retry: false,
   });
 }

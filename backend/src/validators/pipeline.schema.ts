@@ -12,9 +12,10 @@ export const syncPipelinesBodySchema = z.object({
 });
 
 export const upsertGitHubConfigSchema = z.object({
-  owner: z.string().trim().min(1).max(120),
-  repo: z.string().trim().min(1).max(160),
-  token: z.string().trim().min(20).max(500),
-  webhookSecret: z.string().trim().min(8).max(300).optional(),
+  owner:  z.string().trim().min(1).max(120),
+  repos:  z.array(z.string().trim().min(1).max(160)).min(1, "Select at least one repo").max(20),
+  token:  z.string().trim().min(20).max(500),
+  scope:  z.enum(["org", "user"]).default("user"),
+  webhookSecret:         z.string().trim().min(8).max(300).optional(),
   webhookOrganizationId: z.string().trim().min(1).max(120).optional(),
 });

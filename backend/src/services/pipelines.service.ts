@@ -67,8 +67,9 @@ type GitHubWebhookPayload = {
 
 type RuntimeGitHubConfig = {
   owner: string;
-  repo: string;
+  repos: string[];   // multi-repo
   token: string;
+  scope: "org" | "user";
   webhookSecret?: string;
   webhookOrganizationId?: string;
   source: "env" | "user";
@@ -77,8 +78,9 @@ type RuntimeGitHubConfig = {
 
 type GitHubConfigInput = {
   owner: string;
-  repo: string;
+  repos: string[];
   token: string;
+  scope: "org" | "user";
   webhookSecret?: string;
   webhookOrganizationId?: string;
 };
@@ -134,18 +136,12 @@ function getEnvGitHubConfig(): RuntimeGitHubConfig | null {
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
   const webhookOrganizationId = process.env.GITHUB_WEBHOOK_ORGANIZATION_ID?.trim();
 
-  if (!owner || !repo || !token) {
-    return null;
-  }
+  if (!owner || !repo || !token) return null;
 
   return {
-    owner,
-    repo,
-    token,
-    webhookSecret,
-    webhookOrganizationId,
-    source: "env",
-    cacheScope: `env:${owner}/${repo}`,
+    owner, repos: [repo], token, scope: "org",
+    webhookSecret, webhookOrganizationId,
+    source: "env", cacheScope: `env:${owner}/${repo}`,
   };
 }
 
@@ -190,33 +186,36 @@ function mapGitHubRun(run: GitHubWorkflowRun): PipelineRun {
 
 function readUserGitHubConfig(data: unknown): {
   owner: string;
-  repo: string;
+  repos: string[];
+  scope: "org" | "user";
   tokenEncrypted: string;
   webhookSecret?: string;
   webhookOrganizationId?: string;
 } | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-
   const root = data as Record<string, unknown>;
   const integrations = root.integrations;
   if (!integrations || typeof integrations !== "object" || Array.isArray(integrations)) return null;
-
   const github = (integrations as Record<string, unknown>).github;
   if (!github || typeof github !== "object" || Array.isArray(github)) return null;
-
   const payload = github as Record<string, unknown>;
+
   const owner = normalizeText(payload.owner as string | undefined);
-  const repo = normalizeText(payload.repo as string | undefined);
   const tokenEncrypted = normalizeText(payload.tokenEncrypted as string | undefined);
+  if (!owner || !tokenEncrypted) return null;
+
+  // Support both old single-repo and new multi-repo format
+  const repos: string[] = Array.isArray(payload.repos)
+    ? (payload.repos as string[]).filter(Boolean)
+    : payload.repo ? [normalizeText(payload.repo as string)] : [];
+  if (repos.length === 0) return null;
+
+  const scope = payload.scope === "org" ? "org" : "user";
   const webhookSecret = normalizeText(payload.webhookSecret as string | undefined);
   const webhookOrganizationId = normalizeText(payload.webhookOrganizationId as string | undefined);
 
-  if (!owner || !repo || !tokenEncrypted) return null;
-
   return {
-    owner,
-    repo,
-    tokenEncrypted,
+    owner, repos, scope, tokenEncrypted,
     ...(webhookSecret ? { webhookSecret } : {}),
     ...(webhookOrganizationId ? { webhookOrganizationId } : {}),
   };
@@ -237,15 +236,13 @@ async function getUserGitHubConfig(actor: AccessActor): Promise<RuntimeGitHubCon
   try {
     const token = decrypt(config.tokenEncrypted).trim();
     if (!token) return null;
-
     return {
-      owner: config.owner,
-      repo: config.repo,
-      token,
+      owner: config.owner, repos: config.repos, token,
+      scope: config.scope,
       webhookSecret: config.webhookSecret,
       webhookOrganizationId: config.webhookOrganizationId,
       source: "user",
-      cacheScope: `user:${actor.userId}:${config.owner}/${config.repo}`,
+      cacheScope: `user:${actor.userId}:${config.owner}:${config.repos.join(",")}`,
     };
   } catch {
     return null;
@@ -261,92 +258,65 @@ async function resolveRuntimeGitHubConfig(actor?: AccessActor): Promise<RuntimeG
 
 async function fetchGitHubRuns(config: RuntimeGitHubConfig, options: ListOptions): Promise<PipelineRun[]> {
   const statusFilter = getGitHubStatusFilter(options.status);
-  const search = new URLSearchParams({
-    per_page: String(Math.min(100, options.limit)),
-  });
+  const search = new URLSearchParams({ per_page: String(Math.min(100, options.limit)) });
   if (options.branch) search.set("branch", options.branch);
   if (statusFilter) search.set("status", statusFilter);
 
-  const url = `https://api.github.com/repos/${config.owner}/${config.repo}/actions/runs?${search.toString()}`;
+  // Fetch from all configured repos and merge
+  const allRuns: PipelineRun[] = [];
+  for (const repo of config.repos) {
+    const url = `https://api.github.com/repos/${config.owner}/${repo}/actions/runs?${search.toString()}`;
+    const cacheKey = `pipelines:github:${config.cacheScope}:${repo}:${search.toString()}`;
+    const cached = await cache.get<PipelineRun[]>(cacheKey);
+    if (cached) { allRuns.push(...cached); continue; }
 
-  const cacheKey = `pipelines:github:${config.cacheScope}:${search.toString()}`;
-  const cached = await cache.get<PipelineRun[]>(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 7000);
-
-  try {
-    let response: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
     try {
-      response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${config.token}`,
-          Accept: "application/vnd.github+json",
-          "User-Agent": "flowsyc-crm",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new AppError("GitHub API request timed out", 504, "GITHUB_TIMEOUT");
-      }
-      throw new AppError("Unable to reach GitHub API", 502, "GITHUB_UNAVAILABLE");
-    }
-
-    if (!response.ok) {
-      let remoteMessage = "";
+      let response: Response;
       try {
-        const payload = (await response.json()) as GitHubErrorResponse;
-        remoteMessage = String(payload?.message ?? "").trim();
-      } catch {
-        remoteMessage = "";
+        response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${config.token}`,
+            Accept: "application/vnd.github+json",
+            "User-Agent": "flowsyc-crm",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") throw new AppError("GitHub API request timed out", 504, "GITHUB_TIMEOUT");
+        throw new AppError("Unable to reach GitHub API", 502, "GITHUB_UNAVAILABLE");
       }
 
-      if (response.status === 401 || response.status === 403) {
-        throw new AppError(
-          "GitHub token is invalid or missing required Actions read access",
-          400,
-          "GITHUB_AUTH_FAILED",
-        );
+      if (!response.ok) {
+        let remoteMessage = "";
+        try { const p = (await response.json()) as GitHubErrorResponse; remoteMessage = String(p?.message ?? "").trim(); } catch { remoteMessage = ""; }
+        if (response.status === 401 || response.status === 403) throw new AppError("GitHub token is invalid or missing required Actions read access", 400, "GITHUB_AUTH_FAILED");
+        if (response.status === 404) throw new AppError(`GitHub repository ${config.owner}/${repo} not found or access denied`, 400, "GITHUB_REPO_NOT_FOUND");
+        if (response.status === 429) throw new AppError("GitHub API rate limit exceeded. Try again shortly.", 429, "GITHUB_RATE_LIMITED");
+        throw new AppError(remoteMessage ? `GitHub API error: ${remoteMessage}` : `GitHub API error (${response.status})`, 502, "GITHUB_API_ERROR");
       }
 
-      if (response.status === 404) {
-        throw new AppError("GitHub repository not found or access denied", 400, "GITHUB_REPO_NOT_FOUND");
-      }
+      const payload = (await response.json()) as GitHubRunsResponse;
+      let runs = (payload.workflow_runs ?? []).map(mapGitHubRun);
+      if (options.workflow) { const needle = options.workflow.toLowerCase(); runs = runs.filter((r) => r.workflow.toLowerCase().includes(needle)); }
+      if (options.status) runs = runs.filter((r) => r.status === options.status);
 
-      if (response.status === 429) {
-        throw new AppError("GitHub API rate limit exceeded. Try again shortly.", 429, "GITHUB_RATE_LIMITED");
-      }
-
-      throw new AppError(
-        remoteMessage ? `GitHub API error: ${remoteMessage}` : `GitHub API error (${response.status})`,
-        502,
-        "GITHUB_API_ERROR",
-      );
+      await cache.set(cacheKey, runs, 60_000);
+      allRuns.push(...runs);
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const payload = (await response.json()) as GitHubRunsResponse;
-    let runs = (payload.workflow_runs ?? []).map(mapGitHubRun);
-
-    if (options.workflow) {
-      const needle = options.workflow.toLowerCase();
-      runs = runs.filter((run) => run.workflow.toLowerCase().includes(needle));
-    }
-    if (options.status) {
-      runs = runs.filter((run) => run.status === options.status);
-    }
-
-    runs = runs.slice(0, options.limit);
-    await cache.set(cacheKey, runs, TTL.SHORT);
-    return runs;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  // Sort merged results by startedAt desc, deduplicate by id
+  const seen = new Set<string>();
+  return allRuns
+    .filter((r) => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
+    .sort((a, b) => new Date(b.startedAt ?? 0).getTime() - new Date(a.startedAt ?? 0).getTime())
+    .slice(0, options.limit);
 }
 
 function buildDeploymentWhere(actor: AccessActor, options: ListOptions) {
@@ -465,11 +435,10 @@ async function persistGitHubRunsToDeployments(runs: PipelineRun[], organizationI
 
 function isMatchingRepository(payload: GitHubWebhookPayload, config: RuntimeGitHubConfig): boolean {
   const expectedOwner = normalizeRepoValue(config.owner);
-  const expectedRepo = normalizeRepoValue(config.repo);
   const actualOwner = normalizeRepoValue(payload.repository?.owner?.login);
   const actualRepo = normalizeRepoValue(payload.repository?.name);
 
-  return actualOwner === expectedOwner && actualRepo === expectedRepo;
+  return actualOwner === expectedOwner && config.repos.map(normalizeRepoValue).includes(actualRepo);
 }
 
 function isWebhookConfigured(config: RuntimeGitHubConfig | null) {
@@ -477,6 +446,31 @@ function isWebhookConfigured(config: RuntimeGitHubConfig | null) {
 }
 
 export const pipelinesService = {
+  // List all repos accessible by a token (org repos or user repos)
+  async listGitHubRepos(token: string, owner: string, isOrg: boolean): Promise<{ name: string; fullName: string; private: boolean; description: string | null }[]> {
+    const url = isOrg
+      ? `https://api.github.com/orgs/${owner}/repos?per_page=100&sort=updated`
+      : `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "flowsyc-crm",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) throw new AppError("Invalid token or insufficient permissions", 400, "GITHUB_AUTH_FAILED");
+      if (response.status === 404) throw new AppError(`Organization '${owner}' not found`, 404, "GITHUB_NOT_FOUND");
+      throw new AppError(`GitHub API error (${response.status})`, 502, "GITHUB_API_ERROR");
+    }
+
+    const repos = (await response.json()) as Array<{ name: string; full_name: string; private: boolean; description: string | null }>;
+    return repos.map((r) => ({ name: r.name, fullName: r.full_name, private: r.private, description: r.description }));
+  },
+
   async list(actor: AccessActor, options: ListOptions): Promise<{ data: PipelineRun[]; source: PipelineSource }> {
     if (!actor) {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
@@ -545,7 +539,8 @@ export const pipelinesService = {
         configured: false,
         source: "none" as const,
         owner: null,
-        repo: null,
+        repos: [],
+        scope: "user" as const,
         webhookConfigured: false,
       };
     }
@@ -554,7 +549,8 @@ export const pipelinesService = {
       configured: true,
       source: config.source,
       owner: config.owner,
-      repo: config.repo,
+      repos: config.repos,
+      scope: config.scope ?? "user",
       webhookConfigured: isWebhookConfigured(config),
     };
   },
@@ -565,9 +561,10 @@ export const pipelinesService = {
     }
 
     const owner = normalizeText(input.owner);
-    const repo = normalizeText(input.repo);
+    const repos = (input.repos ?? []).map(normalizeText).filter(Boolean);
     const token = normalizeText(input.token);
-    if (!owner || !repo || !token) {
+    const scope = input.scope ?? "user";
+    if (!owner || repos.length === 0 || !token) {
       throw new AppError("Invalid GitHub configuration", 400, "VALIDATION_ERROR");
     }
 
@@ -591,8 +588,7 @@ export const pipelinesService = {
       integrations: {
         ...currentIntegrations,
         github: {
-          owner,
-          repo,
+          owner, repos, scope,
           tokenEncrypted: encrypt(token),
           ...(input.webhookSecret ? { webhookSecret: normalizeText(input.webhookSecret) } : {}),
           ...(input.webhookOrganizationId ? { webhookOrganizationId: normalizeText(input.webhookOrganizationId) } : {}),

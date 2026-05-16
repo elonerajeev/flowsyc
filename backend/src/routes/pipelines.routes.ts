@@ -60,6 +60,19 @@ pipelinesRouter.get(
   }),
 );
 
+// List repos accessible by the token (org repos or user repos)
+pipelinesRouter.get(
+  "/github/repos",
+  requireAuth,
+  requireRole(["admin", "manager", "employee"]),
+  asyncHandler(async (req, res) => {
+    const { token, owner, scope } = req.query as { token?: string; owner?: string; scope?: string };
+    if (!token || !owner) throw new AppError("token and owner are required", 400, "VALIDATION_ERROR");
+    const repos = await pipelinesService.listGitHubRepos(token.trim(), owner.trim(), scope === "org");
+    res.json({ data: repos });
+  }),
+);
+
 pipelinesRouter.put(
   "/github/config",
   requireAuth,
