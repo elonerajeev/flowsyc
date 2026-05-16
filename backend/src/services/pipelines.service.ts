@@ -293,8 +293,10 @@ async function fetchGitHubRuns(config: RuntimeGitHubConfig, options: ListOptions
       if (!response.ok) {
         let remoteMessage = "";
         try { const p = (await response.json()) as GitHubErrorResponse; remoteMessage = String(p?.message ?? "").trim(); } catch { remoteMessage = ""; }
+        // 401/403 = bad token — throw immediately (affects all repos)
         if (response.status === 401 || response.status === 403) throw new AppError("GitHub token is invalid or missing required Actions read access", 400, "GITHUB_AUTH_FAILED");
-        if (response.status === 404) throw new AppError(`GitHub repository ${config.owner}/${repo} not found or access denied`, 400, "GITHUB_REPO_NOT_FOUND");
+        // 404 = this specific repo not accessible — skip it, continue with others
+        if (response.status === 404) { logger.warn(`Pipelines: skipping repo ${config.owner}/${repo} — not found or access denied`); continue; }
         if (response.status === 429) throw new AppError("GitHub API rate limit exceeded. Try again shortly.", 429, "GITHUB_RATE_LIMITED");
         throw new AppError(remoteMessage ? `GitHub API error: ${remoteMessage}` : `GitHub API error (${response.status})`, 502, "GITHUB_API_ERROR");
       }
