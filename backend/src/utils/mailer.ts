@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 import { AppError } from "../middleware/error.middleware";
 
-type SendMailInput = {
+export type SendMailInput = {
   to: string;
   subject: string;
   text: string;
@@ -55,7 +55,7 @@ function getTransporter() {
   return cachedTransporter;
 }
 
-export async function sendMail(input: SendMailInput) {
+export async function sendMailDirect(input: SendMailInput) {
   if (process.env.DISABLE_EMAIL_DELIVERY === "true") {
     return;
   }
@@ -85,4 +85,9 @@ export async function sendMail(input: SendMailInput) {
   } catch (err) {
     console.warn("Failed to deliver email:", (err as any).message);
   }
+}
+
+export async function sendMail(input: SendMailInput) {
+  const { queueEmail } = await import("../services/queue.service");
+  await queueEmail(input);
 }

@@ -63,19 +63,19 @@ const badges = [
 
 export default function SecurityStrip() {
   return (
-    <section className="border-y border-white/[0.05] bg-[#030308] px-4 py-12">
+    <section className="border-y border-border/60 bg-background px-4 py-12">
       <div className="mx-auto max-w-6xl">
-        <p className="mb-8 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-white/20">
+        <p className="mb-8 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           Enterprise-ready security & infrastructure
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {badges.map((b) => (
-            <div key={b.label} className="group flex flex-col items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-center transition-all hover:border-white/10">
+            <div key={b.label} className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-4 text-center transition-all hover:border-border">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${b.color}15`, color: b.color }}>
                 {b.icon}
               </div>
-              <p className="text-xs font-semibold text-white/70">{b.label}</p>
-              <p className="text-[9px] leading-tight text-white/30">{b.detail}</p>
+              <p className="text-xs font-semibold text-foreground/70">{b.label}</p>
+              <p className="text-[10px] leading-tight text-muted-foreground sm:text-[9px]">{b.detail}</p>
             </div>
           ))}
         </div>

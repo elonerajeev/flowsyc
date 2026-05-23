@@ -31,9 +31,9 @@ export default function CustomerLogos() {
   const doubled = [...companies, ...companies];
 
   return (
-    <section className="bg-[#030308] px-4 py-14 sm:py-20">
+    <section className="bg-background px-4 py-14 sm:py-20">
       <div className="mx-auto max-w-6xl">
-        <p className="mb-10 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-white/20">
+        <p className="mb-10 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           Trusted by teams at
         </p>
 
@@ -47,7 +47,7 @@ export default function CustomerLogos() {
             {doubled.map((name, i) => (
               <div
                 key={`${name}-${i}`}
-                className="flex shrink-0 items-center justify-center rounded-xl border border-white/[0.04] bg-white/[0.02] px-8 py-4 text-lg font-bold text-white/25 transition-colors hover:text-white/50 hover:border-white/10 whitespace-nowrap"
+                className="flex shrink-0 items-center justify-center rounded-xl border border-border/50 bg-muted/30 px-6 py-3 text-base font-bold text-muted-foreground/60 transition-colors hover:text-foreground/50 hover:border-border whitespace-nowrap sm:px-8 sm:py-4 sm:text-lg"
               >
                 {name}
               </div>

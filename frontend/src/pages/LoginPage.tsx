@@ -21,7 +21,8 @@ export default function LoginPage() {
 
   const { login, switchRole } = useAuth();
   const { setRole } = useTheme();
-  const [email, setEmail] = useState("john@crmpro.com");
+  const nextPath = searchParams.get("from") || "/";
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
@@ -100,19 +101,19 @@ export default function LoginPage() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#5355D6]">Sign in</p>
           <h1 className="mt-2 text-2xl font-bold text-white">Welcome back</h1>
           {pendingSwitchRole ? (
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-white/40">
               Sign in to switch to{" "}
-              <span className="font-semibold text-primary">{roleLabels[pendingSwitchRole]}</span>
+              <span className="font-semibold text-[#5355D6]">{roleLabels[pendingSwitchRole]}</span>
             </p>
           ) : (
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-white/40">
               Enter your credentials to continue into the workspace.
             </p>
           )}
         </div>
 
         <div className="space-y-4">
-          <label className="space-y-2 text-sm font-semibold text-foreground">
+          <label className="space-y-2 text-sm font-semibold text-white/80">
             Email
             <input
               type="email"
@@ -120,11 +121,11 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
               required
-              className="h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none transition focus:outline-none focus:ring-2 focus:ring-[#5355D6]/50 focus:ring-offset-2 focus:ring-offset-[#030308]"
             />
           </label>
 
-          <label className="space-y-2 text-sm font-semibold text-foreground">
+          <label className="space-y-2 text-sm font-semibold text-white/80">
             Password
             <input
               type="password"
@@ -132,46 +133,46 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
-              className="h-11 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none transition focus:outline-none focus:ring-2 focus:ring-[#5355D6]/50 focus:ring-offset-2 focus:ring-offset-[#030308]"
             />
           </label>
 
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-white/40 cursor-pointer">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-input bg-background text-primary focus:ring-ring focus:ring-offset-0"
+                className="h-4 w-4 rounded border-white/10 bg-white/[0.03] text-[#5355D6] focus:ring-[#5355D6]/50 focus:ring-offset-0"
               />
               Remember me
             </label>
             <button
               type="button"
               onClick={() => navigate("/forgot-password")}
-              className="text-sm text-primary underline hover:brightness-125"
+              className="text-sm text-[#5355D6] underline hover:brightness-125"
             >
               Forgot password?
             </button>
           </div>
         </div>
 
-        {error && <p className="text-xs font-semibold text-destructive">{error}</p>}
+        {error && <p className="text-xs font-semibold text-[#DC3545]">{error}</p>}
 
         {emailNotVerified && (
           <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm">
             <p className="font-semibold text-yellow-600">Email not verified</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-white/40">
               Please check your inbox and click the verification link before logging in.
             </p>
             {verificationResent ? (
-              <p className="mt-2 text-xs font-medium text-green-600">✓ Verification email resent!</p>
+              <p className="mt-2 text-xs font-medium text-[#2A8F7A]">✓ Verification email resent!</p>
             ) : (
               <button
                 type="button"
                 onClick={handleResendVerification}
                 disabled={resendingVerification}
-                className="mt-2 text-xs font-semibold text-primary underline hover:brightness-125 disabled:opacity-50"
+                className="mt-2 text-xs font-semibold text-[#5355D6] underline hover:brightness-125 disabled:opacity-50"
               >
                 {resendingVerification ? "Sending..." : "Resend verification email"}
               </button>
@@ -182,7 +183,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-2xl bg-[#5355D6] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading
             ? "Signing in..."
@@ -193,10 +194,10 @@ export default function LoginPage() {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
+            <span className="w-full border-t border-white/10" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            <span className="bg-[#030308] px-2 text-white/40">Or continue with</span>
           </div>
         </div>
 
@@ -204,7 +205,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={loadingGoogle}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-input bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-accent disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/[0.06] disabled:opacity-50"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -215,9 +216,9 @@ export default function LoginPage() {
           {loadingGoogle ? "Connecting..." : "Google"}
         </button>
 
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="text-center text-xs text-white/40">
           Need an account?{" "}
-          <button type="button" onClick={() => navigate("/signup")} className="text-primary underline">
+          <button type="button" onClick={() => navigate("/signup")} className="text-[#5355D6] underline">
             Create one
           </button>
           .

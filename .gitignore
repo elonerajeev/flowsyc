@@ -5,7 +5,9 @@
 
 # Environment files
 *.env
+*.env.*
 !.env.example
+!backend/.env.example
 
 # Auth/secret files
 /frontend/.htpasswd

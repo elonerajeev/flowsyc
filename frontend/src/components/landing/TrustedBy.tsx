@@ -76,13 +76,13 @@ const brands = [
 
 export default function TrustedBy() {
   return (
-    <section className="relative bg-[#030308] px-4 py-14 sm:py-20">
+    <section className="relative bg-background px-4 py-14 sm:py-20">
       {/* top/bottom fade lines */}
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
       <div className="mx-auto max-w-6xl">
-        <p className="mb-10 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-white/20">
+        <p className="mb-10 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           Integrates with tools your team already uses
         </p>
 

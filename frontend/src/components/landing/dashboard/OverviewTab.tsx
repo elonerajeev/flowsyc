@@ -15,9 +15,9 @@ const stats = [
 const Tip = ({ active, payload }: { active?: boolean; payload?: { name: string; value: number }[] }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-xs shadow-xl">
-      <p className="text-white/40">{payload[0].name}</p>
-      <p className="font-semibold text-white">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-xl">
+      <p className="text-muted-foreground">{payload[0].name}</p>
+      <p className="font-semibold text-foreground">
         {payload[0].name === "revenue" || payload[0].name === "target"
           ? `$${(payload[0].value / 1000).toFixed(0)}k`
           : payload[0].value}
@@ -32,7 +32,7 @@ export default function OverviewTab() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+          <div key={s.label} className="rounded-xl border border-border/50 bg-muted/30 p-4">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${s.color}15` }}>
                 <s.icon className="h-4 w-4" style={{ color: s.color }} />
@@ -41,23 +41,23 @@ export default function OverviewTab() {
                 <ArrowUpRight className="h-3 w-3" />{s.change}
               </span>
             </div>
-            <p className="text-xl font-bold text-white">{s.value}</p>
-            <p className="mt-0.5 text-[10px] text-white/30">{s.label}</p>
+            <p className="text-xl font-bold text-foreground">{s.value}</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">{s.label}</p>
           </div>
         ))}
       </div>
 
       {/* Charts */}
       <div className="grid gap-4 sm:grid-cols-5">
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 sm:col-span-3">
+        <div className="rounded-xl border border-border/50 bg-muted/30 p-4 sm:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-white/50">Revenue vs Target</p>
-              <p className="mt-0.5 text-xl font-bold text-white">$192k <span className="text-xs font-normal text-[#2A8F7A]">+23.4%</span></p>
+              <p className="text-xs font-semibold text-muted-foreground">Revenue vs Target</p>
+              <p className="mt-0.5 text-xl font-bold text-foreground">$192k <span className="text-xs font-normal text-[#2A8F7A]">+23.4%</span></p>
             </div>
-            <div className="flex gap-3 text-[10px] text-white/30">
+            <div className="flex gap-3 text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#5355D6]" />Actual</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-white/20" />Target</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/10" />Target</span>
             </div>
           </div>
           <div className="h-40">
@@ -69,19 +69,19 @@ export default function OverviewTab() {
                     <stop offset="100%" stopColor="#5355D6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-                <XAxis dataKey="month" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.2)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: "rgba(255,255,255,0.2)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v / 1000}k`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.3)" />
+                <XAxis dataKey="month" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground) / 0.4)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground) / 0.4)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v / 1000}k`} />
                 <Tooltip content={<Tip />} />
                 <Area type="monotone" dataKey="revenue" stroke="#5355D6" strokeWidth={2} fill="url(#rg)" name="revenue" />
-                <Area type="monotone" dataKey="target" stroke="rgba(255,255,255,0.15)" strokeWidth={1} strokeDasharray="4 4" fill="none" name="target" />
+                <Area type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground) / 0.2)" strokeWidth={1} strokeDasharray="4 4" fill="none" name="target" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 sm:col-span-2">
-          <p className="mb-3 text-xs font-semibold text-white/50">Pipeline Stages</p>
+        <div className="rounded-xl border border-border/50 bg-muted/30 p-4 sm:col-span-2">
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">Pipeline Stages</p>
           <div className="flex items-center gap-3">
             <div className="h-36 flex-1">
               <ResponsiveContainer width="100%" height="100%">
@@ -96,8 +96,8 @@ export default function OverviewTab() {
               {pipelineData.map((d) => (
                 <div key={d.name} className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-[10px] text-white/40">{d.name}</span>
-                  <span className="text-[10px] font-bold text-white/70">{d.value}%</span>
+                  <span className="text-[10px] text-muted-foreground">{d.name}</span>
+                  <span className="text-[10px] font-bold text-foreground/70">{d.value}%</span>
                 </div>
               ))}
             </div>
@@ -107,33 +107,33 @@ export default function OverviewTab() {
 
       {/* Activity + Bar */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 sm:col-span-2">
-          <p className="mb-3 text-xs font-semibold text-white/50">Live Activity</p>
+        <div className="rounded-xl border border-border/50 bg-muted/30 p-4 sm:col-span-2">
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">Live Activity</p>
           <div className="space-y-2">
             {activityFeed.map((a) => (
-              <div key={a.text} className="flex items-center justify-between rounded-lg border border-white/[0.03] bg-white/[0.01] px-3 py-2">
+              <div key={a.text} className="flex items-center justify-between rounded-lg border border-border/30 bg-muted/20 px-3 py-2">
                 <div className="flex items-center gap-2.5">
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: a.badgeColor }} />
                   <div>
-                    <p className="text-[11px] text-white/50">{a.text}</p>
-                    {a.amount && <p className="text-[10px] text-white/25">{a.amount}</p>}
+                    <p className="text-[11px] text-muted-foreground">{a.text}</p>
+                    {a.amount && <p className="text-[10px] text-muted-foreground/60">{a.amount}</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold" style={{ backgroundColor: `${a.badgeColor}15`, color: a.badgeColor }}>{a.badge}</span>
-                  <span className="hidden text-[9px] text-white/15 sm:block">{a.time}</span>
+                  <span className="hidden text-[9px] text-muted-foreground/30 sm:block">{a.time}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-          <p className="mb-3 text-xs font-semibold text-white/50">Deals by Source</p>
+        <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">Deals by Source</p>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dealsBySource} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.2)" }} axisLine={false} tickLine={false} />
-                <YAxis dataKey="source" type="category" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.4)" }} axisLine={false} tickLine={false} width={48} />
+                <XAxis type="number" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground) / 0.4)" }} axisLine={false} tickLine={false} />
+                <YAxis dataKey="source" type="category" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground) / 0.6)" }} axisLine={false} tickLine={false} width={48} />
                 <Tooltip content={<Tip />} />
                 <Bar dataKey="deals" radius={[0, 4, 4, 0]} barSize={14}>
                   {dealsBySource.map((e, i) => <Cell key={i} fill={e.color} />)}
