@@ -71,19 +71,19 @@ const avatarGradients: Record<string, string> = {
 
 export default function Testimonials() {
   return (
-    <section id="testimonials" className="bg-[#030308] px-4 py-20 sm:py-28">
+    <section id="testimonials" className="bg-background px-4 py-16 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="mb-14 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Testimonials
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             Loved by{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               Teams Worldwide
             </span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">
             Real stories from teams that replaced multiple tools with Flowsyc.
           </p>
         </div>
@@ -92,7 +92,7 @@ export default function Testimonials() {
           {testimonials.map((t) => (
             <div
               key={t.name}
-              className="group overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 transition-all duration-300 hover:border-white/10 hover:bg-white/[0.04]"
+              className="group overflow-hidden rounded-2xl border border-border/80 bg-muted/30 p-6 transition-all duration-300 hover:border-border hover:bg-muted/60"
             >
               <Quote className="mb-3 h-5 w-5 opacity-20" style={{ color: t.color }} />
 
@@ -102,7 +102,7 @@ export default function Testimonials() {
                 ))}
               </div>
 
-              <p className="mb-5 text-sm leading-relaxed text-white/60">"{t.quote}"</p>
+              <p className="mb-5 text-sm leading-relaxed text-muted-foreground">"{t.quote}"</p>
 
               <div className="flex items-center gap-3">
                 <div
@@ -111,15 +111,15 @@ export default function Testimonials() {
                   {t.avatar}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white/80">{t.name}</p>
-                  <p className="text-xs text-white/30">{t.role} · {t.company}</p>
+                  <p className="text-sm font-semibold text-foreground/80">{t.name}</p>
+                  <p className="text-xs text-muted-foreground">{t.role} · {t.company}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-8 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-8 py-6">
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-4 sm:gap-8 rounded-2xl border border-border/80 bg-muted/30 px-4 sm:px-8 py-6">
           {[
             { value: "4.9/5", label: "Average Rating" },
             { value: "500+", label: "Teams Onboarded" },
@@ -127,8 +127,8 @@ export default function Testimonials() {
             { value: "< 1 day", label: "Avg. Onboarding" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
-              <p className="text-2xl font-bold text-white">{stat.value}</p>
-              <p className="mt-1 text-xs text-white/35">{stat.label}</p>
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{stat.label}</p>
             </div>
           ))}
         </div>

@@ -28,8 +28,8 @@ const footerLinks = {
   Support: [
     { label: "Get Started", path: "/signup" },
     { label: "Log In", path: "/login" },
-    { label: "Privacy Policy", path: "#" },
-    { label: "Terms of Service", path: "#" },
+    { label: "Privacy Policy", path: "/privacy" },
+    { label: "Terms of Service", path: "/terms" },
   ],
 };
 
@@ -38,7 +38,7 @@ const socials = [
     label: "Twitter",
     href: "https://twitter.com/elonerajeev",
     icon: (<svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>),
-    color: "hover:text-white hover:bg-white/10",
+    color: "hover:text-foreground hover:bg-muted/90",
   },
   {
     label: "LinkedIn",
@@ -50,7 +50,7 @@ const socials = [
     label: "GitHub",
     href: "https://github.com/elonerajeev/flowsyc",
     icon: (<svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 2.27-.322 1.265 0 2.27.322 2.27.322.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg>),
-    color: "hover:text-white hover:bg-white/10",
+    color: "hover:text-foreground hover:bg-muted/90",
   },
 ];
 
@@ -83,18 +83,18 @@ export default function LandingFooter() {
   };
 
   return (
-    <footer className="bg-[#030308]">
+    <footer className="bg-background">
       {/* Newsletter Section */}
-      <div className="border-b border-white/5">
+      <div className="border-b border-border/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-[#5355D6]/20 bg-[#5355D6]/10">
               <Mail className="h-5 w-5 text-[#5355D6]" />
             </div>
-            <h3 className="text-2xl font-bold text-white sm:text-3xl">
+            <h3 className="text-2xl font-bold text-foreground sm:text-3xl">
               Stay Updated with Flowsyc
             </h3>
-            <p className="mt-3 text-sm text-white/40 sm:text-base">
+            <p className="mt-3 text-sm text-muted-foreground sm:text-base">
               Get product updates, tips, and industry insights delivered to your inbox. No spam, ever.
             </p>
             {subscribed ? (
@@ -111,7 +111,7 @@ export default function LandingFooter() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
-                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-white placeholder:text-white/25 focus:border-[#5355D6]/50 focus:outline-none focus:ring-1 focus:ring-[#5355D6]/20 sm:max-w-xs"
+                  className="flex-1 rounded-xl border border-border bg-muted/50 px-5 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-[#5355D6]/50 focus:outline-none focus:ring-1 focus:ring-[#5355D6]/20 sm:max-w-xs"
                   required
                   disabled={subscribing}
                 />
@@ -122,7 +122,7 @@ export default function LandingFooter() {
                 >
                   {subscribing ? (
                     <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/60 border-t-foreground" />
                       Subscribing...
                     </>
                   ) : (
@@ -135,7 +135,7 @@ export default function LandingFooter() {
               </form>
             )}
             {!subscribed && (
-              <p className="mt-3 text-[10px] text-white/20">
+              <p className="mt-3 text-[10px] text-muted-foreground/40">
                 By subscribing, you agree to our Privacy Policy. Unsubscribe anytime.
               </p>
             )}
@@ -145,7 +145,7 @@ export default function LandingFooter() {
 
       {/* Main Footer */}
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-8 sm:gap-12 sm:grid-cols-2 lg:grid-cols-6">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <button
@@ -153,9 +153,9 @@ export default function LandingFooter() {
               className="flex items-center gap-2.5"
             >
               <img src="/logo.svg" alt="Flowsyc" className="h-8 w-8" />
-              <span className="text-xl font-bold tracking-tight text-white">Flowsyc</span>
+              <span className="text-xl font-bold tracking-tight text-foreground">Flowsyc</span>
             </button>
-            <p className="mt-4 text-sm leading-relaxed text-white/35">
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
               Enterprise CRM platform for modern businesses. Manage clients, leads, deals, projects, tasks, invoices, HR & analytics — all in one place.
             </p>
             {/* Social Links */}
@@ -167,7 +167,7 @@ export default function LandingFooter() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={social.label}
-                  className={`rounded-lg p-2.5 text-white/25 transition-all ${social.color}`}
+                  className={`rounded-lg p-2.5 text-muted-foreground/60 transition-all ${social.color}`}
                 >
                   {social.icon}
                 </a>
@@ -178,18 +178,18 @@ export default function LandingFooter() {
           {/* Link Columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {category}
               </h4>
               <ul className="space-y-3">
                 {links.map((link) => (
                   <li key={link.label}>
                     {"external" in link && link.external ? (
-                      <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-sm text-white/35 transition-colors hover:text-white/70">
+                      <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground transition-colors hover:text-foreground/70">
                         {link.label} ↗
                       </a>
                     ) : (
-                      <button onClick={() => handleFooterClick(link)} className="text-sm text-white/35 transition-colors hover:text-white/70">
+                      <button onClick={() => handleFooterClick(link)} className="text-sm text-muted-foreground transition-colors hover:text-foreground/70">
                         {link.label}
                       </button>
                     )}
@@ -202,22 +202,22 @@ export default function LandingFooter() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-white/5">
+      <div className="border-t border-border/40">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <p className="text-xs text-white/25">
+            <p className="text-xs text-muted-foreground/60">
               © 2026 Flowsyc. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
-              <a href="#" className="text-xs text-white/25 transition-colors hover:text-white/50">
+              <button onClick={() => navigate("/privacy")} className="text-xs text-muted-foreground/60 transition-colors hover:text-foreground/50">
                 Privacy Policy
-              </a>
-              <a href="#" className="text-xs text-white/25 transition-colors hover:text-white/50">
+              </button>
+              <button onClick={() => navigate("/terms")} className="text-xs text-muted-foreground/60 transition-colors hover:text-foreground/50">
                 Terms of Service
-              </a>
-              <a href="#" className="text-xs text-white/25 transition-colors hover:text-white/50">
+              </button>
+              <button onClick={() => navigate("/privacy")} className="text-xs text-muted-foreground/60 transition-colors hover:text-foreground/50">
                 Cookies
-              </a>
+              </button>
             </div>
           </div>
         </div>

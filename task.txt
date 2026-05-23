@@ -1,13 +1,62 @@
-1. why this routes get slowed to load check and fix if have any dead thinsg and make it fast while 
-keepign all functi and main thiungs "http://localhost:8080/hr/candidates"
-
-2. in teh app some of the page have this text button "Refresh List", instead of just Refresh List button 
-without "" (quotes) check in app and make it fix. also make sute this button reayy wokring well and functional on al page ()where have implemnetd)
-
-3. when i try to comeon this "Section HR in Employees" then it automatic go on this "Section People Members" why fix this now and ensure all routes pointing correct 
-
-4. this page look very messy "http://localhost:8080/system/settings" so clean it and keepig main things and important things , aldo why this is here "Google Calendar
-
-Connect to create real Google Meet links for meetings", keep thi sin seeting intergation page
-
-5.  
+┌─────────────────────────────────────────────────────────────────┐
+│  👨‍💻 DEVELOPER                                                   │
+│  git push → main branch                                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚙️  GITHUB ACTIONS PIPELINE STARTS                             │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                ┌────────────┴────────────┐
+                │   STAGE 1: BUILD        │
+                │   • Checkout code       │
+                │   • Run unit tests      │
+                │   • Build Docker image  │
+                └────────────┬────────────┘
+                             │
+                             ▼
+                ┌────────────────────────────┐
+                │   STAGE 2: DEPLOY          │
+                │   • SSH to EC2             │
+                │   • Pull latest code       │
+                │   • Restart services       │
+                │   • Wait 30 seconds        │
+                └────────────┬───────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  🔍 STAGE 3: HEALTH CHECK (python __test__/healthall.py)        │
+│                                                                  │
+│  Tests run in PARALLEL:                                          │
+│  ┌──────────────────────────────────────────────────────┐        │
+│  │  ✓ MySQL Connection      (SELECT 1)                   │      │
+│  │  ✓ Postgres Connection   (SELECT 1)                   │      │
+│  │  ✓ Google Docs API       (test doc read)              │      │
+│  │  ✓ Airbyte API           (health endpoint)            │      │
+│  │  ✓ Claude API            (test message)               │      │
+│  │  ✓ API Server            (GET /)                      │      │
+│  │  ✓ End-to-End Flow       (POST /chat with test query) │      │
+│  └──────────────────────────────────────────────────────┘       │
+│                                                                 │
+│  Uses GitHub Secrets (not in code):                             │
+│  • MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD                       │
+│  • POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD              │
+│  • CLAUDE_API_KEY, GOOGLE_CREDENTIALS_JSON                      │
+│  • AIRBYTE_HOST, AIRBYTE_API_KEY                                │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+        ┌──────────────┐        ┌──────────────┐
+        │  ✅ ALL PASS │        │  ❌ ANY FAIL│
+        └──────┬───────┘        └──────┬───────┘
+               │                       │
+               ▼                       ▼
+    ┌─────────────────────┐  ┌─────────────────────┐
+    │  🎉 SUCCESS         │ │  🚨 FAILURE       │
+    │  • Exit code: 0     │  │  • Exit code: 1     │
+    │  • Slack: ✅ Success│  │  • Rollback deploy  │
+    │  • Keep deployment  │  │  • Slack: ❌ Failed │
+    └─────────────────────┘  └─────────────────────┘

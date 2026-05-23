@@ -99,8 +99,8 @@ export function useLoadingProgress() {
     setProgress({ ...config, progress: 0 });
   };
 
-  const updateProgress = (value: number) => {
-    setProgress(prev => prev ? { ...prev, progress: value } : null);
+  const updateProgress = (value: number, message?: string) => {
+    setProgress(prev => prev ? { ...prev, progress: value, ...(message ? { message } : {}) } : null);
   };
 
   const endProgress = () => {

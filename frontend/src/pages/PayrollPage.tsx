@@ -6,12 +6,15 @@ import {
   CircleDollarSign,
   Clock3,
   HandCoins,
+  Loader2,
   ReceiptText,
   Search,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import PageLoader from "@/components/shared/PageLoader";
 import ErrorFallback from "@/components/shared/ErrorFallback";
@@ -124,15 +127,17 @@ export default function PayrollPage() {
     return records.find((record) => record.id === selectedId) ?? records[0] ?? null;
   }, [canManagePayroll, currentUserRecord, records, selectedId]);
 
-  const markPaid = async (recordId: number) => {
-    if (!canManagePayroll) return;
-    try {
-      await crmService.updatePayrollStatus(recordId, "paid");
-      refetchPayroll();
-    } catch (error) {
-      console.error("Failed to mark as paid:", error);
-    }
-  };
+  const markPaidMutation = useMutation({
+    mutationFn: (recordId: number) => crmService.updatePayrollStatus(recordId, "paid"),
+    onSuccess: async () => {
+      await refetchPayroll();
+      toast.success("Payroll status updated to paid.");
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Failed to update payroll status";
+      toast.error(message);
+    },
+  });
 
   if (isLoading) {
     return <PageLoader />;
@@ -349,10 +354,14 @@ export default function PayrollPage() {
               {canManagePayroll && selectedRecord.status !== "paid" && (
                 <button
                   type="button"
-                  onClick={() => markPaid(selectedRecord.id)}
-                  className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                  onClick={() => markPaidMutation.mutate(selectedRecord.id)}
+                  disabled={markPaidMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Mark paid
+                  {markPaidMutation.isPending && markPaidMutation.variables === selectedRecord.id && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {markPaidMutation.isPending && markPaidMutation.variables === selectedRecord.id ? "Marking paid..." : "Mark paid"}
                 </button>
               )}
               <span className={cn("rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]", statusTone[selectedRecord.status])}>

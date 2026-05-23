@@ -62,8 +62,8 @@ const integrations = [
     name: "GitHub",
     description: "Link commits, PRs, and issues to projects and tasks for full dev-to-delivery visibility.",
     badge: "Active",
-    badgeColor: "text-white/40 bg-white/5",
-    borderHover: "hover:border-white/10",
+    badgeColor: "text-muted-foreground bg-muted/40",
+    borderHover: "hover:border-border",
     glowColor: "rgba(255,255,255,0.04)",
     logo: (
       <svg viewBox="0 0 24 24" className="h-7 w-7" fill="white">
@@ -88,20 +88,20 @@ const integrations = [
 
 export default function Integrations() {
   return (
-    <section id="integrations" className="bg-[#030308] px-4 py-20 sm:py-28">
+    <section id="integrations" className="bg-background px-4 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-14 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Integrations
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             Connect Your{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               Existing Tools
             </span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35 sm:text-lg">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
             Flowsyc plugs into the tools your team already uses — no workflow disruption, just more power.
           </p>
         </div>
@@ -111,7 +111,7 @@ export default function Integrations() {
           {integrations.map((item) => (
             <div
               key={item.name}
-              className={`group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 transition-all duration-300 ${item.borderHover}`}
+              className={`group relative overflow-hidden rounded-2xl border border-border/80 bg-muted/30 p-6 transition-all duration-300 ${item.borderHover}`}
               style={{ "--glow": item.glowColor } as React.CSSProperties}
             >
               {/* hover glow */}
@@ -121,7 +121,7 @@ export default function Integrations() {
               />
 
               <div className="relative flex items-start justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] transition-all duration-300 group-hover:scale-110 group-hover:border-white/15">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50 transition-all duration-300 group-hover:scale-110 group-hover:border-border">
                   {item.logo}
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[9px] font-semibold ${item.badgeColor}`}>
@@ -131,17 +131,17 @@ export default function Integrations() {
 
               <div className="relative mt-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-white/90">{item.name}</h3>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-white/20 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white/50" />
+                  <h3 className="text-base font-semibold text-foreground/90">{item.name}</h3>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground/50" />
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-white/35">{item.description}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Bottom note */}
-        <p className="mt-10 text-center text-xs text-white/25">
+        <p className="mt-10 text-center text-xs text-muted-foreground/60">
           More integrations coming soon — Zapier, HubSpot, Salesforce, Jira, and more.
         </p>
       </div>

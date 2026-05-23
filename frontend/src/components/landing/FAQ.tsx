@@ -38,13 +38,13 @@ const faqs = [
 
 export default function FAQ() {
   return (
-    <section id="faq" className="bg-[#030308] px-4 py-20 sm:py-28">
+    <section id="faq" className="bg-background px-4 py-20 sm:py-28">
       <div className="mx-auto max-w-3xl">
         <div className="mb-12 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             FAQ
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Frequently Asked{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               Questions
@@ -66,22 +66,22 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] transition-all duration-300 hover:border-white/10">
+    <div className="overflow-hidden rounded-xl border border-border/80 bg-muted/30 transition-all duration-300 hover:border-border">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
       >
-        <span className="text-sm font-semibold text-white/80">{question}</span>
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] transition-all">
+        <span className="text-sm font-semibold text-foreground/80">{question}</span>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/50 transition-all">
           {isOpen ? (
-            <Minus className="h-3.5 w-3.5 text-white/40" />
+            <Minus className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
-            <Plus className="h-3.5 w-3.5 text-white/40" />
+            <Plus className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </span>
       </button>
       {isOpen && (
-        <p className="px-6 pb-5 text-sm leading-relaxed text-white/40">{answer}</p>
+        <p className="px-6 pb-5 text-sm leading-relaxed text-muted-foreground">{answer}</p>
       )}
     </div>
   );

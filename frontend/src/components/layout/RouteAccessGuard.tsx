@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { isRemoteApiEnabled } from "@/lib/api-client";
 import { getAccessiblePathForRole, getAllowedRolesForPath } from "./sidebarConfig";
+import { getAllowedDevOpsRolesForPath } from "./devopsConfig";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ export default function RouteAccessGuard({ children }: RouteAccessGuardProps) {
     return <Navigate to="/login" replace />;
   }
 
-  const allowedRoles = getAllowedRolesForPath(location.pathname);
+  const allowedRoles = getAllowedRolesForPath(location.pathname) ?? getAllowedDevOpsRolesForPath(location.pathname);
 
   if (!allowedRoles) {
     return <Navigate to={getAccessiblePathForRole(effectiveRole)} replace />;

@@ -62,43 +62,46 @@ export default function Pricing() {
   const [isAnnual, setIsAnnual] = useState(false);
 
   return (
-    <section id="pricing" className="bg-[#0A0F1A] px-4 py-20 sm:py-28">
+    <section id="pricing" className="bg-background px-4 py-16 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Pricing
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             Simple,{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               Transparent
             </span>{" "}
             Pricing
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35 sm:text-lg">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
             Start free, scale as you grow. No hidden fees, no surprises.
           </p>
 
           {/* Annual/Monthly Toggle */}
           <div className="mt-8 flex items-center justify-center gap-3">
-            <span className={`text-sm ${!isAnnual ? "text-white" : "text-white/40"}`}>Monthly</span>
+            <span className={`text-sm transition-all duration-300 ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
             <button
               onClick={() => setIsAnnual(!isAnnual)}
-              className={`relative h-7 w-12 rounded-full transition-colors ${isAnnual ? "bg-[#5355D6]" : "bg-white/15"}`}
+              className={`relative h-7 w-12 rounded-full transition-all duration-300 ${isAnnual ? "bg-[#5355D6]" : "bg-muted-foreground/20"}`}
               aria-label="Toggle annual pricing"
             >
               <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${isAnnual ? "translate-x-5" : "translate-x-0.5"}`}
+                className="absolute top-0.5 h-6 w-6 rounded-full bg-primary-foreground shadow transition-all duration-300 ease-out"
+                style={{ left: isAnnual ? "22px" : "2px" }}
               />
             </button>
-            <span className={`text-sm ${isAnnual ? "text-white" : "text-white/40"}`}>
+            <span className={`text-sm transition-all duration-300 ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
               Annual
             </span>
-            {isAnnual && (
-              <span className="rounded-full bg-[#2A8F7A]/15 px-2.5 py-0.5 text-[10px] font-semibold text-[#2A8F7A]">
-                Save 20%
-              </span>
-            )}
+            <span
+              className={`rounded-full bg-[#2A8F7A]/15 px-2.5 py-0.5 text-[10px] font-semibold text-[#2A8F7A] transition-all duration-300 ${
+                isAnnual ? "scale-100 opacity-100" : "scale-75 opacity-0 pointer-events-none"
+              }`}
+            >
+              Save 20%
+            </span>
           </div>
         </div>
 
@@ -106,10 +109,10 @@ export default function Pricing() {
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`group relative overflow-hidden rounded-2xl border p-8 transition-all duration-300 ${
+              className={`group relative overflow-hidden rounded-2xl border p-6 sm:p-8 transition-all duration-300 ${
                 plan.popular
                   ? "border-[#5355D6]/30 bg-[#5355D6]/5"
-                  : "border-white/[0.06] bg-white/[0.02] hover:border-white/10"
+                  : "border-border bg-muted/30 hover:border-border"
               }`}
             >
               {plan.popular && (
@@ -123,36 +126,48 @@ export default function Pricing() {
                 </>
               )}
 
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.14em] text-white/40">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {plan.name}
               </p>
 
               <div className="mb-4 flex items-baseline gap-1">
                 {plan.price === "Custom" ? (
-                  <span className="text-5xl font-bold tracking-tight text-white">Custom</span>
+                  <span className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">Custom</span>
                 ) : (
                   <>
-                    <span className="text-5xl font-bold tracking-tight text-white">
-                      ${isAnnual && plan.annualPrice !== "Custom" ? plan.annualPrice : plan.price}
+                    <span className="inline-block text-4xl sm:text-5xl font-bold tracking-tight text-foreground min-w-[4rem]">
+                      <span
+                        key={isAnnual ? "annual" : "monthly"}
+                        className="inline-block animate-in fade-in slide-in-from-bottom-1 duration-300"
+                      >
+                        ${isAnnual ? plan.annualPrice : plan.price}
+                      </span>
                     </span>
-                    <span className="text-sm text-white/35">/month</span>
+                    <span className="text-sm text-muted-foreground">/month</span>
                   </>
                 )}
               </div>
 
-              {isAnnual && plan.price !== "0" && plan.price !== "Custom" && (
-                <p className="mb-2 text-xs text-[#2A8F7A]">
-                  Billed annually (${parseInt(plan.annualPrice) * 12}/year)
+              <div className="relative h-5">
+                <p
+                  key={isAnnual ? "show-billed" : "hide-billed"}
+                  className={`text-xs text-[#2A8F7A] transition-all duration-300 ${
+                    isAnnual && plan.price !== "0" && plan.price !== "Custom"
+                      ? "translate-y-0 opacity-100"
+                      : "translate-y-1 opacity-0 pointer-events-none"
+                  }`}
+                >
+                  Billed annually (${isAnnual && plan.annualPrice !== "Custom" ? parseInt(plan.annualPrice) * 12 : 0}/year)
                 </p>
-              )}
+              </div>
 
-              <p className="mb-8 text-sm text-white/40">{plan.description}</p>
+              <p className="mb-8 text-sm text-muted-foreground">{plan.description}</p>
 
               <ul className="mb-8 space-y-3">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-center gap-3">
+                  <li key={feature} className="flex items-center gap-2 sm:gap-3">
                     <Check className="h-4 w-4 shrink-0 text-[#2A8F7A]" />
-                    <span className="text-sm text-white/60">{feature}</span>
+                    <span className="text-sm text-muted-foreground">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -162,7 +177,7 @@ export default function Pricing() {
                 className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all ${
                   plan.popular
                     ? "bg-[#5355D6] text-white shadow-lg shadow-[#5355D6]/20 hover:bg-[#5355D6]/90"
-                    : "border border-white/10 bg-white/[0.03] text-white/80 hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                    : "border-border bg-muted/50 text-foreground/80 hover:border-border hover:bg-muted/80 hover:text-foreground"
                 }`}
               >
                 {plan.cta}
@@ -173,7 +188,7 @@ export default function Pricing() {
         </div>
 
         {/* Risk reversal */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-white/30">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <svg className="h-4 w-4 text-[#2A8F7A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />

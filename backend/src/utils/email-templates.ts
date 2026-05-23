@@ -3,6 +3,64 @@ import { sendMail } from "./mailer";
 import { logger } from "./logger";
 
 const APP_NAME = "Flowsyc";
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:8080";
+
+// ─── Shared branded email layout ────────────────────────────────────────────
+function emailLayout(content: string, footerNote?: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <!-- HEADER -->
+  <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
+    <img src="https://flowsyc-svuj.vercel.app/flowsyc-logo.png" alt="Flowsyc" width="56" height="56" style="border-radius:12px;display:block;margin:0 auto 12px;" />
+    <div style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;margin-bottom:4px;">Flowsyc</div>
+    <div style="font-size:11px;color:#94a3b8;letter-spacing:2.5px;text-transform:uppercase;">Enterprise CRM Platform</div>
+  </td></tr>
+  <!-- BODY -->
+  <tr><td style="background:#ffffff;padding:40px 40px 32px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+    ${content}
+  </td></tr>
+  <!-- FOOTER -->
+  <tr><td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 16px 16px;padding:24px 40px;text-align:center;">
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">${footerNote ?? `This email was sent by <strong>${APP_NAME}</strong>. If you have questions, reply to this email.`}</p>
+    <p style="margin:0 0 16px;font-size:12px;color:#94a3b8;">© ${new Date().getFullYear()} ${APP_NAME} · Enterprise CRM Platform</p>
+    <a href="${FRONTEND_URL}/login" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;">Open ${APP_NAME}</a>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+
+function ctaButton(label: string, url: string, color = "linear-gradient(135deg,#6366f1,#8b5cf6)"): string {
+  return `<p style="margin:28px 0 0;text-align:center;"><a href="${url}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:700;">${label}</a></p>`;
+}
+
+function infoTable(rows: { label: string; value: string; highlight?: boolean }[]): string {
+  const rowsHtml = rows.map(r => `<tr>
+    <td style="padding:10px 16px;font-size:13px;color:#64748b;font-weight:600;white-space:nowrap;border-bottom:1px solid #f1f5f9;">${r.label}</td>
+    <td style="padding:10px 16px;font-size:14px;color:${r.highlight ? "#6366f1" : "#1e293b"};font-weight:${r.highlight ? "700" : "400"};border-bottom:1px solid #f1f5f9;">${r.value}</td>
+  </tr>`).join("");
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin:20px 0;">${rowsHtml}</table>`;
+}
+
+function alertBox(text: string, type: "info" | "warning" | "success" | "danger" = "info"): string {
+  const map = { info: ["#eff6ff", "#3b82f6"], warning: ["#fffbeb", "#f59e0b"], success: ["#f0fdf4", "#22c55e"], danger: ["#fef2f2", "#ef4444"] };
+  const [bg, border] = map[type];
+  return `<div style="background:${bg};border-left:4px solid ${border};border-radius:0 8px 8px 0;padding:14px 18px;margin:20px 0;font-size:14px;color:#1e293b;">${text}</div>`;
+}
+
+function hi(name: string): string {
+  return `<p style="font-size:16px;color:#1e293b;margin:0 0 16px;">Hi <strong>${name}</strong>,</p>`;
+}
+
+function sig(): string {
+  return `<p style="margin:32px 0 0;font-size:14px;color:#64748b;border-top:1px solid #f1f5f9;padding-top:20px;">Warm regards,<br/><strong style="color:#1e293b;">The ${APP_NAME} Team</strong></p>`;
+}
 
 function generateSalarySlipPDF(salary: { name: string; period: string; baseSalary: number; allowances: number; deductions: number; netPay: number; paidAt: Date }) {
   const doc = new PDFDocument();
@@ -117,125 +175,95 @@ export const emailTemplates = {
     return {
       to: user.email,
       subject: `Welcome to ${APP_NAME}!`,
-      text: `Hello ${user.name},\n\nWelcome to ${APP_NAME}! Your account has been created with the role of ${user.role}.\n\nYou can now log in and start managing your CRM workflow.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Welcome to ${APP_NAME}!</h2>
-          <p>Hello ${user.name},</p>
-          <p>Your account has been created successfully.</p>
-          <table style="margin: 16px 0; border-collapse: collapse;">
-            <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Email</td><td>${user.email}</td></tr>
-            <tr><td style="padding: 6px 12px 6px 0; font-weight: 600;">Role</td><td style="text-transform: capitalize;">${user.role}</td></tr>
-          </table>
-          <p>You can now log in and start managing your CRM workflow.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
+      text: `Hello ${user.name},\n\nWelcome to ${APP_NAME}! Your account has been created with the role of ${user.role}.\n\nLogin at: ${FRONTEND_URL}/login\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Welcome to ${APP_NAME}! 🎉</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">Your account is ready. Here's what you need to get started.</p>
+        ${hi(user.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Your account has been created successfully. You can now log in and start managing your CRM workflow.</p>
+        ${infoTable([
+          { label: "Email", value: user.email },
+          { label: "Role", value: user.role.charAt(0).toUpperCase() + user.role.slice(1), highlight: true },
+        ])}
+        ${ctaButton("Log In to " + APP_NAME, `${FRONTEND_URL}/login`)}
+        ${sig()}
+      `),
     };
   },
 
   invoiceReminder(invoice: { id: string; client: string; amount: string; due: string }, recipientEmail: string) {
     return {
       to: recipientEmail,
-      subject: `Invoice Reminder: ${invoice.id} - ${invoice.amount} due ${invoice.due}`,
-      text: `Hello,\n\nThis is a reminder that invoice ${invoice.id} for ${invoice.amount} is due on ${invoice.due}.\n\nClient: ${invoice.client}\nAmount: ${invoice.amount}\nDue Date: ${invoice.due}\n\nPlease ensure timely payment.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Invoice Reminder</h2>
-          <p>Hello,</p>
-          <p>This is a reminder about an upcoming invoice payment.</p>
-          <table style="margin: 16px 0; border-collapse: collapse; border: 1px solid #e5e7eb;">
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Invoice ID</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${invoice.id}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Client</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${invoice.client}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Amount</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb; color: #059669; font-weight: 600;">${invoice.amount}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600;">Due Date</td><td style="padding: 8px 16px; color: #dc2626; font-weight: 600;">${invoice.due}</td></tr>
-          </table>
-          <p>Please ensure timely payment to avoid any service interruptions.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
+      subject: `Invoice Reminder: ${invoice.id} — ${invoice.amount} due ${invoice.due}`,
+      text: `Invoice ${invoice.id} for ${invoice.amount} is due on ${invoice.due}.\n\nClient: ${invoice.client}\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Invoice Payment Reminder</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">A payment is due soon — please review the details below.</p>
+        ${alertBox("⏰ Payment due on <strong>" + invoice.due + "</strong>. Please ensure timely payment to avoid service interruptions.", "warning")}
+        ${infoTable([
+          { label: "Invoice ID", value: invoice.id },
+          { label: "Client", value: invoice.client },
+          { label: "Amount", value: invoice.amount, highlight: true },
+          { label: "Due Date", value: invoice.due },
+        ])}
+        ${ctaButton("View Invoice", `${FRONTEND_URL}/finance`, "linear-gradient(135deg,#f59e0b,#d97706)")}
+        ${sig()}
+      `),
     };
   },
 
   passwordReset(user: { name: string; email: string }, resetToken: string) {
-    const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:8080"}/reset-password?token=${resetToken}`;
+    const resetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
     return {
       to: user.email,
-      subject: `Password Reset - ${APP_NAME}`,
-      text: `Hello ${user.name},\n\nYou requested a password reset. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Password Reset</h2>
-          <p>Hello ${user.name},</p>
-          <p>You requested a password reset. Click the button below to reset your password:</p>
-          <p style="margin: 24px 0;">
-            <a href="${resetUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Reset Password</a>
-          </p>
-          <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour. If you didn't request this, please ignore this email.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
+      subject: `Reset Your Password — ${APP_NAME}`,
+      text: `Hello ${user.name},\n\nReset your password: ${resetUrl}\n\nExpires in 1 hour.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Reset Your Password</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">We received a request to reset your password.</p>
+        ${hi(user.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+        ${ctaButton("Reset Password", resetUrl, "linear-gradient(135deg,#ef4444,#dc2626)")}
+        ${alertBox("If you didn't request this, you can safely ignore this email. Your password won't change.", "info")}
+        ${sig()}
+      `, "If you didn't request a password reset, please ignore this email."),
     };
   },
 };
 
 export async function sendWelcomeEmail(user: { name: string; email: string; role: string }) {
   try {
-    const email = emailTemplates.welcome(user);
-    await sendMail(email);
+    await sendMail(emailTemplates.welcome(user));
   } catch (err) {
-    // Don't block signup if email fails
     logger.warn("Failed to send welcome email", { error: err instanceof Error ? err.message : String(err), email: user.email });
   }
 }
 
 export async function sendVerificationEmail(user: { name: string; email: string }, token: string) {
-  const verificationUrl = `${process.env.FRONTEND_URL ?? "http://localhost:8080"}/verify-email?token=${token}`;
+  const url = `${FRONTEND_URL}/verify-email?token=${token}`;
   try {
-    const email = {
+    await sendMail({
       to: user.email,
-      subject: `Verify Your Email - ${APP_NAME}`,
-      text: `Hello ${user.name},\n\nPlease verify your email by clicking the link below:\n\n${verificationUrl}\n\nThis link expires in 1 hour.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Verify Your Email</h2>
-          <p>Hello ${user.name},</p>
-          <p>Please verify your email address to complete your account setup.</p>
-          <p style="margin: 24px 0;">
-            <a href="${verificationUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Verify Email</a>
-          </p>
-          <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour. If you didn't create this account, please ignore this email.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+      subject: `Verify Your Email — ${APP_NAME}`,
+      text: `Hello ${user.name},\n\nVerify your email: ${url}\n\nExpires in 1 hour.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Verify Your Email Address</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">One quick step to activate your account.</p>
+        ${hi(user.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Please verify your email address to complete your ${APP_NAME} account setup. This link expires in <strong>1 hour</strong>.</p>
+        ${ctaButton("Verify Email Address", url, "linear-gradient(135deg,#22c55e,#16a34a)")}
+        ${alertBox("If you didn't create a ${APP_NAME} account, you can safely ignore this email.", "info")}
+        ${sig()}
+      `, "If you didn't create this account, please ignore this email."),
+    });
   } catch (err) {
     logger.warn("Failed to send verification email", { error: err instanceof Error ? err.message : String(err), email: user.email });
   }
 }
 
 export async function sendPasswordResetEmail(user: { name: string; email: string }, token: string) {
-  const resetUrl = `${process.env.FRONTEND_URL ?? "http://localhost:8080"}/reset-password?token=${token}`;
   try {
-    const email = {
-      to: user.email,
-      subject: `Password Reset - ${APP_NAME}`,
-      text: `Hello ${user.name},\n\nYou requested a password reset. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Password Reset</h2>
-          <p>Hello ${user.name},</p>
-          <p>You requested a password reset. Click the button below to reset your password:</p>
-          <p style="margin: 24px 0;">
-            <a href="${resetUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Reset Password</a>
-          </p>
-          <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour. If you didn't request this, please ignore this email.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+    await sendMail(emailTemplates.passwordReset(user, token));
   } catch (err) {
     logger.warn("Failed to send password reset email", { error: err instanceof Error ? err.message : String(err), email: user.email });
   }
@@ -248,29 +276,30 @@ export async function sendEmployeeInviteEmail(params: {
   inviterName?: string;
   organizationName?: string;
 }) {
-  const setupUrl = `${process.env.FRONTEND_URL ?? "http://localhost:8080"}/reset-password?token=${params.token}&mode=invite`;
-  const inviter = params.inviterName ? ` by ${params.inviterName}` : "";
-  const orgName = params.organizationName ? ` for ${params.organizationName}` : "";
+  const setupUrl = `${FRONTEND_URL}/reset-password?token=${params.token}&mode=invite`;
+  const inviter = params.inviterName ? params.inviterName : APP_NAME;
+  const orgName = params.organizationName ?? APP_NAME;
 
   try {
-    const email = {
+    await sendMail({
       to: params.email,
-      subject: `You're invited to ${APP_NAME}`,
-      text: `Hello ${params.name},\n\nYou've been invited${inviter}${orgName}.\n\nSet your password to activate your account:\n${setupUrl}\n\nThis setup link expires in 24 hours.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">You're Invited</h2>
-          <p>Hello ${params.name},</p>
-          <p>You've been invited${inviter}${orgName}.</p>
-          <p style="margin: 24px 0;">
-            <a href="${setupUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Set Password & Activate</a>
-          </p>
-          <p style="color: #6b7280; font-size: 14px;">This setup link expires in 24 hours.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+      subject: `You're invited to join ${orgName} on ${APP_NAME}`,
+      text: `Hello ${params.name},\n\nYou've been invited by ${inviter} to join ${orgName} on ${APP_NAME}.\n\nSet your password to activate your account:\n${setupUrl}\n\nExpires in 24 hours.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">You're Invited! 🎉</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">${inviter} has invited you to join <strong>${orgName}</strong> on ${APP_NAME}.</p>
+        ${hi(params.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Your account has been created. Click the button below to set your password and activate your account.</p>
+        ${infoTable([
+          { label: "Email", value: params.email },
+          { label: "Organization", value: orgName, highlight: true },
+          { label: "Invited by", value: inviter },
+        ])}
+        ${ctaButton("Set Password & Activate Account", setupUrl)}
+        ${alertBox("⏳ This invitation link expires in <strong>24 hours</strong>. Set your password before it expires.", "warning")}
+        ${sig()}
+      `, "You received this because someone invited you to " + APP_NAME + ". If this was a mistake, ignore this email."),
+    });
   } catch (err) {
     logger.warn("Failed to send employee invite email", { error: err instanceof Error ? err.message : String(err), email: params.email });
   }
@@ -281,42 +310,31 @@ export async function sendHireEmail(candidate: { name: string; email: string; jo
     const offerData = {
       candidate: { name: candidate.name, email: candidate.email, jobTitle: candidate.jobTitle },
       hr: { name: candidate.hrName, designation: candidate.hrDesignation },
-      offer: {
-        joiningDate: candidate.joiningDate,
-        offeredSalary: candidate.offeredSalary,
-        jobTitle: candidate.jobTitle,
-        department: candidate.department,
-        location: candidate.location
-      }
+      offer: { joiningDate: candidate.joiningDate, offeredSalary: candidate.offeredSalary, jobTitle: candidate.jobTitle, department: candidate.department, location: candidate.location }
     };
     const pdfBuffer = generateOfferLetterPDF(offerData);
-
-    const email = {
+    await sendMail({
       to: candidate.email,
-      subject: `Congratulations! You're Hired - ${APP_NAME}`,
-      text: `Dear ${candidate.name},\n\nCongratulations! We're excited to offer you the position of ${candidate.jobTitle}.\n\nDepartment: ${candidate.department}\nLocation: ${candidate.location}\nJoining Date: ${candidate.joiningDate}\nOffered Salary: ${candidate.offeredSalary}\n\nWelcome to the team! Please find the attached offer letter for your records.\n\nBest regards,\n${candidate.hrName}\n${candidate.hrDesignation}\n${APP_NAME}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Congratulations! You're Hired</h2>
-          <p>Dear ${candidate.name},</p>
-          <p>We're excited to offer you the position of <strong>${candidate.jobTitle}</strong> in our <strong>${candidate.department}</strong> department.</p>
-          <table style="margin: 16px 0; border-collapse: collapse; border: 1px solid #e5e7eb;">
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Department</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${candidate.department}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Location</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${candidate.location}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Joining Date</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${candidate.joiningDate}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600;">Offered Salary</td><td style="padding: 8px 16px;">₹${candidate.offeredSalary}</td></tr>
-          </table>
-          <p>Please find the attached offer letter for your records. Welcome to the team!</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${candidate.hrName}<br />${candidate.hrDesignation}<br />${APP_NAME}</p>
-        </div>
-      `,
-      attachments: [{
-        filename: `Offer_Letter_${candidate.name.replace(/\s+/g, '_')}.pdf`,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }]
-    };
-    await sendMail(email);
+      subject: `🎉 Congratulations! You're Hired — ${APP_NAME}`,
+      text: `Dear ${candidate.name},\n\nCongratulations! You've been offered the position of ${candidate.jobTitle}.\n\nDepartment: ${candidate.department}\nLocation: ${candidate.location}\nJoining Date: ${candidate.joiningDate}\nOffered Salary: ${candidate.offeredSalary}\n\nWelcome to the team!\n\n${candidate.hrName}\n${candidate.hrDesignation}`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Congratulations! You're Hired 🎉</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">We're thrilled to welcome you to the team.</p>
+        ${hi(candidate.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">We're excited to offer you the position of <strong>${candidate.jobTitle}</strong>. Please find your offer details below.</p>
+        ${infoTable([
+          { label: "Position", value: candidate.jobTitle, highlight: true },
+          { label: "Department", value: candidate.department },
+          { label: "Location", value: candidate.location },
+          { label: "Joining Date", value: candidate.joiningDate },
+          { label: "Offered Salary", value: "₹" + candidate.offeredSalary },
+        ])}
+        ${alertBox("📎 Your offer letter is attached to this email. Please review and confirm your acceptance.", "success")}
+        ${ctaButton("Log In to " + APP_NAME, `${FRONTEND_URL}/login`, "linear-gradient(135deg,#22c55e,#16a34a)")}
+        <p style="margin:28px 0 0;font-size:14px;color:#64748b;border-top:1px solid #f1f5f9;padding-top:20px;">Warm regards,<br/><strong style="color:#1e293b;">${candidate.hrName}</strong><br/><span style="color:#94a3b8;">${candidate.hrDesignation} · ${APP_NAME}</span></p>
+      `),
+      attachments: [{ filename: `Offer_Letter_${candidate.name.replace(/\s+/g, "_")}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+    });
   } catch (err) {
     logger.warn("Failed to send hire email", { error: err instanceof Error ? err.message : String(err), email: candidate.email });
   }
@@ -324,23 +342,20 @@ export async function sendHireEmail(candidate: { name: string; email: string; jo
 
 export async function sendRejectionEmail(candidate: { name: string; email: string; jobTitle: string }, reason?: string) {
   try {
-    const email = {
+    await sendMail({
       to: candidate.email,
-      subject: `Application Update - ${APP_NAME}`,
-      text: `Dear ${candidate.name},\n\nThank you for your interest in the ${candidate.jobTitle} position at ${APP_NAME}.\n\nAfter careful consideration, we have decided to move forward with other candidates whose qualifications more closely match our current needs.${reason ? `\n\nFeedback: ${reason}` : ''}\n\nWe appreciate your time and effort in applying. We encourage you to apply for future opportunities that match your skills.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #6b7280;">Application Update</h2>
-          <p>Dear ${candidate.name},</p>
-          <p>Thank you for your interest in the <strong>${candidate.jobTitle}</strong> position at ${APP_NAME}.</p>
-          <p>After careful consideration, we have decided to move forward with other candidates whose qualifications more closely match our current needs.</p>
-          ${reason ? `<p><strong>Feedback:</strong> ${reason}</p>` : ''}
-          <p>We appreciate your time and effort in applying and encourage you to apply for future opportunities that match your skills.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+      subject: `Application Update — ${APP_NAME}`,
+      text: `Dear ${candidate.name},\n\nThank you for applying for ${candidate.jobTitle}. After careful consideration, we've decided to move forward with other candidates.${reason ? "\n\nFeedback: " + reason : ""}\n\nWe encourage you to apply for future opportunities.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Application Update</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">Thank you for your interest in joining our team.</p>
+        ${hi(candidate.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Thank you for applying for the <strong>${candidate.jobTitle}</strong> position. After careful consideration, we've decided to move forward with other candidates whose qualifications more closely match our current needs.</p>
+        ${reason ? alertBox("<strong>Feedback:</strong> " + reason, "info") : ""}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">We appreciate your time and encourage you to apply for future opportunities that match your skills.</p>
+        ${sig()}
+      `),
+    });
   } catch (err) {
     logger.warn("Failed to send rejection email", { error: err instanceof Error ? err.message : String(err), email: candidate.email });
   }
@@ -348,22 +363,20 @@ export async function sendRejectionEmail(candidate: { name: string; email: strin
 
 export async function sendInterviewInvitationEmail(candidate: { name: string; email: string; jobTitle: string }) {
   try {
-    const email = {
+    await sendMail({
       to: candidate.email,
-      subject: `Interview Invitation - ${APP_NAME}`,
-      text: `Dear ${candidate.name},\n\nCongratulations! You've been selected for an interview for the ${candidate.jobTitle} position at ${APP_NAME}.\n\nOur HR team will contact you shortly to schedule the interview. Please check your email and phone for further details.\n\nWe look forward to speaking with you!\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Interview Invitation</h2>
-          <p>Dear ${candidate.name},</p>
-          <p>Congratulations! You've been selected for an interview for the <strong>${candidate.jobTitle}</strong> position at ${APP_NAME}.</p>
-          <p>Our HR team will contact you shortly to schedule the interview. Please check your email and phone for further details.</p>
-          <p>We look forward to speaking with you!</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+      subject: `Interview Invitation — ${candidate.jobTitle} at ${APP_NAME}`,
+      text: `Dear ${candidate.name},\n\nCongratulations! You've been selected for an interview for the ${candidate.jobTitle} position.\n\nOur HR team will contact you shortly to schedule the interview.\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Interview Invitation 🎯</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">Great news — you've been shortlisted!</p>
+        ${hi(candidate.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Congratulations! You've been selected for an interview for the <strong>${candidate.jobTitle}</strong> position at ${APP_NAME}.</p>
+        ${alertBox("📅 Our HR team will contact you shortly to schedule the interview. Please keep an eye on your email and phone.", "success")}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">We look forward to speaking with you!</p>
+        ${sig()}
+      `),
+    });
   } catch (err) {
     logger.warn("Failed to send interview invitation email", { error: err instanceof Error ? err.message : String(err), email: candidate.email });
   }
@@ -371,82 +384,80 @@ export async function sendInterviewInvitationEmail(candidate: { name: string; em
 
 export async function sendClientWelcomeEmail(client: { name: string; email: string }) {
   try {
-    const email = {
+    await sendMail({
       to: client.email,
-      subject: `Welcome to ${APP_NAME} - Your Account is Ready`,
-      text: `Dear ${client.name},\n\nWelcome to ${APP_NAME}! Your client account has been successfully created.\n\nYou can now log in to access your projects, invoices, and communicate with our team.\n\nIf you have any questions, please don't hesitate to contact us.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Welcome to ${APP_NAME}!</h2>
-          <p>Dear ${client.name},</p>
-          <p>Your client account has been successfully created. Welcome to our platform!</p>
-          <p>You can now:</p>
-          <ul style="margin: 16px 0; padding-left: 20px;">
-            <li>Access your project details and progress</li>
-            <li>View and download invoices</li>
-            <li>Communicate directly with your account team</li>
+      subject: `Welcome to ${APP_NAME} — Your Account is Ready`,
+      text: `Dear ${client.name},\n\nWelcome to ${APP_NAME}! Your client account has been created.\n\nLogin at: ${FRONTEND_URL}/login\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Welcome to ${APP_NAME}! 👋</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">Your client account is ready to use.</p>
+        ${hi(client.name)}
+        <p style="color:#475569;font-size:15px;line-height:1.6;">Your client account has been successfully created. You now have access to your dedicated workspace.</p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin:20px 0;">
+          <p style="margin:0 0 12px;font-weight:700;color:#1e293b;font-size:15px;">What you can do:</p>
+          <ul style="margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:2;">
+            <li>View your project details and progress</li>
+            <li>Download invoices and payment history</li>
+            <li>Communicate with your account team</li>
             <li>Track milestones and deliverables</li>
           </ul>
-          <p>If you have any questions or need assistance, please don't hesitate to contact us.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
         </div>
-      `,
-    };
-    await sendMail(email);
+        ${ctaButton("Access Your Dashboard", `${FRONTEND_URL}/login`)}
+        ${sig()}
+      `),
+    });
   } catch (err) {
     logger.warn("Failed to send client welcome email", { error: err instanceof Error ? err.message : String(err), email: client.email });
   }
 }
 
 export async function sendTaskAssignmentEmail(task: { title: string; description?: string; priority: string; dueDate?: string; assigneeEmail: string; assigneeName: string; assignerName: string }) {
+  const priorityColor = task.priority === "high" ? "#ef4444" : task.priority === "medium" ? "#f59e0b" : "#22c55e";
   try {
-    const email = {
+    await sendMail({
       to: task.assigneeEmail,
       subject: `New Task Assigned: ${task.title}`,
-      text: `Dear ${task.assigneeName},\n\n${task.assignerName} has assigned you a new task:\n\nTitle: ${task.title}\n${task.description ? `Description: ${task.description}\n` : ''}Priority: ${task.priority}\n${task.dueDate ? `Due Date: ${task.dueDate}\n` : ''}\nPlease check your dashboard for more details.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">New Task Assigned</h2>
-          <p>Dear ${task.assigneeName},</p>
-          <p>${task.assignerName} has assigned you a new task:</p>
-          <table style="margin: 16px 0; border-collapse: collapse; border: 1px solid #e5e7eb;">
-            <tr><td style="padding: 8px 16px; font-weight: 600;">Title</td><td style="padding: 8px 16px;">${task.title}</td></tr>
-            ${task.description ? `<tr><td style="padding: 8px 16px; font-weight: 600;">Description</td><td style="padding: 8px 16px;">${task.description}</td></tr>` : ''}
-            <tr><td style="padding: 8px 16px; font-weight: 600;">Priority</td><td style="padding: 8px 16px;">${task.priority}</td></tr>
-            ${task.dueDate ? `<tr><td style="padding: 8px 16px; font-weight: 600;">Due Date</td><td style="padding: 8px 16px;">${task.dueDate}</td></tr>` : ''}
-          </table>
-          <p>Please check your dashboard for more details and updates.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
+      text: `Hi ${task.assigneeName},\n\n${task.assignerName} assigned you a task: ${task.title}\nPriority: ${task.priority}${task.dueDate ? "\nDue: " + task.dueDate : ""}\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">New Task Assigned</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">${task.assignerName} has assigned you a task.</p>
+        ${hi(task.assigneeName)}
+        ${infoTable([
+          { label: "Task", value: task.title, highlight: true },
+          ...(task.description ? [{ label: "Description", value: task.description }] : []),
+          { label: "Priority", value: `<span style="color:${priorityColor};font-weight:700;">${task.priority.toUpperCase()}</span>` },
+          ...(task.dueDate ? [{ label: "Due Date", value: task.dueDate }] : []),
+          { label: "Assigned by", value: task.assignerName },
+        ])}
+        ${ctaButton("View Task", `${FRONTEND_URL}/workspace/tasks`)}
+        ${sig()}
+      `),
+    });
   } catch (err) {
     logger.warn("Failed to send task assignment email", { error: err instanceof Error ? err.message : String(err), email: task.assigneeEmail });
   }
 }
 
 export async function sendProjectUpdateEmail(project: { name: string; status: string; teamMembers: { email: string; name: string }[] }) {
-  const emails = project.teamMembers.map(member => member.email);
-  if (emails.length === 0) return;
-
+  if (project.teamMembers.length === 0) return;
   try {
-    for (const recipient of emails) {
-      const mailData = {
-        to: recipient,
+    for (const member of project.teamMembers) {
+      await sendMail({
+        to: member.email,
         subject: `Project Update: ${project.name}`,
-        text: `Hello Team,\n\nThe project "${project.name}" status has been updated to "${project.status}".\n\nPlease check your dashboard for more details.\n\nBest regards,\nThe ${APP_NAME} Team`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-            <h2 style="color: #2563eb;">Project Update</h2>
-            <p>Hello Team,</p>
-            <p>The project <strong>${project.name}</strong> status has been updated to <strong>${project.status}</strong>.</p>
-            <p>Please check your dashboard for more details and next steps.</p>
-            <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-          </div>
-        `,
-      };
-      await sendMail(mailData);
+        text: `Hi ${member.name},\n\nProject "${project.name}" status updated to "${project.status}".\n\nBest regards,\nThe ${APP_NAME} Team`,
+        html: emailLayout(`
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Project Status Update</h2>
+          <p style="margin:0 0 20px;color:#64748b;font-size:15px;">There's an update on a project you're part of.</p>
+          ${hi(member.name)}
+          ${infoTable([
+            { label: "Project", value: project.name, highlight: true },
+            { label: "New Status", value: project.status },
+          ])}
+          ${ctaButton("View Project", `${FRONTEND_URL}/workspace/projects`)}
+          ${sig()}
+        `),
+      });
     }
   } catch (err) {
     logger.warn("Failed to send project update email", { error: err instanceof Error ? err.message : String(err) });
@@ -456,287 +467,53 @@ export async function sendProjectUpdateEmail(project: { name: string; status: st
 export async function sendSalaryPaidEmail(salary: { name: string; email: string; period: string; baseSalary: number; allowances: number; deductions: number; netPay: number; paidAt: Date }) {
   try {
     const pdfBuffer = generateSalarySlipPDF(salary);
-
-    const email = {
+    await sendMail({
       to: salary.email,
-      subject: `Salary Paid for ${salary.period} - ${APP_NAME}`,
-      text: `Dear ${salary.name},\n\nYour salary for ${salary.period} has been paid.\n\nBase Salary: ₹${salary.baseSalary}\nAllowances: ₹${salary.allowances}\nDeductions: ₹${salary.deductions}\nNet Salary: ₹${salary.netPay}\nPaid At: ${salary.paidAt.toLocaleDateString()}\n\nPlease check your account for the credited amount.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Salary Paid</h2>
-          <p>Dear ${salary.name},</p>
-          <p>Your salary for <strong>${salary.period}</strong> has been paid successfully.</p>
-          <table style="margin: 16px 0; border-collapse: collapse; border: 1px solid #e5e7eb;">
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Base Salary</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">₹${salary.baseSalary}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Allowances</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">₹${salary.allowances}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Deductions</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">₹${salary.deductions}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600; background: #f3f4f6;">Net Salary</td><td style="padding: 8px 16px; background: #f3f4f6; font-weight: 600; color: #059669;">₹${salary.netPay}</td></tr>
-            <tr><td style="padding: 8px 16px; font-weight: 600;">Paid At</td><td style="padding: 8px 16px;">${salary.paidAt.toLocaleDateString()}</td></tr>
-          </table>
-          <p>Please check your account for the credited amount.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-      attachments: [{
-        filename: `Salary_Slip_${salary.period}.pdf`,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }]
-    };
-    await sendMail(email);
+      subject: `Salary Paid for ${salary.period} — ${APP_NAME}`,
+      text: `Dear ${salary.name},\n\nYour salary for ${salary.period} has been paid.\n\nNet Salary: ₹${salary.netPay}\nPaid: ${salary.paidAt.toLocaleDateString()}\n\nBest regards,\nThe ${APP_NAME} Team`,
+      html: emailLayout(`
+        <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Salary Credited 💰</h2>
+        <p style="margin:0 0 20px;color:#64748b;font-size:15px;">Your salary for <strong>${salary.period}</strong> has been processed.</p>
+        ${hi(salary.name)}
+        ${infoTable([
+          { label: "Pay Period", value: salary.period },
+          { label: "Base Salary", value: "₹" + salary.baseSalary.toLocaleString() },
+          { label: "Allowances", value: "+ ₹" + salary.allowances.toLocaleString() },
+          { label: "Deductions", value: "− ₹" + salary.deductions.toLocaleString() },
+          { label: "Net Salary", value: "₹" + salary.netPay.toLocaleString(), highlight: true },
+          { label: "Paid On", value: salary.paidAt.toLocaleDateString() },
+        ])}
+        ${alertBox("📎 Your salary slip is attached to this email for your records.", "success")}
+        ${ctaButton("View Payroll", `${FRONTEND_URL}/hr/payroll`)}
+        ${sig()}
+      `),
+      attachments: [{ filename: `Salary_Slip_${salary.period.replace(/\s+/g, "_")}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+    });
   } catch (err) {
     logger.warn("Failed to send salary paid email", { error: err instanceof Error ? err.message : String(err), email: salary.email });
   }
 }
 
 export async function sendInvoiceReminder(invoice: { id: string; client: string; amount: string; due: string }, recipientEmail: string) {
-  const email = emailTemplates.invoiceReminder(invoice, recipientEmail);
-  await sendMail(email);
+  await sendMail(emailTemplates.invoiceReminder(invoice, recipientEmail));
 }
 
 export async function sendInvoiceSentEmail(invoice: { id: string; client: string; amount: string; due: string }, recipientEmail: string) {
-  const email = {
+  await sendMail({
     to: recipientEmail,
-    subject: `Invoice Sent: ${invoice.id} - ${invoice.amount} due ${invoice.due}`,
-    text: `Hello,\n\nInvoice ${invoice.id} for ${invoice.amount} has been sent.\n\nClient: ${invoice.client}\nAmount: ${invoice.amount}\nDue Date: ${invoice.due}\n\nPlease review and process the payment.\n\nBest regards,\nThe ${APP_NAME} Team`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-        <h2 style="color: #2563eb;">Invoice Sent</h2>
-        <p>Hello,</p>
-        <p>A new invoice has been sent for your review.</p>
-        <table style="margin: 16px 0; border-collapse: collapse; border: 1px solid #e5e7eb;">
-          <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Invoice ID</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${invoice.id}</td></tr>
-          <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Client</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb;">${invoice.client}</td></tr>
-          <tr><td style="padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Amount</td><td style="padding: 8px 16px; border-bottom: 1px solid #e5e7eb; color: #059669; font-weight: 600;">${invoice.amount}</td></tr>
-          <tr><td style="padding: 8px 16px; font-weight: 600;">Due Date</td><td style="padding: 8px 16px;">${invoice.due}</td></tr>
-        </table>
-        <p>Please review the invoice details and process the payment accordingly.</p>
-        <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-      </div>
-    `,
-  };
-  await sendMail(email);
-}
-
-// ============================================
-// CRM EMAIL TEMPLATES - LEADS, DEALS, CLIENTS
-// ============================================
-
-// Lead Welcome Email
-export async function sendLeadWelcomeEmail(lead: { name: string; email: string; company?: string }) {
-  try {
-    const email = {
-      to: lead.email,
-      subject: `Welcome - Thank You for Your Interest in ${APP_NAME}`,
-      text: `Dear ${lead.name},\n\nThank you for reaching out! We've received your inquiry and our team will be in touch with you shortly.\n\nWhat happens next:\n1. Our team will review your requirements\n2. A specialist will reach out within 24-48 hours\n3. We'll schedule a call to understand your needs better\n\nIn the meantime, feel free to explore our website.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">Welcome, ${lead.name}!</h2>
-          <p>Thank you for reaching out! We've received your inquiry and our team will be in touch with you shortly.</p>
-          
-          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin: 0 0 12px 0; color: #374151;">What happens next?</h3>
-            <ol style="margin: 0; padding-left: 20px; color: #6b7280;">
-              <li>Our team will review your requirements</li>
-              <li>A specialist will reach out within 24-48 hours</li>
-              <li>We'll schedule a call to understand your needs better</li>
-            </ol>
-          </div>
-          
-          <p>In the meantime, feel free to explore our website or follow us on social media.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send lead welcome email", { error: err instanceof Error ? err.message : String(err), email: lead.email });
-  }
-}
-
-// Lead Assigned Email (to Sales Rep)
-export async function sendLeadAssignedEmail(lead: { name: string; email: string; company?: string; source?: string }, assignee: { name: string; email: string }) {
-  try {
-    const email = {
-      to: assignee.email,
-      subject: `New Lead Assigned: ${lead.name} from ${lead.company || 'Unknown Company'}`,
-      text: `Hi ${assignee.name},\n\nA new lead has been assigned to you.\n\nLead Details:\nName: ${lead.name}\nEmail: ${lead.email}\nCompany: ${lead.company || 'N/A'}\nSource: ${lead.source || 'Direct'}\n\nPlease reach out within 24 hours.\n\nBest regards,\n${APP_NAME} System`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #2563eb;">New Lead Assigned</h2>
-          <p>Hi ${assignee.name},</p>
-          <p>A new lead has been assigned to you. Please follow up promptly.</p>
-          
-          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin: 0 0 12px 0; color: #374151;">Lead Details</h3>
-            <table style="width: 100%;">
-              <tr><td style="padding: 8px 0; color: #6b7280;">Name</td><td style="padding: 8px 0; font-weight: 600;">${lead.name}</td></tr>
-              <tr><td style="padding: 8px 0; color: #6b7280;">Email</td><td style="padding: 8px 0;"><a href="mailto:${lead.email}">${lead.email}</a></td></tr>
-              <tr><td style="padding: 8px 0; color: #6b7280;">Company</td><td style="padding: 8px 0;">${lead.company || 'N/A'}</td></tr>
-              <tr><td style="padding: 8px 0; color: #6b7280;">Source</td><td style="padding: 8px 0;">${lead.source || 'Direct'}</td></tr>
-            </table>
-          </div>
-          
-          <p style="color: #f59e0b; font-weight: 600;">Please reach out within 24 hours.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send lead assigned email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
-  }
-}
-
-// Deal Won Email
-export async function sendDealWonEmail(deal: { title: string; value: string; clientName?: string }, recipientEmail: string) {
-  try {
-    const email = {
-      to: recipientEmail,
-      subject: `🎉 Deal Won: ${deal.title}`,
-      text: `Congratulations!\n\nWe're thrilled to announce that the deal "${deal.title}" has been successfully closed!\n\nDeal Value: ${deal.value}\n${deal.clientName ? `Client: ${deal.clientName}` : ''}\n\nThis is a huge win for the team. Thank you for your hard work!\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #10b981;">🎉 Congratulations!</h2>
-          <p>We're thrilled to announce that the deal <strong>"${deal.title}"</strong> has been successfully closed!</p>
-          
-          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 24px; border-radius: 12px; margin: 20px 0; text-align: center;">
-            <p style="font-size: 14px; margin: 0 0 8px 0; opacity: 0.9;">DEAL VALUE</p>
-            <p style="font-size: 32px; font-weight: bold; margin: 0;">${deal.value}</p>
-            ${deal.clientName ? `<p style="font-size: 14px; margin: 16px 0 0 0; opacity: 0.9;">Client: ${deal.clientName}</p>` : ''}
-          </div>
-          
-          <p>This is a huge win for the team! Thank you for your dedication and hard work.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send deal won email", { error: err instanceof Error ? err.message : String(err), to: recipientEmail });
-  }
-}
-
-// Deal Lost Email
-export async function sendDealLostEmail(deal: { title: string; value?: string; reason?: string }, recipientEmail: string) {
-  try {
-    const email = {
-      to: recipientEmail,
-      subject: `Deal Update: ${deal.title}`,
-      text: `Hello,\n\nWe wanted to update you that the deal "${deal.title}" has been marked as closed/lost.\n\n${deal.reason ? `Reason: ${deal.reason}` : ''}\n\nWhile this deal didn't convert, every interaction is a learning opportunity. Let's discuss how we can improve our approach for future deals.\n\nBest regards,\nThe ${APP_NAME} Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #6b7280;">Deal Update</h2>
-          <p>Hello,</p>
-          <p>We wanted to update you that the deal <strong>"${deal.title}"</strong> has been marked as closed/lost.</p>
-          ${deal.reason ? `<div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
-            <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Reason</p>
-            <p style="margin: 4px 0 0 0; font-weight: 600;">${deal.reason}</p>
-          </div>` : ''}
-          <p>While this deal didn't convert, every interaction is a learning opportunity. Let's discuss how we can improve our approach for future deals.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />The ${APP_NAME} Team</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send deal lost email", { error: err instanceof Error ? err.message : String(err), to: recipientEmail });
-  }
-}
-
-// Follow-up Reminder Email
-export async function sendFollowupEmail(lead: { name: string; email: string; company?: string }, assignee: { name: string; email: string }) {
-  try {
-    const email = {
-      to: assignee.email,
-      subject: `Follow-up Reminder: ${lead.name}`,
-      text: `Hi ${assignee.name},\n\nThis is a reminder to follow up with ${lead.name}${lead.company ? ` from ${lead.company}` : ''}.\n\nLast contacted: N/A\nStatus: Awaiting response\n\nDon't let this lead go cold!\n\nBest regards,\n${APP_NAME} System`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #f59e0b;">Follow-up Reminder</h2>
-          <p>Hi ${assignee.name},</p>
-          <p>This is a reminder to follow up with the lead below.</p>
-          
-          <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
-            <p style="margin: 0 0 8px 0; font-weight: 600; color: #92400e;">${lead.name}</p>
-            <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 14px;">${lead.email}</p>
-            ${lead.company ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${lead.company}</p>` : ''}
-          </div>
-          
-          <p style="color: #dc2626; font-weight: 600;">Don't let this lead go cold!</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send follow-up email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
-  }
-}
-
-// Task Reminder Email
-export async function sendTaskReminderEmail(task: { title: string; dueDate?: string; priority?: string }, assignee: { name: string; email: string }) {
-  try {
-    const priorityColors: Record<string, string> = {
-      high: "#dc2626",
-      medium: "#f59e0b",
-      low: "#10b981"
-    };
-    const priorityColor = priorityColors[task.priority || "medium"] || "#6b7280";
-    
-    const email = {
-      to: assignee.email,
-      subject: `Task Reminder: ${task.title}`,
-      text: `Hi ${assignee.name},\n\nThis is a reminder about the following task:\n\nTask: ${task.title}\n${task.dueDate ? `Due: ${task.dueDate}` : ''}\n${task.priority ? `Priority: ${task.priority}` : ''}\n\nPlease complete this task on time.\n\nBest regards,\n${APP_NAME} System`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: ${priorityColor};">Task Reminder</h2>
-          <p>Hi ${assignee.name},</p>
-          <p>This is a reminder about the following task:</p>
-          
-          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${task.title}</p>
-            ${task.dueDate ? `<p style="margin: 0 0 8px 0; color: #6b7280;">📅 Due: <strong>${task.dueDate}</strong></p>` : ''}
-            ${task.priority ? `<p style="margin: 0; color: ${priorityColor};">⚡ Priority: <strong>${task.priority.toUpperCase()}</strong></p>` : ''}
-          </div>
-          
-          <p>Please complete this task on time.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send task reminder email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
-  }
-}
-
-// Renewal Reminder Email
-export async function sendRenewalReminderEmail(client: { name: string; email: string; renewalDate?: string }, assignee: { name: string; email: string }) {
-  try {
-    const email = {
-      to: assignee.email,
-      subject: `Renewal Alert: ${client.name}`,
-      text: `Hi ${assignee.name},\n\nThis is an automated reminder that a client renewal is approaching.\n\nClient: ${client.name}\n${client.renewalDate ? `Renewal Date: ${client.renewalDate}` : ''}\n\nPlease prepare for the renewal discussion.\n\nBest regards,\n${APP_NAME} System`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
-          <h2 style="color: #7c3aed;">Renewal Alert</h2>
-          <p>Hi ${assignee.name},</p>
-          <p>This is an automated reminder that a client renewal is approaching.</p>
-          
-          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">CLIENT</p>
-            <p style="margin: 0 0 16px 0; font-size: 24px; font-weight: 600; color: #7c3aed;">${client.name}</p>
-            ${client.renewalDate ? `<p style="margin: 0; color: #6b7280;">Renewal Date: <strong>${client.renewalDate}</strong></p>` : ''}
-          </div>
-          
-          <p>Please prepare for the renewal discussion and reach out to the client in advance.</p>
-          <p style="margin-top: 24px; color: #6b7280;">Best regards,<br />${APP_NAME} System</p>
-        </div>
-      `,
-    };
-    await sendMail(email);
-  } catch (err) {
-    logger.warn("Failed to send renewal reminder email", { error: err instanceof Error ? err.message : String(err), to: assignee.email });
-  }
+    subject: `Invoice ${invoice.id} — ${invoice.amount} due ${invoice.due}`,
+    text: `Invoice ${invoice.id} for ${invoice.amount} has been sent. Due: ${invoice.due}.\n\nBest regards,\nThe ${APP_NAME} Team`,
+    html: emailLayout(`
+      <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">Invoice Sent</h2>
+      <p style="margin:0 0 20px;color:#64748b;font-size:15px;">A new invoice has been issued for your review.</p>
+      ${infoTable([
+        { label: "Invoice ID", value: invoice.id },
+        { label: "Client", value: invoice.client },
+        { label: "Amount", value: invoice.amount, highlight: true },
+        { label: "Due Date", value: invoice.due },
+      ])}
+      ${ctaButton("View Invoice", `${FRONTEND_URL}/finance`, "linear-gradient(135deg,#f59e0b,#d97706)")}
+      ${sig()}
+    `),
+  });
 }

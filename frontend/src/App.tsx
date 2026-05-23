@@ -13,6 +13,7 @@ import RouteAccessGuard from "@/components/layout/RouteAccessGuard";
 import PageLoader from "@/components/shared/PageLoader";
 import AppErrorBoundary from "@/components/shared/AppErrorBoundary";
 import NetworkErrorBridge from "@/components/shared/NetworkErrorBridge";
+import CookieConsent from "@/components/shared/CookieConsent";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useMonitoring } from "@/hooks/use-monitoring";
 import { Analytics } from '@vercel/analytics/react';
@@ -66,6 +67,13 @@ const GTMOpsPage = lazy(() => import("@/pages/GTMOpsPage"));
 const GTMFlowPage = lazy(() => import("@/pages/GTMFlowPage"));
 const InboxPage = lazy(() => import("@/pages/InboxPage"));
 
+const DevOpsHealthPage      = lazy(() => import("@/pages/devops/HealthPage"));
+const DevOpsServersPage     = lazy(() => import("@/pages/devops/ServersPage"));
+const DevOpsDeploymentsPage = lazy(() => import("@/pages/devops/DeploymentsPage"));
+const DevOpsPipelinesPage   = lazy(() => import("@/pages/devops/PipelinesPage"));
+const DevOpsLogsPage        = lazy(() => import("@/pages/devops/LogsPage"));
+const DevOpsAlertsPage      = lazy(() => import("@/pages/devops/AlertsPage"));
+
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
@@ -97,7 +105,8 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <AppErrorBoundary>
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
@@ -139,7 +148,6 @@ const App = () => {
                 path="/*"
                 element={
                   <PrivateRoute>
-                    <ThemeProvider>
                       <RealtimeProvider>
                         <WorkspaceProvider>
                           <NotificationProvider>
@@ -227,6 +235,13 @@ const App = () => {
                                       <Route path="/billing" element={<Navigate to="/finance" replace />} />
                                       <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
                                       <Route path="/restricted" element={<RestrictedPage />} />
+                                      <Route path="/devops/health"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsHealthPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/servers"     element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsServersPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/deployments" element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsDeploymentsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/pipelines"   element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsPipelinesPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/logs"        element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsLogsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/alerts"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsAlertsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops"             element={<Navigate to="/devops/health" replace />} />
                                       <Route path="*" element={<NotFound />} />
                                     </Routes>
                                   </Suspense>
@@ -236,14 +251,15 @@ const App = () => {
                           </NotificationProvider>
                         </WorkspaceProvider>
                       </RealtimeProvider>
-                    </ThemeProvider>
                   </PrivateRoute>
                 }
               />
             </Routes>
+            <CookieConsent />
           </BrowserRouter>
-        </AppErrorBoundary>
-      </AuthProvider>
+          </AppErrorBoundary>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };
