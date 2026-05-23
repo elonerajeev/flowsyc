@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle, Clock, GitBranch, Loader2,
@@ -241,6 +241,7 @@ export default function DevOpsPipelinesPage() {
   const [branchFilter, setBranchFilter] = useState("");
   const [workflowFilter, setWorkflowFilter] = useState("");
   const [configOpen, setConfigOpen] = useState(false);
+  const [repoFilter, setRepoFilter] = useState<string>("all");
 
   const { data, isLoading, error, refetch, isFetching } = usePipelines({
     limit: 50,
@@ -252,16 +253,26 @@ export default function DevOpsPipelinesPage() {
   const { data: githubConfig } = useGitHubConfigStatus(canConfigure);
   const syncPipelines = useSyncPipelines();
 
+  const runs = data?.data;
+  const source = data?.meta.source ?? "deployments";
+
+  // Repo selector — only repos from config
+  const configuredRepos = githubConfig?.repos ?? [];
+
+  const filteredRuns = useMemo(() => {
+    const baseRuns = runs ?? [];
+    if (repoFilter === "all") return baseRuns;
+    return baseRuns.filter((r) => r.repo === repoFilter);
+  }, [runs, repoFilter]);
+
+  const counts = useMemo(() => ({
+    success: filteredRuns.filter((r) => r.status === "success").length,
+    failed:  filteredRuns.filter((r) => r.status === "failed").length,
+    running: filteredRuns.filter((r) => r.status === "running" || r.status === "queued").length,
+  }), [filteredRuns]);
+
   if (isLoading) return <PageLoader />;
   if (error) return <ErrorFallback error={error as Error} onRetry={() => { void refetch(); }} />;
-
-  const runs = data?.data ?? [];
-  const source = data?.meta.source ?? "deployments";
-  const counts = {
-    success: runs.filter((r) => r.status === "success").length,
-    failed:  runs.filter((r) => r.status === "failed").length,
-    running: runs.filter((r) => r.status === "running" || r.status === "queued").length,
-  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -306,6 +317,18 @@ export default function DevOpsPipelinesPage() {
 
         {/* Filters + actions */}
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+          {/* Repo selector — only shown when multiple repos configured */}
+          {configuredRepos.length > 1 && (
+            <Select value={repoFilter} onValueChange={setRepoFilter}>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All repos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All repos</SelectItem>
+                {configuredRepos.map((r) => (
+                  <SelectItem key={r} value={r} className="font-mono">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={status} onValueChange={(v) => setStatus(v as "all" | PipelineStatus)}>
             <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
@@ -372,10 +395,10 @@ export default function DevOpsPipelinesPage() {
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">Recent Runs</span>
-          <span className={cn("ml-auto text-muted-foreground", TEXT.meta)}>{runs.length} items</span>
+          <span className={cn("ml-auto text-muted-foreground", TEXT.meta)}>{filteredRuns.length} items</span>
         </div>
 
-        {runs.length === 0 ? (
+        {filteredRuns.length === 0 ? (
           <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/30">
               <GitBranch className="h-6 w-6 text-muted-foreground/50" />
@@ -394,16 +417,24 @@ export default function DevOpsPipelinesPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {runs.map((run) => {
+            {filteredRuns.map((run) => {
               const meta = STATUS_META[run.status] ?? STATUS_META.unknown;
               const Icon = meta.icon;
+              const runDate = run.startedAt ? new Date(run.startedAt) : null;
               return (
                 <div key={run.id} className="flex items-center gap-4 px-6 py-4 transition hover:bg-muted/20">
                   <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl", meta.bg)}>
                     <Icon className={cn("h-4 w-4", meta.color, run.status === "running" && "animate-pulse")} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{run.workflow}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-foreground truncate">{run.workflow}</p>
+                      {run.repo && (
+                        <Badge variant="outline" className="font-mono text-[10px] shrink-0 border-indigo-500/30 text-indigo-500 bg-indigo-500/5">
+                          {run.repo}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                       <span className="font-mono">{run.branch}</span>
                       {run.commitHash && <><span>·</span><span className="font-mono">{run.commitHash.slice(0, 7)}</span></>}
@@ -413,9 +444,18 @@ export default function DevOpsPipelinesPage() {
                   <div className="hidden md:block text-right shrink-0">
                     <p className="text-xs text-muted-foreground">{run.actor ?? "—"}</p>
                   </div>
+                  {/* Date + time */}
+                  <div className="hidden lg:block text-right shrink-0 w-28">
+                    {runDate && (
+                      <>
+                        <p className="text-xs font-medium text-foreground">{runDate.toLocaleDateString([], { month: "short", day: "numeric" })}</p>
+                        <p className={cn("text-muted-foreground", TEXT.meta)}>{runDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                      </>
+                    )}
+                  </div>
                   <div className="text-right shrink-0">
                     <p className={cn("text-xs font-semibold", meta.color)}>{meta.label}</p>
-                    <p className="text-xs text-muted-foreground">{formatDuration(run.durationMs)} · {timeAgo(run.startedAt ?? run.updatedAt)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDuration(run.durationMs)}</p>
                   </div>
                 </div>
               );

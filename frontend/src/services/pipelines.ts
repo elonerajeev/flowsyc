@@ -8,7 +8,9 @@ export type PipelineStatus = "success" | "failed" | "running" | "cancelled" | "q
 export interface PipelineRun {
   id: string;
   workflow: string;
+  repo: string | null;
   branch: string;
+  event: string | null;
   status: PipelineStatus;
   durationMs: number | null;
   startedAt: string | null;
@@ -81,7 +83,8 @@ export function usePipelines(params: ListParams = {}) {
     queryKey: pipelineKeys.list(params),
     queryFn: () => requestJson<PipelinesResponse>(`/pipelines${buildQuery(params)}`),
     refetchInterval: 30_000,
-    staleTime: 20_000,
+    staleTime: 15_000,   // don't refetch if data is < 15s old
+    gcTime: 5 * 60_000,  // keep in cache 5 min
   });
 }
 

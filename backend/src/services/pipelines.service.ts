@@ -14,7 +14,9 @@ type PipelineSource = "github" | "deployments";
 type PipelineRun = {
   id: string;
   workflow: string;
+  repo: string | null;
   branch: string;
+  event: string | null;
   status: PipelineStatus;
   durationMs: number | null;
   startedAt: string | null;
@@ -47,6 +49,8 @@ type GitHubWorkflowRun = {
   head_sha?: string | null;
   display_title?: string | null;
   actor?: { login?: string | null } | null;
+  repository?: { name?: string | null } | null;
+  event?: string | null;  // push, pull_request, schedule, workflow_dispatch, etc.
 };
 
 type GitHubRunsResponse = {
@@ -159,7 +163,7 @@ function getGitHubStatusFilter(status?: PipelineStatus) {
   return undefined;
 }
 
-function mapGitHubRun(run: GitHubWorkflowRun): PipelineRun {
+function mapGitHubRun(run: GitHubWorkflowRun, repoName?: string): PipelineRun {
   const startedAt = run.run_started_at ?? run.created_at ?? null;
   const finishedAt =
     String(run.status ?? "").toLowerCase() === "completed"
@@ -170,7 +174,9 @@ function mapGitHubRun(run: GitHubWorkflowRun): PipelineRun {
   return {
     id: `gh-${run.id}`,
     workflow: run.name?.trim() || "Unnamed Workflow",
+    repo: repoName ?? run.repository?.name?.trim() ?? null,
     branch: run.head_branch?.trim() || "unknown",
+    event: run.event?.trim() ?? null,
     status,
     durationMs: parseDurationMs(startedAt, finishedAt ?? run.updated_at ?? null),
     startedAt,
@@ -302,7 +308,11 @@ async function fetchGitHubRuns(config: RuntimeGitHubConfig, options: ListOptions
       }
 
       const payload = (await response.json()) as GitHubRunsResponse;
-      let runs = (payload.workflow_runs ?? []).map(mapGitHubRun);
+      // Only keep CI-triggered runs (push, pull_request, workflow_dispatch) — skip schedule, dependabot, etc.
+      const CI_EVENTS = new Set(["push", "pull_request", "workflow_dispatch", "release", "merge_group"]);
+      let runs = (payload.workflow_runs ?? [])
+        .filter((r) => !r.event || CI_EVENTS.has(r.event))
+        .map((r) => mapGitHubRun(r, repo));
       if (options.workflow) { const needle = options.workflow.toLowerCase(); runs = runs.filter((r) => r.workflow.toLowerCase().includes(needle)); }
       if (options.status) runs = runs.filter((r) => r.status === options.status);
 
@@ -313,10 +323,20 @@ async function fetchGitHubRuns(config: RuntimeGitHubConfig, options: ListOptions
     }
   }
 
-  // Sort merged results by startedAt desc, deduplicate by id
+  // Sort by startedAt desc, deduplicate by id, then keep latest per repo+workflow
   const seen = new Set<string>();
-  return allRuns
+  const sorted = allRuns
     .filter((r) => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
+    .sort((a, b) => new Date(b.startedAt ?? 0).getTime() - new Date(a.startedAt ?? 0).getTime());
+
+  // Keep only latest run per repo+workflow key
+  const latestByKey = new Map<string, PipelineRun>();
+  for (const run of sorted) {
+    const key = `${run.repo ?? ""}::${run.workflow}`;
+    if (!latestByKey.has(key)) latestByKey.set(key, run);
+  }
+
+  return Array.from(latestByKey.values())
     .sort((a, b) => new Date(b.startedAt ?? 0).getTime() - new Date(a.startedAt ?? 0).getTime())
     .slice(0, options.limit);
 }
@@ -342,7 +362,9 @@ async function fetchDeploymentBackfill(actor: AccessActor, options: ListOptions)
   return rows.map((row) => ({
     id: `dep-${row.id}`,
     workflow: row.service,
+    repo: row.branch?.includes("/") ? row.branch.split("/")[0] : null, // extract repo from version if stored
     branch: row.branch ?? "unknown",
+    event: null,
     status: fromDeploymentStatus(row.status),
     durationMs: parseDurationMs(row.startedAt.toISOString(), row.finishedAt?.toISOString() ?? row.updatedAt.toISOString()),
     startedAt: row.startedAt.toISOString(),
@@ -352,7 +374,7 @@ async function fetchDeploymentBackfill(actor: AccessActor, options: ListOptions)
     commitHash: row.commitHash ?? null,
     commitMessage: row.commitMessage ?? null,
     url: null,
-    source: "deployments",
+    source: "deployments" as const,
   }));
 }
 
@@ -396,7 +418,7 @@ async function persistGitHubRunsToDeployments(runs: PipelineRun[], organizationI
     const run = dedupedByMarker.get(marker)!;
     const existingId = existingByVersion.get(marker);
     const payload = {
-      service: run.workflow,
+      service: run.repo ? `${run.repo} / ${run.workflow}` : run.workflow,
       environment: "ci-cd",
       branch: run.branch,
       status: toDeploymentStatus(run.status),
