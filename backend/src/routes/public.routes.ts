@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { asyncHandler } from "../utils/async-handler";
@@ -6,6 +7,14 @@ import { sendLeadWelcomeEmail } from "../utils/email-templates";
 import { logger } from "../utils/logger";
 
 const router = Router();
+
+const demoBookingRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many demo booking requests, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const demoBookingSchema = z.object({
   name: z.string().min(1).max(200),
@@ -17,6 +26,7 @@ const demoBookingSchema = z.object({
 
 router.post(
   "/demo-bookings",
+  demoBookingRateLimiter,
   asyncHandler(async (req, res) => {
     const body = demoBookingSchema.parse(req.body);
 

@@ -155,6 +155,7 @@ export function createApp() {
   app.use("/api/activities", activityRouter);
   app.use("/api/csv-import", csvImportRouter);
   app.use("/api/inbox", inboxRouter);
+  app.use("/api/notifications", notificationsRouter);
   app.use("/api/public", publicRouter);
 
   app.use(notFound);

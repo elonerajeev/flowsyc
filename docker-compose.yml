@@ -107,23 +107,6 @@ services:
           memory: 256M
           cpus: "0.25"
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - crm-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
@@ -216,5 +199,5 @@ volumes:
     driver: local
   loki_data:
     driver: local
-  redis_data:
+  valkey_data:
     driver: local
