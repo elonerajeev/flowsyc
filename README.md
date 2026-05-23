@@ -192,6 +192,12 @@ CLOUDINARY_API_SECRET=
 │ • 30+ Models          │            │  • Email Queue      │
 │ • Migrations          │            │  • Async Jobs       │
 └───────────────────────┘            └─────────────────────┘
+└────────────────────┬────────────────────────────────────┘
+                     │ Prisma ORM
+┌────────────────────▼────────────────────────────────────┐
+│              DATABASE (PostgreSQL)                      │
+│  • 30+ Models  • Migrations  • Indexes                  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -211,6 +217,7 @@ CLOUDINARY_API_SECRET=
 | Automation | ✅ | Rules, triggers, actions |
 | Email Integration | ✅ | Gmail SMTP, templates (queued via BullMQ) |
 | Asynchronous Jobs | ✅ | Redis/BullMQ background queue |
+| Email Integration | ✅ | Gmail SMTP, templates |
 | File Attachments | ✅ | Upload, download |
 | Audit Logs | ✅ | Full activity tracking |
 | Multi-Workspace | ✅ | Team isolation |

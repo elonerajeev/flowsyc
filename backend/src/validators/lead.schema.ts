@@ -10,6 +10,7 @@ export const leadSourceEnum = z.enum([
   "event",
   "partner",
   "email",
+  "other",
 ]);
 
 export const leadStatusEnum = z.enum([
@@ -18,6 +19,8 @@ export const leadStatusEnum = z.enum([
   "qualified",
   "proposal",
   "negotiation",
+  "closed_won",
+  "closed_lost",
   "won",
   "lost",
 ]);
@@ -93,7 +96,7 @@ export const createLeadSchema = z.object({
     .default(50),
   assignedTo: z
     .string()
-    .email("Invalid assignee email")
+    .max(255, "Assignee must be less than 255 characters")
     .optional()
     .nullable(),
   notes: z
@@ -154,7 +157,7 @@ export const updateLeadSchema = z.object({
     .optional(),
   assignedTo: z
     .string()
-    .email("Invalid assignee email")
+    .max(255, "Assignee must be less than 255 characters")
     .optional()
     .nullable(),
   notes: z

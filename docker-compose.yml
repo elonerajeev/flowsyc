@@ -47,12 +47,13 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-crm_user}:${DB_PASSWORD:-crm_password}@db:5432/${DB_NAME:-focal_point_compass}?connection_limit=10&pool_timeout=20
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
-      NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:-https://flowsyc-svuj.vercel.app}
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
       # Email (optional — leave blank to disable email features)
       SMTP_HOST: ${SMTP_HOST:-}
@@ -125,6 +126,13 @@ services:
       - crm-network
     depends_on:
       - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   grafana:
     image: grafana/grafana:11.1.4
@@ -146,6 +154,13 @@ services:
     depends_on:
       - prometheus
       - loki
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   loki:
     image: grafana/loki:3.1.1
@@ -158,6 +173,13 @@ services:
       - "3100"
     networks:
       - crm-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   promtail:
     image: grafana/promtail:3.1.1
@@ -171,6 +193,13 @@ services:
       - crm-network
     depends_on:
       - loki
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -185,14 +214,19 @@ services:
       - crm-network
     depends_on:
       - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   crm-network:
     driver: bridge
 
 volumes:
-  postgres_data:
-    driver: local
   prometheus_data:
     driver: local
   grafana_data:

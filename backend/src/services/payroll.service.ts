@@ -44,13 +44,13 @@ export const payrollService = {
       where.period = period;
     }
 
-    // Admin/Manager: organization-scoped visibility based on owner adminId.
+    // Admin/Manager: organization-scoped visibility.
     if (access?.role === "admin" || access?.role === "manager") {
       orgAdminId = await ensureOrgTeamMembers(access);
       const teamMembers = await prisma.teamMember.findMany({
         where: {
           deletedAt: null,
-          adminId: orgAdminId ?? "__none__",
+          organizationId: orgAdminId ?? "__none__",
         },
         select: {
           id: true,
@@ -187,7 +187,7 @@ export const payrollService = {
       where: {
         deletedAt: null,
         status: "active",
-        adminId: orgAdminId ?? "__none__",
+        organizationId: orgAdminId ?? "__none__",
       },
     });
 
@@ -239,12 +239,12 @@ export const payrollService = {
 
     const teamMember = await prisma.teamMember.findUnique({
       where: { id: Number(payroll.memberId) },
-      select: { name: true, email: true, adminId: true },
+      select: { name: true, email: true, organizationId: true },
     });
     if (!teamMember) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }
-    if (!orgAdminId || teamMember.adminId !== orgAdminId) {
+    if (!orgAdminId || teamMember.organizationId !== orgAdminId) {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 
@@ -291,9 +291,9 @@ export const payrollService = {
     }
     const teamMember = await prisma.teamMember.findUnique({
       where: { id: Number(payroll.memberId) },
-      select: { adminId: true },
+      select: { organizationId: true },
     });
-    if (!teamMember || !orgAdminId || teamMember.adminId !== orgAdminId) {
+    if (!teamMember || !orgAdminId || teamMember.organizationId !== orgAdminId) {
       throw new AppError("Access denied", 403, "FORBIDDEN");
     }
 

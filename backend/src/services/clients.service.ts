@@ -1,5 +1,4 @@
 import { logger } from "../utils/logger";
-import { normalizePagination } from "../utils/pagination";
 import { Prisma, type ClientSegment, type ClientStatus, type ClientTier } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
@@ -58,6 +57,7 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 type ClientInput = {
@@ -147,30 +147,32 @@ async function buildWhere(filters: ClientFilters, access: AccessScope): Promise<
     });
   }
 
-  // Data isolation: Role-based filtering
-  // Admin: Get their team's data (via team field)
-  // Manager: See only their created/assigned records
-  // Employee: See only assigned records
-  if (access?.role === "admin") {
-    // Admin sees all clients they created or are assigned to
-    and.push({
-      OR: [
-        { assignedTo: access.email },
-        { assignedTo: access.userId ?? "" },
-        { assignedTo: null },
-      ],
-    } as any);
-  } else if (access?.role === "manager") {
-    and.push({
-      OR: [
-        { assignedTo: access.email },
-        { assignedTo: access.userId ?? "" },
-      ],
-    } as any);
-  } else if (access?.role === "employee") {
-    and.push({
-      assignedTo: { in: [access.email, access.userId ?? ""] },
-    } as any);
+  // Org-level isolation (primary): filters by organizationId when available
+  if (access?.organizationId) {
+    and.push({ organizationId: access.organizationId });
+    // Within org: role-based sub-scoping
+    if (access.role === "manager") {
+      const ids = [access.email, access.userId].filter(Boolean) as string[];
+      and.push({ OR: ids.map((id) => ({ assignedTo: id })) });
+    } else if (access.role === "employee") {
+      and.push({ assignedTo: { in: [access.email, access.userId ?? ""].filter(Boolean) } });
+    }
+    // admin sees all org clients
+  } else {
+    // Backward-compat user-level isolation when no org context exists
+    if (access?.role === "admin" || access?.role === "manager") {
+      and.push({
+        OR: [
+          { assignedTo: access.email },
+          { assignedTo: access.userId ?? "" },
+        ],
+      });
+    }
+    if (access?.role === "employee") {
+      and.push({
+        assignedTo: { in: [access.email, access.userId ?? ""] },
+      });
+    }
   }
 
   if (filters.status) {
@@ -264,7 +266,6 @@ export const clientsService = {
   },
 
   async list(filters: ClientFilters, access?: AccessScope) {
-    const { page, limit, skip } = normalizePagination({ page: filters.page, limit: filters.limit });
     const where = await buildWhere(filters, access);
 
     const [total, clients] = await prisma.$transaction([
@@ -272,8 +273,8 @@ export const clientsService = {
       prisma.client.findMany({
         where,
         orderBy: buildOrderBy(filters.sort, filters.order),
-        skip,
-        take: limit,
+        skip: (filters.page - 1) * filters.limit,
+        take: filters.limit,
       }),
     ]);
 
@@ -288,7 +289,7 @@ export const clientsService = {
     };
   },
 
-  async create(input: ClientInput) {
+  async create(input: ClientInput, access?: AccessScope) {
     const existing = await prisma.client.findUnique({ where: { email: input.email } });
     if (existing) {
       throw new AppError("Client email already exists", 409, "CONFLICT");
@@ -316,6 +317,7 @@ export const clientsService = {
           phone: input.phone ?? "",
           company: input.company ?? "",
           tags: input.tags ?? [],
+          organizationId: access?.organizationId ?? null,
           updatedAt: new Date(),
         },
       });

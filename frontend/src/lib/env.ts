@@ -6,6 +6,9 @@ type AppEnv = {
   enableAnalytics: boolean;
   analyticsEndpoint: string;
   sentryDsn: string;
+  companyName: string;
+  companyEmail: string;
+  companyWebsite: string;
 };
 
 function readEnv(key: string, fallback = "") {
@@ -31,6 +34,9 @@ export const appEnv: AppEnv = {
   enableAnalytics: readEnv("VITE_ENABLE_ANALYTICS", "false") === "true",
   analyticsEndpoint: readEnv("VITE_ANALYTICS_ENDPOINT", ""),
   sentryDsn: readEnv("VITE_SENTRY_DSN", ""),
+  companyName: readEnv("VITE_COMPANY_NAME", "Flowsyc"),
+  companyEmail: readEnv("VITE_COMPANY_EMAIL", "hr@flowsyc.ct.ws"),
+  companyWebsite: readEnv("VITE_COMPANY_WEBSITE", "https://flowsyc.ct.ws"),
 };
 
 export const isProduction = appEnv.appEnv === "production";

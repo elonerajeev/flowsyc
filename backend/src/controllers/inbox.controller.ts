@@ -45,7 +45,7 @@ export const getEmail = asyncHandler(async (req: Request, res: Response) => {
 export const getEmailsByEntity = asyncHandler(async (req: Request, res: Response) => {
   const { entityType, entityId } = req.query;
   if (!entityType || !entityId) { res.status(400).json({ error: "entityType and entityId required" }); return; }
-  const emails = await inboxService.getEmailsByEntity(String(entityType), Number(entityId));
+  const emails = await inboxService.getEmailsByEntity(req.auth!.userId, String(entityType), Number(entityId));
   res.json(emails);
 });
 

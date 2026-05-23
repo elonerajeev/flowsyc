@@ -33,7 +33,7 @@ export const systemService = {
       const payload = {
         event,
         timestamp: new Date().toISOString(),
-        source: "Focal Point CRM",
+        source: "Flowsyc CRM",
         data,
       };
 

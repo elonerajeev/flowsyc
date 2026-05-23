@@ -3,13 +3,14 @@ import { Prisma, type PaymentMode } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { fromDbPaymentMode, toDbPaymentMode } from "../utils/payment-mode";
-import { logger } from "../utils/logger";
 import type { AccessScope } from "../utils/access-control";
+import { authService } from "./auth.service";
 
 type TeamMemberRecord = {
   id: number;
   name: string;
   email: string;
+  userId: string | null;
   role: "Admin" | "Manager" | "Employee";
   status: "active" | "pending" | "completed";
   avatar: string;
@@ -81,13 +82,14 @@ const teamMemberSelect = {
   id: true,
   name: true,
   email: true,
+  userId: true,
   role: true,
   status: true,
   avatar: true,
   department: true,
   team: true,
   teamId: true,
-  adminId: true,
+  organizationId: true,
   designation: true,
   manager: true,
   workingHours: true,
@@ -127,15 +129,7 @@ function mapUserRoleToTeamRole(role: "admin" | "manager" | "employee" | "client"
 }
 
 export async function resolveOrgAdminId(access?: AccessScope): Promise<string | null> {
-  if (!access?.userId) return null;
-  if (access.role === "admin") return access.userId;
-
-  const user = await prisma.user.findUnique({
-    where: { id: access.userId },
-    select: { adminId: true },
-  });
-
-  return user?.adminId ?? access.userId;
+  return access?.organizationId ?? null;
 }
 
 export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string | null> {
@@ -143,14 +137,14 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
     return null;
   }
 
-  const orgAdminId = await resolveOrgAdminId(access);
-  if (!orgAdminId) return null;
+  const organizationId = access.organizationId;
+  if (!organizationId) return null;
 
   const users = await prisma.user.findMany({
     where: {
       deletedAt: null,
       role: { in: ["admin", "manager", "employee"] },
-      OR: [{ id: orgAdminId }, { adminId: orgAdminId }],
+      organizationId,
     },
     select: {
       id: true,
@@ -173,7 +167,7 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
   });
 
   if (users.length === 0) {
-    return orgAdminId;
+    return organizationId;
   }
 
   await prisma.$transaction(
@@ -181,6 +175,7 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
       prisma.teamMember.upsert({
         where: { email: user.email },
         update: {
+          userId: user.id,
           name: user.name,
           role: mapUserRoleToTeamRole(user.role),
           department: user.department || "Operations",
@@ -196,10 +191,11 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
           paymentMode: user.paymentMode,
           location: user.location || "HQ",
           status: "active",
-          adminId: orgAdminId,
+          organizationId,
           updatedAt: new Date(),
         },
         create: {
+          userId: user.id,
           name: user.name,
           email: user.email,
           role: mapUserRoleToTeamRole(user.role),
@@ -220,25 +216,27 @@ export async function ensureOrgTeamMembers(access?: AccessScope): Promise<string
           checkIn: "-",
           location: user.location || "HQ",
           workload: 0,
-          adminId: orgAdminId,
+          organizationId,
           updatedAt: new Date(),
         },
       }),
     ),
   );
 
-  return orgAdminId;
+  return organizationId;
 }
 
 function mapMember(member: {
   id: number;
   name: string;
   email: string;
+  userId: string | null;
   role: "Admin" | "Manager" | "Employee";
   status: "active" | "pending" | "completed";
   avatar: string;
   department: string;
   team: string;
+  teamId: number | null;
   designation: string;
   manager: string;
   workingHours: string;
@@ -264,12 +262,13 @@ function mapMember(member: {
     id: member.id,
     name: member.name,
     email: member.email,
+    userId: member.userId ?? null,
     role: member.role,
     status: member.status,
     avatar: member.avatar,
     department: member.department,
     team: member.team,
-    teamId: null,
+    teamId: member.teamId ?? null,
     designation: member.designation,
     manager: member.manager,
     workingHours: member.workingHours,
@@ -308,13 +307,20 @@ function isEmailUniqueConstraintError(error: unknown) {
 }
 
 export const teamMembersService = {
-  async getById(memberId: number) {
+  async getById(memberId: number, access?: AccessScope) {
     const member = await prisma.teamMember.findUnique({
       where: { id: memberId },
       select: teamMemberSelect,
     });
     if (!member || member.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
+    }
+    if (
+      access?.organizationId &&
+      member.organizationId &&
+      member.organizationId !== access.organizationId
+    ) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
     }
     return mapMember(member);
   },
@@ -323,14 +329,19 @@ export const teamMembersService = {
     const orgAdminId = await ensureOrgTeamMembers(access);
     const where: Prisma.TeamMemberWhereInput = {
       deletedAt: null,
-      // Admin/Manager: scoped to their organization owner.
+      // Admin/Manager: scoped to their organization.
       ...(access?.role === "admin" || access?.role === "manager"
-        ? { adminId: orgAdminId ?? "__none__" }
+        ? { organizationId: orgAdminId ?? "__none__" }
         : {}),
       ...(query.role ? { role: query.role } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.department ? { department: { contains: query.department, mode: "insensitive" } } : {}),
     };
+
+    const orgScopeForRelatedRecords =
+      access?.organizationId
+        ? { organizationId: access.organizationId }
+        : {};
 
     const [total, members, taskCounts, projects] = await prisma.$transaction([
       prisma.teamMember.count({ where }),
@@ -343,11 +354,14 @@ export const teamMembersService = {
       }),
       prisma.task.groupBy({
         by: ["assignee"],
-        where: { deletedAt: null, column: { not: "done" } },
+        where: { deletedAt: null, column: { not: "done" }, ...orgScopeForRelatedRecords },
         orderBy: { assignee: "asc" },
         _count: { assignee: true },
       }),
-      prisma.project.findMany({ where: { deletedAt: null, status: { in: ["active", "in_progress"] } }, select: { team: true } }),
+      prisma.project.findMany({
+        where: { deletedAt: null, status: { in: ["active", "in_progress"] }, ...orgScopeForRelatedRecords },
+        select: { team: true },
+      }),
     ]);
 
     // Build task count map by assignee name
@@ -374,20 +388,6 @@ export const teamMembersService = {
       return { ...member, workload };
     });
 
-    // Persist updated workloads back to DB (fire and forget)
-    Promise.allSettled(membersWithWorkload.map(m =>
-      prisma.teamMember.update({
-        where: { id: m.id },
-        data: { workload: m.workload },
-        select: { id: true },
-      })
-    )).then(results => {
-      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-      if (failures.length > 0) {
-        logger.warn("Some workload updates failed", { failures: failures.map(f => f.reason) });
-      }
-    });
-
     return {
       data: membersWithWorkload.map(mapMember),
       pagination: { page: query.page, limit: query.limit, total, totalPages: Math.max(1, Math.ceil(total / query.limit)) },
@@ -395,10 +395,17 @@ export const teamMembersService = {
   },
 
   async create(input: TeamMemberCreateInput, access?: AccessScope) {
-    const adminId = (await resolveOrgAdminId(access)) ?? undefined;
-    
+    const organizationId = (await resolveOrgAdminId(access)) ?? undefined;
+    if (!organizationId) {
+      throw new AppError("Organization context is required", 400, "BAD_REQUEST");
+    }
+    if (access?.role === "manager" && input.role !== "Employee") {
+      throw new AppError("Managers can only create employee accounts", 403, "FORBIDDEN");
+    }
+
     const name = input.name.trim();
-    const existing = await prisma.teamMember.findUnique({ where: { email: input.email } });
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const existing = await prisma.teamMember.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
       throw new AppError("Team member email already exists", 409, "CONFLICT");
     }
@@ -440,7 +447,7 @@ export const teamMembersService = {
       const member = await prisma.teamMember.create({
         data: {
           name,
-          email: input.email,
+          email: normalizedEmail,
           role: input.role,
           status: input.status ?? "active",
           avatar: input.avatar ?? name.slice(0, 2).toUpperCase(),
@@ -465,12 +472,48 @@ export const teamMembersService = {
           checkIn,
           location,
           workload: input.workload ?? 0,
-          adminId: adminId ?? null,
+          organizationId,
           updatedAt: new Date(),
         },
         select: teamMemberSelect,
       });
-      return mapMember(member);
+
+      const account = await authService.provisionInvitedUserFromTeamMember(
+        {
+          teamMemberId: member.id,
+          userId: member.userId,
+          teamMemberRole: member.role,
+          name: member.name,
+          email: member.email,
+          department: member.department,
+          team: member.team,
+          designation: member.designation,
+          manager: member.manager,
+          workingHours: member.workingHours,
+          officeLocation: member.officeLocation,
+          timeZone: member.timeZone,
+          baseSalary: member.baseSalary,
+          allowances: member.allowances,
+          deductions: member.deductions,
+          paymentMode: fromDbPaymentMode(member.paymentMode),
+          location: member.location,
+          organizationId,
+        },
+        access,
+      );
+
+      const linkedMember = await prisma.teamMember.update({
+        where: { id: member.id },
+        data: { userId: account.userId },
+        select: teamMemberSelect,
+      });
+
+      return {
+        ...mapMember(linkedMember),
+        linkedUserId: account.userId,
+        invitationSent: account.invitationSent,
+        inviteStatus: account.status,
+      };
     } catch (error) {
       if (isEmailUniqueConstraintError(error)) {
         throw new AppError("Team member email already exists", 409, "CONFLICT");
@@ -479,23 +522,37 @@ export const teamMembersService = {
     }
   },
 
-  async update(memberId: number, patch: TeamMemberUpdateInput) {
+  async update(memberId: number, patch: TeamMemberUpdateInput, access?: AccessScope) {
+    if (access?.role === "manager" && patch.role && patch.role !== "Employee") {
+      throw new AppError("Managers can only assign employee role", 403, "FORBIDDEN");
+    }
+
     const existing = await prisma.teamMember.findUnique({
       where: { id: memberId },
       select: {
         id: true,
         email: true,
+        role: true,
+        organizationId: true,
         deletedAt: true,
       },
     });
     if (!existing || existing.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }
+    if (access?.organizationId && existing.organizationId && existing.organizationId !== access.organizationId) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
+    }
+    if (access?.role === "manager" && existing.role !== "Employee") {
+      throw new AppError("Managers can only update employee records", 403, "FORBIDDEN");
+    }
     if (patch.email !== undefined && patch.email !== existing.email) {
-      const emailOwner = await prisma.teamMember.findUnique({ where: { email: patch.email } });
+      const normalizedPatchEmail = patch.email.trim().toLowerCase();
+      const emailOwner = await prisma.teamMember.findUnique({ where: { email: normalizedPatchEmail } });
       if (emailOwner && emailOwner.id !== existing.id) {
         throw new AppError("Team member email already exists", 409, "CONFLICT");
       }
+      patch.email = normalizedPatchEmail;
     }
 
     try {
@@ -532,6 +589,54 @@ export const teamMembersService = {
         select: teamMemberSelect,
       });
 
+      const shouldDeactivateLinkedUser =
+        member.status === "completed" ||
+        member.terminatedAt !== null;
+
+      if (shouldDeactivateLinkedUser && member.organizationId) {
+        await authService.deactivateUserFromTeamMember({
+          organizationId: member.organizationId,
+          userId: member.userId,
+          email: member.email,
+        });
+        return mapMember(member);
+      }
+
+      if (member.organizationId && access && (access.role === "admin" || access.role === "manager")) {
+        const linked = await authService.syncUserFromTeamMember(
+          {
+            teamMemberId: member.id,
+            userId: member.userId,
+            teamMemberRole: member.role,
+            name: member.name,
+            email: member.email,
+            department: member.department,
+            team: member.team,
+            designation: member.designation,
+            manager: member.manager,
+            workingHours: member.workingHours,
+            officeLocation: member.officeLocation,
+            timeZone: member.timeZone,
+            baseSalary: member.baseSalary,
+            allowances: member.allowances,
+            deductions: member.deductions,
+            paymentMode: fromDbPaymentMode(member.paymentMode),
+            location: member.location,
+            organizationId: member.organizationId,
+          },
+          access,
+        );
+
+        if (member.userId !== linked.userId) {
+          const relinked = await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { userId: linked.userId },
+            select: teamMemberSelect,
+          });
+          return mapMember(relinked);
+        }
+      }
+
       return mapMember(member);
     } catch (error) {
       if (isEmailUniqueConstraintError(error)) {
@@ -541,21 +646,45 @@ export const teamMembersService = {
     }
   },
 
-  async delete(memberId: number) {
+  async delete(memberId: number, access?: AccessScope) {
     const existing = await prisma.teamMember.findUnique({
       where: { id: memberId },
       select: {
         id: true,
+        email: true,
+        userId: true,
+        role: true,
+        organizationId: true,
         deletedAt: true,
       },
     });
     if (!existing || existing.deletedAt) {
       throw new AppError("Team member not found", 404, "NOT_FOUND");
     }
+    if (access?.organizationId && existing.organizationId && existing.organizationId !== access.organizationId) {
+      throw new AppError("Access denied", 403, "FORBIDDEN");
+    }
+    if (access?.role === "manager") {
+      throw new AppError("Managers cannot delete team members", 403, "FORBIDDEN");
+    }
+    if (access?.role === "admin" && existing.role === "Admin") {
+      // Avoid accidental self/peer admin deletions via team member endpoint.
+      throw new AppError("Admin team records cannot be deleted from this endpoint", 403, "FORBIDDEN");
+    }
 
-    await prisma.teamMember.update({
-      where: { id: memberId },
-      data: { deletedAt: new Date() },
+    await prisma.$transaction(async (tx) => {
+      await tx.teamMember.update({
+        where: { id: memberId },
+        data: { deletedAt: new Date() },
+      });
     });
+
+    if (existing.organizationId) {
+      await authService.deactivateUserFromTeamMember({
+        organizationId: existing.organizationId,
+        userId: existing.userId,
+        email: existing.email,
+      });
+    }
   },
 };

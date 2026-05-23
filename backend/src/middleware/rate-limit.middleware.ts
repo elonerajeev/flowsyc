@@ -17,6 +17,19 @@ function resolveKey(req: Request): string {
   return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
 }
 
+function createLimiter(windowMs: number, limit: number, message: string): RequestHandler {
+  return isDev
+    ? noOp
+    : rateLimit({
+        windowMs,
+        limit,
+        standardHeaders: "draft-7",
+        legacyHeaders: false,
+        keyGenerator: resolveKey,
+        message: { error: message },
+      });
+}
+
 export const apiRateLimiter: RequestHandler = isDev ? noOp : rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 500,
@@ -32,6 +45,7 @@ export const authRateLimiter: RequestHandler = isDev ? noOp : rateLimit({
   limit: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  keyGenerator: resolveKey,
   message: { error: "Too many authentication attempts, please try again later." },
 });
 
@@ -62,3 +76,27 @@ export const writeRateLimiter: RequestHandler = isDev ? noOp : rateLimit({
   skip: (req) => req.method === "GET" || req.method === "HEAD",
   message: { error: "Too many write operations, please slow down." },
 });
+
+export const loginRateLimiter = createLimiter(
+  15 * 60 * 1000,
+  10,
+  "Too many login attempts. Try again in 15 minutes.",
+);
+
+export const forgotPasswordRateLimiter = createLimiter(
+  60 * 60 * 1000,
+  5,
+  "Too many password reset requests. Try again in 1 hour.",
+);
+
+export const inviteAcceptRateLimiter = createLimiter(
+  60 * 60 * 1000,
+  8,
+  "Too many invite acceptance attempts. Try again in 1 hour.",
+);
+
+export const googleCallbackRateLimiter = createLimiter(
+  15 * 60 * 1000,
+  25,
+  "Too many Google auth callback attempts. Please try again later.",
+);

@@ -1,3 +1,4 @@
+import { env } from "../config/env";
 import { prisma } from "../config/prisma";
 
 export type AuditAction =
@@ -31,6 +32,7 @@ export type GetAuditLogsOptions = {
   role?: string;
   dateFrom?: string;
   dateTo?: string;
+  organizationId?: string;
 };
 
 export type AuditLogListResult = {
@@ -53,11 +55,9 @@ export async function resolveAuditActorName(userId: string, fallback?: string) {
   return user?.name ?? user?.email ?? "Unknown";
 }
 
-const AUDIT_RETENTION_DAYS = 7;
-
 function retentionCutoff(): Date {
   const d = new Date();
-  d.setDate(d.getDate() - AUDIT_RETENTION_DAYS);
+  d.setDate(d.getDate() - env.AUDIT_RETENTION_DAYS);
   return d;
 }
 
@@ -72,16 +72,34 @@ export async function logAudit(params: {
   entity: string;
   entityId?: string | number;
   detail?: string;
+  organizationId?: string;
 }) {
   try {
+    let resolvedUserName = params.userName?.trim();
+    let resolvedOrganizationId = params.organizationId ?? null;
+
+    if (!resolvedUserName || !resolvedOrganizationId) {
+      const actor = await prisma.user.findUnique({
+        where: { id: params.userId },
+        select: { name: true, email: true, organizationId: true },
+      });
+      if (!resolvedUserName) {
+        resolvedUserName = actor?.name ?? actor?.email ?? "Unknown";
+      }
+      if (!resolvedOrganizationId) {
+        resolvedOrganizationId = actor?.organizationId ?? null;
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: params.userId,
-        userName: await resolveAuditActorName(params.userId, params.userName),
+        userName: resolvedUserName ?? "Unknown",
         action: params.action,
         entity: params.entity,
         entityId: params.entityId ? String(params.entityId) : null,
         detail: params.detail ?? null,
+        organizationId: resolvedOrganizationId,
       },
     });
     // Purge old logs — fire-and-forget, never blocks the caller
@@ -112,6 +130,7 @@ function normalizeAuditOptions(input: number | GetAuditLogsOptions): GetAuditLog
     entity: input.entity?.trim() ?? "",
     userId: input.userId,
     role: input.role,
+    organizationId: input.organizationId,
   };
 }
 
@@ -122,7 +141,13 @@ function buildAuditWhereClause(options: GetAuditLogsOptions & { search: string; 
   params.push(retentionCutoff().toISOString());
   conditions.push(`"createdAt" >= $${params.length}::timestamptz`);
 
-  if (options.userId) {
+  // Org-level isolation: filter by organizationId when available
+  if (options.organizationId) {
+    params.push(options.organizationId);
+    conditions.push(`"organizationId" = $${params.length}`);
+  }
+
+  if ((options.role === "employee" || !options.organizationId) && options.userId) {
     params.push(options.userId);
     conditions.push(`"userId" = $${params.length}`);
   }

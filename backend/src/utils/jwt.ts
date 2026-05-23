@@ -9,6 +9,7 @@ export type TokenPayload = {
   email: string;
   role?: UserRole;
   type?: string;
+  organizationId?: string;
 };
 
 export function signAccessToken(payload: TokenPayload) {
@@ -28,6 +29,13 @@ export function signRefreshToken(payload: TokenPayload) {
 export function signPasswordResetToken(payload: TokenPayload) {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
     expiresIn: "1h",
+    jwtid: crypto.randomBytes(16).toString("hex"),
+  });
+}
+
+export function signInviteSetupToken(payload: TokenPayload) {
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: "24h",
     jwtid: crypto.randomBytes(16).toString("hex"),
   });
 }

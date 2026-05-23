@@ -731,7 +731,7 @@ async function executeWebhook(config: Record<string, unknown>, event: TriggerEve
       headers: {
         "Content-Type": "application/json",
         ...(headers || {}),
-        "User-Agent": "FocalPoint-Compass-CRM/1.0",
+        "User-Agent": "Flowsyc-CRM/1.0",
       },
       body: resolvedBody,
       signal: AbortSignal.timeout(30000),
@@ -1080,7 +1080,7 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
               <div style="width: 72px; height: 72px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
                 <span style="font-size: 36px;">🎉</span>
               </div>
-              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.5px;">Welcome to Focal Point Compass!</h1>
+              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.5px;">Welcome to Flowsyc!</h1>
             </td>
           </tr>
           <tr>
@@ -1108,7 +1108,7 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
                 </tr>
               </table>
               
-              <p style="color: #9ca3af; font-size: 13px; margin: 0;">Best regards,<br/><strong style="color: #4b5563;">The Focal Point Compass Team</strong></p>
+              <p style="color: #9ca3af; font-size: 13px; margin: 0;">Best regards,<br/><strong style="color: #4b5563;">The Flowsyc Team</strong></p>
             </td>
           </tr>
           <tr>
@@ -1181,7 +1181,7 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
                 </tr>
               </table>
               
-              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Flowsyc CRM</p>
             </td>
           </tr>
         </table>
@@ -1216,7 +1216,7 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
             <td style="padding: 32px 24px; text-align: center;">
               <p style="color: #111827; font-size: 17px; margin: 0 0 16px;">Don't forget to follow up with <strong style="color: #f59e0b;">{{name}}</strong>!</p>
               <p style="color: #4b5563; font-size: 15px; margin: 0;">This is an automated reminder from your CRM.</p>
-              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Flowsyc CRM</p>
             </td>
           </tr>
         </table>
@@ -1253,7 +1253,7 @@ function buildEmailFromTemplate(template: string, data: Record<string, unknown>,
               <div style="display: inline-block; background: #d1fae5; padding: 12px 24px; border-radius: 8px; margin: 8px 0 0;">
                 <span style="color: #059669; font-size: 18px; font-weight: 600;">Amount: {{amount}}</span>
               </div>
-              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Focal Point Compass CRM</p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">Sent via Flowsyc CRM</p>
             </td>
           </tr>
         </table>
@@ -1476,7 +1476,7 @@ export function startAutomationCron() {
       const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const cutoff90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-      const [tokens, jobs, logs, actLogs] = await Promise.all([
+      const [tokens, jobs, logs, actLogs, notifications] = await Promise.all([
         // Expired refresh tokens
         prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
         // Completed/failed/cancelled scheduled jobs older than 30 days
@@ -1487,6 +1487,8 @@ export function startAutomationCron() {
         prisma.automationLog.deleteMany({ where: { startedAt: { lt: cutoff90d } } }),
         // Activity logs older than 90 days
         prisma.activityLog.deleteMany({ where: { createdAt: { lt: cutoff90d } } }),
+        // Read notifications older than 30 days
+        prisma.notification.deleteMany({ where: { isRead: true, createdAt: { lt: cutoff30d } } }),
       ]);
 
       logger.info("Daily cleanup done", {
@@ -1494,6 +1496,7 @@ export function startAutomationCron() {
         oldJobs: jobs.count,
         oldLogs: logs.count,
         oldActivityLogs: actLogs.count,
+        oldNotifications: notifications.count,
       });
     } catch (err) {
       logger.error("Daily cleanup failed:", err);

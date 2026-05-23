@@ -7,7 +7,7 @@ import { optimizeUploadedImage } from "../services/image-optimization.service";
 
 const uploadRouter = Router();
 
-// POST /upload/avatar - Upload avatar image
+// POST /upload/avatar - Upload avatar image to Cloudinary
 uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
   uploadAvatar.single("file")(req, res, async (err) => {
     if (err) {
@@ -46,9 +46,9 @@ uploadRouter.post("/avatar", requireAuth, (req: Request, res: Response) => {
   });
 });
 
-// POST /upload/resume - Upload candidate resume
+// POST /upload/resume - Upload candidate resume to Cloudinary
 uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
-  uploadResume.single("file")(req, res, (err) => {
+  uploadResume.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -67,9 +67,9 @@ uploadRouter.post("/resume", requireAuth, (req: Request, res: Response) => {
   });
 });
 
-// POST /upload/document - Upload general document
+// POST /upload/document - Upload general document to Cloudinary
 uploadRouter.post("/document", requireAuth, (req: Request, res: Response) => {
-  uploadDocument.single("file")(req, res, (err) => {
+  uploadDocument.single("file")(req, res, async (err) => {
     if (err) {
       const status = err.name === "MulterError" ? 400 : 500;
       return res.status(status).json({ error: err.message, code: "UPLOAD_FAILED" });
@@ -98,27 +98,6 @@ uploadRouter.delete("/:category/:filename", requireAuth, (req: Request, res: Res
     res.status(400).json({ error: "Invalid category", code: "INVALID_CATEGORY" });
     return;
   }
-
-  const deleted = deleteFile(cat, String(filename));
-  if (!deleted) {
-    res.status(404).json({ error: "File not found", code: "FILE_NOT_FOUND" });
-    return;
-  }
-
-  res.status(200).json({ message: "File deleted" });
-});
-
-// GET /uploads/:category/:filename - Serve uploaded files
-uploadRouter.get("/file/:category/:filename", (req: Request, res: Response) => {
-  const { category, filename } = req.params;
-  const relativePath = `uploads/${String(category)}/${String(filename)}`;
-  const filePath = resolveFilePath(relativePath);
-
-  if (!filePath) {
-    return res.status(404).json({ error: "File not found", code: "FILE_NOT_FOUND" });
-  }
-
-  res.sendFile(filePath);
 });
 
 export { uploadRouter };
