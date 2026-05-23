@@ -31,8 +31,8 @@ export default function DemoBookingWidget() {
       });
       setServerMessage(result.message);
       setSubmitted(true);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong. Please try again.");
+    } catch (e: unknown) {
+      setError((e as Error)?.message || "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }

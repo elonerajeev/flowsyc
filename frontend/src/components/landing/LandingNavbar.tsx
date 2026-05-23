@@ -3,21 +3,21 @@ import { Menu, X, Sun, Moon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
 
+const navLinks = [
+  { label: "Product", id: "product", type: "scroll" as const },
+  { label: "Features", id: "features", type: "scroll" as const },
+  { label: "Pricing", id: "pricing", type: "scroll" as const },
+  { label: "Integrations", id: "integrations", type: "scroll" as const },
+  { label: "About", id: "/about", type: "page" as const },
+  { label: "Contact", id: "/contact", type: "page" as const },
+];
+
 export default function LandingNavbar() {
   const navigate = useNavigate();
   const { mode, toggleMode } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("");
-
-  const navLinks = [
-    { label: "Product", id: "product", type: "scroll" as const },
-    { label: "Features", id: "features", type: "scroll" as const },
-    { label: "Pricing", id: "pricing", type: "scroll" as const },
-    { label: "Integrations", id: "integrations", type: "scroll" as const },
-    { label: "About", id: "/about", type: "page" as const },
-    { label: "Contact", id: "/contact", type: "page" as const },
-  ];
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);

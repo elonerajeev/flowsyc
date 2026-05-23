@@ -101,8 +101,6 @@ function getTransporter() {
   return cachedTransporter;
 }
 
-export async function sendMailDirect(input: SendMailInput) {
-  if (process.env.DISABLE_EMAIL_DELIVERY === "true") {
 async function verifyTransporter() {
   const now = Date.now();
   if (cachedTransporter && now - transporterVerifiedAt < VERIFY_TTL_MS) {
@@ -122,7 +120,7 @@ async function verifyTransporter() {
   }
 }
 
-export async function sendMail(input: SendMailInput) {
+export async function sendMailDirect(input: SendMailInput) {
   if (process.env.DISABLE_EMAIL_DELIVERY === "true") {
     return;
   }
@@ -132,8 +130,7 @@ export async function sendMail(input: SendMailInput) {
 
   try {
     const transporter = getTransporter();
-    
-    // Build proper email - let nodemailer handle multipart MIME automatically
+
     const mailOptions: nodemailer.SendMailOptions = {
       from: `${config.fromName} <${config.from}>`,
       to: input.to,
@@ -142,7 +139,7 @@ export async function sendMail(input: SendMailInput) {
       html: input.html,
       attachments: input.attachments,
     };
-    
+
     await transporter.sendMail(mailOptions);
   } catch (err) {
     throw new AppError(

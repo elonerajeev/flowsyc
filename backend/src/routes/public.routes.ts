@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { asyncHandler } from "../utils/async-handler";
-import { sendLeadWelcomeEmail } from "../utils/email-templates";
+import { sendClientWelcomeEmail } from "../utils/email-templates";
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -64,11 +64,10 @@ router.post(
       },
     });
 
-    sendLeadWelcomeEmail({
+    sendClientWelcomeEmail({
       name: body.name,
       email: body.email,
-      company: body.company,
-    }).catch((err) => logger.warn("Demo booking email failed", err));
+    }).catch((err: unknown) => logger.warn("Demo booking email failed", err));
 
     res.status(201).json({ message: "Booking confirmed! Check your email for details." });
   }),
