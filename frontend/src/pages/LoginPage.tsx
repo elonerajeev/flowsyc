@@ -22,7 +22,6 @@ export default function LoginPage() {
 
   const { login, switchRole } = useAuth();
   const { setRole } = useTheme();
-  const nextPath = searchParams.get("from") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);

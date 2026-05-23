@@ -542,19 +542,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const next = mode === "light" ? "dark" : "light";
     setMode(next);
     writeStoredString("crm-mode", next);
-    try { crmService.updatePreferences({ "crm-mode": next }); } catch {}
+    try { crmService.updatePreferences({ "crm-mode": next }); } catch { /* ignore */ }
   }, [mode]);
 
   const setColor = (c: ThemeColor) => {
     setColorState(c);
     writeStoredString("crm-color", c);
-    try { crmService.updatePreferences({ "crm-color": c }); } catch {}
+    try { crmService.updatePreferences({ "crm-color": c }); } catch { /* ignore */ }
   };
 
   const setBackground = (style: BackgroundStyle) => {
     setBackgroundState(style);
     writeStoredString("crm-background", style);
-    try { crmService.updatePreferences({ "crm-background": style }); } catch {}
+    try { crmService.updatePreferences({ "crm-background": style }); } catch { /* ignore */ }
   };
 
   const setRole = (r: UserRole) => {
