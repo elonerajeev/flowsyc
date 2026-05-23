@@ -5,20 +5,20 @@ export default function CTASection() {
   const navigate = useNavigate();
 
   return (
-    <section className="bg-[#0A0F1A] px-4 py-20 sm:py-28">
+    <section className="bg-background px-4 py-16 sm:py-28">
       <div className="mx-auto max-w-4xl">
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#111827] to-[#0D1117] px-6 py-16 text-center sm:px-12 sm:py-20">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-card to-card px-4 py-12 text-center sm:px-12 sm:py-20">
           {/* Glow */}
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(83,85,214,0.12),transparent)]" />
           {/* Top accent */}
           <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-[#5355D6]/40 to-transparent" />
 
           <div className="relative z-10">
-            <h2 className="text-3xl font-bold text-white sm:text-4xl md:text-5xl">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground sm:text-4xl md:text-5xl">
               Start Your Free{" "}
               <span className="text-[#5355D6]">Trial Today</span>
             </h2>
-            <p className="mx-auto mt-4 max-w-md text-sm text-white/40 sm:text-base">
+            <p className="mx-auto mt-4 max-w-md text-sm text-muted-foreground sm:text-base">
               No credit card required. Get full access to all features for 14 days.
             </p>
 
@@ -32,7 +32,7 @@ export default function CTASection() {
               </button>
               <button
                 onClick={() => navigate("/login")}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-7 py-3.5 text-sm font-semibold text-foreground backdrop-blur-sm transition-all hover:bg-muted/90"
               >
                 Log In
               </button>

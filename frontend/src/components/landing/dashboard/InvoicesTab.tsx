@@ -2,7 +2,7 @@ import { invoices } from "./DashboardData";
 import { DollarSign } from "lucide-react";
 
 export default function InvoicesTab() {
-  const total = 67250;
+  const total = 48350;
   const paid = 17600;
   const pending = 8750;
   const overdue = 22000;
@@ -12,30 +12,30 @@ export default function InvoicesTab() {
       {/* Summary */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total Billed", value: "$67.2k", color: "#5355D6" },
+          { label: "Total Billed", value: "$48.4k", color: "#5355D6" },
           { label: "Paid", value: "$17.6k", color: "#2A8F7A" },
           { label: "Pending", value: "$8.7k", color: "#F0A030" },
           { label: "Overdue", value: "$22k", color: "#DC3545" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-center">
+          <div key={s.label} className="rounded-xl border border-border/50 bg-muted/30 p-3 text-center">
             <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
-            <p className="mt-0.5 text-[10px] text-white/35">{s.label}</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">{s.label}</p>
           </div>
         ))}
       </div>
 
       {/* Collection bar */}
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-        <div className="mb-2 flex items-center justify-between text-[10px] text-white/40">
+      <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+        <div className="mb-2 flex items-center justify-between text-[10px] text-muted-foreground">
           <span>Collection Rate</span>
-          <span className="font-bold text-white">{Math.round((paid / total) * 100)}%</span>
+          <span className="font-bold text-foreground">{Math.round((paid / total) * 100)}%</span>
         </div>
-        <div className="flex h-2 overflow-hidden rounded-full bg-white/5">
+        <div className="flex h-2 overflow-hidden rounded-full bg-muted-foreground/10">
           <div className="h-full bg-[#2A8F7A]" style={{ width: `${(paid / total) * 100}%` }} />
           <div className="h-full bg-[#F0A030]" style={{ width: `${(pending / total) * 100}%` }} />
           <div className="h-full bg-[#DC3545]" style={{ width: `${(overdue / total) * 100}%` }} />
         </div>
-        <div className="mt-2 flex gap-4 text-[9px] text-white/30">
+        <div className="mt-2 flex gap-4 text-[9px] text-muted-foreground">
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#2A8F7A]" />Paid</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#F0A030]" />Pending</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#DC3545]" />Overdue</span>
@@ -43,21 +43,21 @@ export default function InvoicesTab() {
       </div>
 
       {/* Invoice list */}
-      <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
-        <div className="grid grid-cols-5 border-b border-white/5 px-4 py-2 text-[9px] font-semibold uppercase tracking-wider text-white/25">
+      <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/30">
+        <div className="grid grid-cols-5 border-b border-border/50 px-4 py-2 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
           <span>Invoice</span>
           <span className="col-span-2">Client</span>
           <span>Amount</span>
           <span>Status</span>
         </div>
         {invoices.map((inv) => (
-          <div key={inv.id} className="grid grid-cols-5 items-center border-b border-white/[0.03] px-4 py-3 transition-all last:border-0 hover:bg-white/[0.03]">
+          <div key={inv.id} className="grid grid-cols-5 items-center border-b border-border/30 px-4 py-3 transition-all last:border-0 hover:bg-muted/50">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-3.5 w-3.5 text-white/20" />
-              <span className="text-[10px] font-mono text-white/50">{inv.id}</span>
+              <DollarSign className="h-3.5 w-3.5 text-muted-foreground/40" />
+              <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
             </div>
-            <span className="col-span-2 text-xs font-semibold text-white/70">{inv.client}</span>
-            <span className="text-xs font-bold text-white">{inv.amount}</span>
+            <span className="col-span-2 text-xs font-semibold text-foreground/70">{inv.client}</span>
+            <span className="text-xs font-bold text-foreground">{inv.amount}</span>
             <span className="w-fit rounded-full px-2 py-0.5 text-[9px] font-semibold" style={{ backgroundColor: `${inv.color}15`, color: inv.color }}>
               {inv.status}
             </span>

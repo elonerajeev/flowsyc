@@ -13,6 +13,7 @@ import RouteAccessGuard from "@/components/layout/RouteAccessGuard";
 import PageLoader from "@/components/shared/PageLoader";
 import AppErrorBoundary from "@/components/shared/AppErrorBoundary";
 import NetworkErrorBridge from "@/components/shared/NetworkErrorBridge";
+import CookieConsent from "@/components/shared/CookieConsent";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useMonitoring } from "@/hooks/use-monitoring";
 import { Analytics } from '@vercel/analytics/react';
@@ -104,7 +105,8 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <AppErrorBoundary>
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
@@ -146,7 +148,6 @@ const App = () => {
                 path="/*"
                 element={
                   <PrivateRoute>
-                    <ThemeProvider>
                       <RealtimeProvider>
                         <WorkspaceProvider>
                           <NotificationProvider>
@@ -250,14 +251,15 @@ const App = () => {
                           </NotificationProvider>
                         </WorkspaceProvider>
                       </RealtimeProvider>
-                    </ThemeProvider>
                   </PrivateRoute>
                 }
               />
             </Routes>
+            <CookieConsent />
           </BrowserRouter>
-        </AppErrorBoundary>
-      </AuthProvider>
+          </AppErrorBoundary>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

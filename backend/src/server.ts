@@ -1,5 +1,6 @@
 import { env } from "./config/env";
 import { createApp } from "./app";
+import { initializeQueues, closeQueues } from "./services/queue.service";
 import { prisma } from "./config/prisma";
 import { logger } from "./utils/logger";
 import { initializeIO, getIO } from "./socket";
@@ -28,6 +29,7 @@ initializeIO(server);
 
 async function start() {
   await prisma.$connect();
+  initializeQueues();
   purgeOldAuditLogs().catch(() => {}); // one-time cleanup on startup
   server.listen(env.PORT, () => {
     logger.info("Backend listening", {
@@ -77,6 +79,7 @@ async function start() {
     stopInboxScheduler();
     healthCron.stop();
     pipelineCron.stop();
+    await closeQueues().catch((err) => logger.error("Error closing queues", { err }));
     
     server.close(async () => {
       await prisma.$disconnect();

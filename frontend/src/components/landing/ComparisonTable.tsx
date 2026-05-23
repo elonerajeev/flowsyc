@@ -25,33 +25,33 @@ const cols = [
 
 function Cell({ value }: { value: boolean | string }) {
   if (value === true) return <Check className="mx-auto h-4 w-4 text-[#2A8F7A]" />;
-  if (value === false) return <X className="mx-auto h-4 w-4 text-white/15" />;
+  if (value === false) return <X className="mx-auto h-4 w-4 text-muted-foreground/30" />;
   if (value === "partial") return <span className="text-[10px] text-[#F0A030]">Partial</span>;
-  return <span className="text-xs font-semibold text-white/70">{value}</span>;
+  return <span className="text-xs font-semibold text-foreground/70">{value}</span>;
 }
 
 export default function ComparisonTable() {
   return (
-    <section id="comparison" className="bg-[#0A0F1A] px-4 py-20 sm:py-28">
+    <section id="comparison" className="bg-background px-4 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Why Flowsyc
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             One platform vs{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               five separate tools
             </span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">
             Flowsyc replaces your entire SaaS stack. Compare what you get.
           </p>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-white/[0.06]">
-          <p className="block px-4 pt-3 text-center text-[10px] text-white/25 sm:hidden">← Scroll to compare →</p>
-          <div className="sm:hidden mb-3 flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-2 text-xs text-white/40">
+        <div className="overflow-x-auto rounded-2xl border border-border/80">
+          <p className="block px-4 pt-3 text-center text-[10px] text-muted-foreground/60 sm:hidden">← Scroll to compare →</p>
+          <div className="sm:hidden mb-3 flex items-center gap-2 rounded-lg border border-border/80 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12M8 12h12m-12 5h12M4 7h.01M4 12h.01M4 17h.01" />
             </svg>
@@ -62,10 +62,10 @@ export default function ComparisonTable() {
           </div>
           <table className="w-full min-w-[640px]">
             <thead>
-              <tr className="border-b border-white/[0.06]">
-                <th className="px-5 py-4 text-left text-xs font-semibold text-white/30">Feature</th>
+              <tr className="border-b border-border/80">
+                  <th className="px-5 py-4 text-left text-xs font-semibold text-muted-foreground">Feature</th>
                 {cols.map((col) => (
-                  <th key={col.key} className={`px-4 py-4 text-center text-xs font-semibold ${col.highlight ? "text-[#5355D6]" : "text-white/30"}`}>
+                  <th key={col.key} className={`px-4 py-4 text-center text-xs font-semibold ${col.highlight ? "text-[#5355D6]" : "text-muted-foreground"}`}>
                     {col.highlight && (
                       <div className="mb-1 inline-block rounded-full bg-[#5355D6]/10 px-2 py-0.5 text-[9px] text-[#5355D6]">★ Best</div>
                     )}
@@ -76,8 +76,8 @@ export default function ComparisonTable() {
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={row.feature} className={`border-b border-white/[0.03] transition-colors hover:bg-white/[0.02] ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}>
-                  <td className="px-5 py-3.5 text-sm text-white/60">{row.feature}</td>
+                <tr key={row.feature} className={`border-b border-border/40 transition-colors hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{row.feature}</td>
                   {cols.map((col) => (
                     <td key={col.key} className={`px-4 py-3.5 text-center ${col.highlight ? "bg-[#5355D6]/[0.04]" : ""}`}>
                       <Cell value={row[col.key as keyof typeof row] as boolean | string} />
@@ -89,7 +89,7 @@ export default function ComparisonTable() {
           </table>
         </div>
 
-        <p className="mt-4 text-center text-xs text-white/20">
+        <p className="mt-4 text-center text-xs text-muted-foreground/40">
           Pricing shown per user/month on entry-level paid plans. Flowsyc Free plan includes all core features.
         </p>
       </div>

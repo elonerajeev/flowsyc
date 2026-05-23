@@ -13,7 +13,11 @@ services:
     networks:
       - crm-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-crm_user} -d ${DB_NAME:-focal_point_compass}" ]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-crm_user} -d ${DB_NAME:-focal_point_compass}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -74,7 +78,8 @@ services:
     networks:
       - crm-network
     healthcheck:
-      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health" ]
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -83,7 +88,7 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
 
   frontend:
     build:
@@ -101,7 +106,7 @@ services:
       resources:
         limits:
           memory: 256M
-          cpus: '0.25'
+          cpus: "0.25"
 
   prometheus:
     image: prom/prometheus:v2.54.1

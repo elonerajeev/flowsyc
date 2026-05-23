@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
+import DemoBookingWidget from "@/components/landing/DemoBookingWidget";
 import { ArrowUp, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import LandingNavbar from "@/components/landing/LandingNavbar";
@@ -17,7 +18,6 @@ const ComparisonTable = lazy(() => import("@/components/landing/ComparisonTable"
 const SecurityStrip = lazy(() => import("@/components/landing/SecurityStrip"));
 const Testimonials = lazy(() => import("@/components/landing/Testimonials"));
 const Pricing = lazy(() => import("@/components/landing/Pricing"));
-const FAQ = lazy(() => import("@/components/landing/FAQ"));
 const Templates = lazy(() => import("@/components/landing/Templates"));
 const CTASection = lazy(() => import("@/components/landing/CTASection"));
 const LandingFooter = lazy(() => import("@/components/landing/LandingFooter"));
@@ -25,7 +25,7 @@ const HowItWorks = lazy(() => import("@/components/landing/HowItWorks"));
 const CustomerLogos = lazy(() => import("@/components/landing/CustomerLogos"));
 
 function SectionLoader() {
-  return <div className="h-96 bg-[#030308]" />;
+  return <div className="h-64 sm:h-96 bg-background" />;
 }
 
 function MobileStickyCTA() {
@@ -41,17 +41,17 @@ function MobileStickyCTA() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0A0F1A]/95 px-4 py-3 backdrop-blur-xl md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-xl md:hidden">
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/signup")}
-          className="flex-1 rounded-xl bg-[#5355D6] px-4 py-2.5 text-sm font-semibold text-white"
+          className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
         >
           Start Free — Free Forever
         </button>
         <button
           onClick={() => navigate("/login")}
-          className="rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white/70"
+          className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground"
         >
           Log in
         </button>
@@ -75,7 +75,7 @@ export default function LandingPage() {
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-[#030308]">
+    <div className="min-h-screen bg-background">
       <LandingNavbar />
       <Hero />
       <TrustedBy />
@@ -88,6 +88,23 @@ export default function LandingPage() {
       </Suspense>
       <FeatureGrid />
       <Suspense fallback={<SectionLoader />}>
+        {/* Streamlined workflows section heading */}
+        <section className="bg-background px-4 pt-20 sm:pt-28">
+          <div className="mx-auto max-w-6xl text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#5355D6]">
+              Built for every role
+            </p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
+              Streamlined workflows{" "}
+              <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
+                for every team
+              </span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground sm:text-lg">
+              Sales, operations, HR, and finance — each module works independently but shares data seamlessly.
+            </p>
+          </div>
+        </section>
         <ShowcaseDecision />
         <ShowcaseEfficiency />
         <ShowcaseSatisfaction />
@@ -98,7 +115,6 @@ export default function LandingPage() {
         <SecurityStrip />
         <Testimonials />
         <Pricing />
-        <FAQ />
         <Templates />
         <CTASection />
         <LandingFooter />
@@ -114,6 +130,7 @@ export default function LandingPage() {
         </button>
       )}
       <MobileStickyCTA />
+      <DemoBookingWidget />
     </div>
   );
 }

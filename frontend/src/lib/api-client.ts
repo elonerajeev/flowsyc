@@ -106,10 +106,59 @@ export function isRemoteApiEnabled() {
   return appEnv.useRemoteApi && Boolean(appEnv.apiBaseUrl.trim());
 }
 
-export async function uploadFile<T>(endpoint: string, file: File, fieldName = "file"): Promise<T> {
+type UploadFileOptions = {
+  onProgress?: (percent: number) => void;
+};
+
+export async function uploadFile<T>(endpoint: string, file: File, fieldName = "file", options?: UploadFileOptions): Promise<T> {
   const authToken = getStoredAuthToken();
   const formData = new FormData();
   formData.append(fieldName, file);
+
+  if (options?.onProgress) {
+    return await new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", buildUrl(endpoint), true);
+      xhr.withCredentials = true;
+
+      if (authToken) {
+        xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+      }
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round((event.loaded / event.total) * 100);
+        options.onProgress?.(Math.min(100, Math.max(0, percent)));
+      };
+
+      xhr.onload = () => {
+        const status = xhr.status;
+        const responseText = xhr.responseText || "";
+
+        if (status < 200 || status >= 300) {
+          const message = responseText || xhr.statusText || "Upload failed";
+          emitNetworkError({ endpoint, status, message });
+          reject(new ApiError(message, status, endpoint));
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(responseText) as T;
+          resolve(parsed);
+        } catch {
+          reject(new ApiError("Invalid upload response", status, endpoint));
+        }
+      };
+
+      xhr.onerror = () => {
+        const message = "Network error during upload";
+        emitNetworkError({ endpoint, message });
+        reject(new ApiError(message, 0, endpoint));
+      };
+
+      xhr.send(formData);
+    });
+  }
 
   const response = await fetch(buildUrl(endpoint), {
     method: "POST",
