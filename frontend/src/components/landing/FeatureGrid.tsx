@@ -94,23 +94,34 @@ const features = [
     accent: "from-[#F0A030]/20 to-[#F0A030]/5",
     bullets: ["Trigger-based rules", "Auto lead assignment", "Email & notification actions"],
   },
-];
+    {
+      icon: Zap,
+      title: "Async Jobs",
+      description: "Background email sending and heavy tasks processed via BullMQ and Redis, keeping the UI snappy.",
+      metric: "1000+ Jobs",
+      metricColor: "#2A8F7A",
+      bgColor: "bg-[#2A8F7A]/10",
+      borderColor: "border-[#2A8F7A]/20",
+      accent: "from-[#2A8F7A]/20 to-[#2A8F7A]/5",
+      bullets: ["Email queue", "Task scheduling", "Scalable workers"],
+    },
+    ];
 
 export default function FeatureGrid() {
   return (
-    <section id="features" className="bg-[#030308] px-4 py-20 sm:py-28">
+    <section id="features" className="bg-background px-4 py-16 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Business Application
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             Everything You Need to{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               Run Your Business
             </span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35 sm:text-lg">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
             Flowsyc unifies your entire operation — from first lead to final invoice —
             with intelligent automation and real-time insights.
           </p>
@@ -120,7 +131,7 @@ export default function FeatureGrid() {
           {features.map((feature, i) => (
             <FadeIn key={feature.title} delay={i * 100}>
               <div
-                className="group relative h-full overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-7 transition-all duration-300 hover:border-white/10"
+                className="group relative h-full overflow-hidden rounded-2xl border border-border/80 bg-muted/30 p-5 sm:p-7 transition-all duration-300 hover:border-border"
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${feature.accent} opacity-0 transition-opacity duration-500 group-hover:opacity-100`} />
                 <div className="absolute inset-x-0 top-0 h-px opacity-0 transition-opacity group-hover:opacity-100"
@@ -135,16 +146,16 @@ export default function FeatureGrid() {
                       <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ backgroundColor: `${feature.metricColor}15`, color: feature.metricColor }}>
                         {feature.metric}
                       </span>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-white/10 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white/30" />
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/20 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
                     </div>
                   </div>
 
-                  <h3 className="mb-2 text-base font-semibold text-white/90">{feature.title}</h3>
-                  <p className="mb-4 text-sm leading-relaxed text-white/35">{feature.description}</p>
+                  <h3 className="mb-2 text-base font-semibold text-foreground/90">{feature.title}</h3>
+                  <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{feature.description}</p>
 
                   <ul className="space-y-1.5">
                     {feature.bullets.map((b) => (
-                      <li key={b} className="flex items-center gap-2 text-xs text-white/40">
+                      <li key={b} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="h-1 w-1 rounded-full flex-shrink-0" style={{ backgroundColor: feature.metricColor }} />
                         {b}
                       </li>

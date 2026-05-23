@@ -8,6 +8,9 @@ backend/dist/
 
 # Environment files (keep .env.example)
 *.env
+*.env.*
+!.env.example
+!backend/.env.example
 .env.production
 backend/.env
 frontend/.env

@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Activity,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { RADIUS, SPACING, TEXT } from "@/lib/design-tokens";
 import RuleBuilder from "@/components/automation/RuleBuilder";
 import RuleLogs from "@/components/automation/RuleLogs";
+import ErrorFallback from "@/components/shared/ErrorFallback";
 import type { AutomationRule, AutomationLog } from "@/types/automation";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
@@ -128,6 +130,7 @@ export default function AutomationRulesPage() {
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingRuleActionId, setPendingRuleActionId] = useState<number | null>(null);
 
   const { data: rules = [], isLoading, error } = useQuery({
     queryKey: ["automation-rules"],
@@ -153,6 +156,9 @@ export default function AutomationRulesPage() {
   });
 
   const toggleMutation = useMutation({
+    onMutate: (ruleId: number) => {
+      setPendingRuleActionId(ruleId);
+    },
     mutationFn: async (ruleId: number) => {
       const res = await fetch(`/api/automation/rules/${ruleId}/toggle`, {
         method: "POST",
@@ -166,9 +172,13 @@ export default function AutomationRulesPage() {
       toast.success("Rule updated");
     },
     onError: () => toast.error("Failed to update rule"),
+    onSettled: () => setPendingRuleActionId(null),
   });
 
   const deleteMutation = useMutation({
+    onMutate: (ruleId: number) => {
+      setPendingRuleActionId(ruleId);
+    },
     mutationFn: async (ruleId: number) => {
       const res = await fetch(`/api/automation/rules/${ruleId}`, {
         method: "DELETE",
@@ -181,6 +191,7 @@ export default function AutomationRulesPage() {
       toast.success("Rule deleted");
     },
     onError: () => toast.error("Failed to delete rule"),
+    onSettled: () => setPendingRuleActionId(null),
   });
 
   const handleRefresh = async () => {
@@ -263,6 +274,7 @@ export default function AutomationRulesPage() {
             {filteredRules.map((rule: AutomationRule) => {
               const TriggerIcon = triggerIcons[rule.trigger] || Zap;
               const actions = rule.actions as any[] || [];
+              const isPendingAction = pendingRuleActionId === rule.id && (toggleMutation.isPending || deleteMutation.isPending);
 
               return (
                 <motion.article
@@ -324,6 +336,12 @@ export default function AutomationRulesPage() {
                           <Badge variant="outline" className="text-xs">
                             {triggerLabels[rule.trigger] || rule.trigger}
                           </Badge>
+                          {isPendingAction && (
+                            <Badge variant="outline" className="text-xs border-primary/30 bg-primary/10 text-primary">
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Updating
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -334,6 +352,7 @@ export default function AutomationRulesPage() {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 rounded-lg"
+                          disabled={isPendingAction}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
@@ -350,8 +369,14 @@ export default function AutomationRulesPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => toggleMutation.mutate(rule.id)}
+                          disabled={isPendingAction}
                         >
-                          {rule.isActive ? (
+                          {isPendingAction ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Updating...
+                            </>
+                          ) : rule.isActive ? (
                             <>
                               <Pause className="mr-2 h-4 w-4" />
                               Pause
@@ -380,6 +405,7 @@ export default function AutomationRulesPage() {
                               deleteMutation.mutate(rule.id);
                             }
                           }}
+                          disabled={isPendingAction}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete

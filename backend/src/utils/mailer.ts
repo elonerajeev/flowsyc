@@ -4,7 +4,7 @@ import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import { AppError } from "../middleware/error.middleware";
 import { logger } from "./logger";
 
-type SendMailInput = {
+export type SendMailInput = {
   to: string;
   subject: string;
   text: string;
@@ -120,7 +120,7 @@ async function verifyTransporter() {
   }
 }
 
-export async function sendMail(input: SendMailInput) {
+export async function sendMailDirect(input: SendMailInput) {
   if (process.env.DISABLE_EMAIL_DELIVERY === "true") {
     return;
   }
@@ -130,8 +130,7 @@ export async function sendMail(input: SendMailInput) {
 
   try {
     const transporter = getTransporter();
-    
-    // Build proper email - let nodemailer handle multipart MIME automatically
+
     const mailOptions: nodemailer.SendMailOptions = {
       from: `${config.fromName} <${config.from}>`,
       to: input.to,
@@ -140,7 +139,7 @@ export async function sendMail(input: SendMailInput) {
       html: input.html,
       attachments: input.attachments,
     };
-    
+
     await transporter.sendMail(mailOptions);
   } catch (err) {
     throw new AppError(
@@ -149,4 +148,9 @@ export async function sendMail(input: SendMailInput) {
       "EMAIL_DELIVERY_FAILED",
     );
   }
+}
+
+export async function sendMail(input: SendMailInput) {
+  const { queueEmail } = await import("../services/queue.service");
+  await queueEmail(input);
 }

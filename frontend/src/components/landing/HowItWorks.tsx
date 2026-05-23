@@ -35,19 +35,19 @@ export default function HowItWorks() {
   const navigate = useNavigate();
 
   return (
-    <section id="how-it-works" className="bg-[#030308] px-4 py-20 sm:py-28">
+    <section id="how-it-works" className="bg-background px-4 py-16 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="mb-16 text-center">
-          <div className="mb-4 inline-block rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+          <div className="mb-4 inline-block rounded-full border border-border bg-muted/50 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             How It Works
           </div>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             Up and Running in{" "}
             <span className="bg-gradient-to-r from-[#5355D6] to-[#7B7FFF] bg-clip-text text-transparent">
               3 Simple Steps
             </span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/35 sm:text-lg">
+          <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
             No complex setup. No IT department needed. Just sign up and start managing your business.
           </p>
         </div>
@@ -60,17 +60,17 @@ export default function HowItWorks() {
                 <div className="absolute top-16 left-[60%] hidden h-px w-[80%] bg-gradient-to-r from-white/10 to-transparent lg:block" />
               )}
 
-              <div className={`rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 transition-all duration-300 hover:border-white/10`}>
+              <div className={`rounded-2xl border border-border/80 bg-muted/30 p-6 sm:p-8 transition-all duration-300 hover:border-border`}>
                 {/* Step number + icon */}
                 <div className="mb-6 flex items-center gap-4">
                   <div className={`flex h-14 w-14 items-center justify-center rounded-xl border ${step.borderColor} ${step.bgColor}`}>
                     <step.icon className="h-6 w-6" style={{ color: step.color }} />
                   </div>
-                  <span className="text-4xl font-bold text-white/5">{step.step}</span>
+                  <span className="text-4xl font-bold text-muted-foreground/10">{step.step}</span>
                 </div>
 
-                <h3 className="mb-3 text-xl font-bold text-white">{step.title}</h3>
-                <p className="text-sm leading-relaxed text-white/40">{step.description}</p>
+                <h3 className="mb-3 text-xl font-bold text-foreground">{step.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">{step.description}</p>
               </div>
             </div>
           ))}
@@ -85,7 +85,7 @@ export default function HowItWorks() {
             Start Free — Takes 30 Seconds
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </button>
-          <p className="mt-4 text-xs text-white/25">
+          <p className="mt-4 text-xs text-muted-foreground/60">
             No credit card required · 14-day free trial · Cancel anytime
           </p>
         </div>

@@ -33,6 +33,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,8 +119,14 @@ export default function GTMOpsPage() {
 
   const recalculateMutation = useMutation({
     mutationFn: () => crmService.bulkRecalculateScores(),
-    onSuccess: () => {
-      refetch();
+    onSuccess: async (result) => {
+      await refetch();
+      toast.success(
+        `Lead scores recalculated. Total: ${result.total}, Hot: ${result.hotLeads}, Warm: ${result.warmLeads}, Cold: ${result.coldLeads}`
+      );
+    },
+    onError: () => {
+      toast.error("Failed to recalculate lead scores. Please retry.");
     },
   });
 

@@ -76,6 +76,7 @@ Flowsyc replaces **dozens** of disconnected tools with a single, unified platfor
 | **Auth** | JWT (Access + Refresh), Google OAuth |
 | **Real-Time** | Socket.IO |
 | **Email** | Nodemailer (SMTP) |
+| **Queue / Cache** | Redis, BullMQ (Async Background Jobs) |
 | **File Storage** | Multer (Local/Cloudinary) |
 | **Monitoring** | Prometheus, Grafana, Loki |
 
@@ -154,6 +155,9 @@ COOKIE_SECRET=your_32_char_hex_secret
 SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_app_password
 
+# Redis Queue (BullMQ)
+REDIS_URL=redis://localhost:6379
+
 # Google OAuth (optional)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -180,6 +184,14 @@ CLOUDINARY_API_SECRET=
 │  Port 3000                                              │
 │  • REST API  • Auth  • Socket.IO                        │
 │  • Zod Validation  • Rate Limiting                      │
+└───────────┬──────────────────────────────────┬──────────┘
+            │                                  │
+            │ Prisma ORM                       │ Redis / BullMQ
+┌───────────▼───────────┐            ┌─────────▼───────────┐
+│ DATABASE (PostgreSQL) │            │  REDIS JOB QUEUE    │
+│ • 30+ Models          │            │  • Email Queue      │
+│ • Migrations          │            │  • Async Jobs       │
+└───────────────────────┘            └─────────────────────┘
 └────────────────────┬────────────────────────────────────┘
                      │ Prisma ORM
 ┌────────────────────▼────────────────────────────────────┐
@@ -203,6 +215,8 @@ CLOUDINARY_API_SECRET=
 | HR Management | ✅ | Employees, payroll, attendance |
 | Analytics | ✅ | Dashboards, reports, charts |
 | Automation | ✅ | Rules, triggers, actions |
+| Email Integration | ✅ | Gmail SMTP, templates (queued via BullMQ) |
+| Asynchronous Jobs | ✅ | Redis/BullMQ background queue |
 | Email Integration | ✅ | Gmail SMTP, templates |
 | File Attachments | ✅ | Upload, download |
 | Audit Logs | ✅ | Full activity tracking |
