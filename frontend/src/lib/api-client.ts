@@ -18,6 +18,20 @@ type NetworkErrorDetail = {
   message: string;
 };
 
+function extractApiErrorMessage(body: string, fallback: string) {
+  if (!body) return fallback;
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } };
+    const message = parsed?.error?.message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  } catch {
+    // not JSON
+  }
+  return body;
+}
+
 function emitNetworkError(detail: NetworkErrorDetail) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("crm:network-error", { detail }));
@@ -56,7 +70,7 @@ export async function requestJson<T>(endpoint: string, init?: RequestInit): Prom
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    const message = body || response.statusText || "Request failed";
+    const message = extractApiErrorMessage(body, response.statusText || "Request failed");
     emitNetworkError({ endpoint, status: response.status, message });
     throw new ApiError(message, response.status, endpoint);
   }
@@ -82,7 +96,7 @@ export async function requestVoid(endpoint: string, init?: RequestInit): Promise
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    const message = body || response.statusText || "Request failed";
+    const message = extractApiErrorMessage(body, response.statusText || "Request failed");
     emitNetworkError({ endpoint, status: response.status, message });
     throw new ApiError(message, response.status, endpoint);
   }
@@ -157,7 +171,7 @@ export async function uploadFile<T>(endpoint: string, file: File, fieldName = "f
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    const message = body || response.statusText || "Upload failed";
+    const message = extractApiErrorMessage(body, response.statusText || "Upload failed");
     emitNetworkError({ endpoint, status: response.status, message });
     throw new ApiError(message, response.status, endpoint);
   }

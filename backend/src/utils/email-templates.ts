@@ -16,7 +16,7 @@ function emailLayout(content: string, footerNote?: string): string {
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
   <!-- HEADER -->
   <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
-    <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:14px;width:52px;height:52px;line-height:52px;text-align:center;font-size:26px;font-weight:900;color:#fff;margin-bottom:12px;">F</div>
+    <img src="https://flowsyc-svuj.vercel.app/flowsyc-logo.png" alt="Flowsyc" width="56" height="56" style="border-radius:12px;display:block;margin:0 auto 12px;" />
     <div style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;margin-bottom:4px;">Flowsyc</div>
     <div style="font-size:11px;color:#94a3b8;letter-spacing:2.5px;text-transform:uppercase;">Enterprise CRM Platform</div>
   </td></tr>

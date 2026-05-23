@@ -1,4 +1,5 @@
 import { SimpleSparkline } from "@/components/shared/SimpleCharts";
+import { cn } from "@/lib/utils";
 
 type SparklineChartProps = {
   data: number[];
@@ -6,6 +7,7 @@ type SparklineChartProps = {
   fill?: string;
   accentFill?: string;
   className?: string;
+  height?: number;
 };
 
 export default function SparklineChart({
@@ -14,6 +16,17 @@ export default function SparklineChart({
   fill = "hsl(var(--primary) / 0.18)",
   accentFill = "hsl(var(--accent) / 0.12)",
   className,
+  height = 40,
 }: SparklineChartProps) {
-  return <SimpleSparkline data={data} stroke={stroke} fill={fill} accentFill={accentFill} className={className} />;
+  return (
+    <div className={cn("w-full", className)} style={{ height }}>
+      <SimpleSparkline 
+        data={data} 
+        stroke={stroke} 
+        fill={fill} 
+        accentFill={accentFill} 
+        className="h-full"
+      />
+    </div>
+  );
 }

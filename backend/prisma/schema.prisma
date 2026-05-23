@@ -1251,3 +1251,154 @@ model Notification {
   @@index([userId, isRead])
   @@index([batchKey])
 }
+
+enum ServiceCheckType {
+  http
+  tcp
+  ping
+}
+
+enum ServiceStatus {
+  up
+  down
+  degraded
+  unknown
+}
+
+model MonitoredService {
+  id             Int               @id @default(autoincrement())
+  organizationId String?
+  name           String
+  url            String
+  checkType      ServiceCheckType  @default(http)
+  intervalSecs   Int               @default(30)
+  timeoutMs      Int               @default(5000)
+  expectedStatus Int?              @default(200)  // for http checks
+  tags           String[]          @default([])
+  isActive       Boolean           @default(true)
+  createdBy      String?
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  checks         ServiceCheck[]
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model ServiceCheck {
+  id          Int            @id @default(autoincrement())
+  serviceId   Int
+  status      ServiceStatus
+  responseMs  Int?
+  statusCode  Int?
+  error       String?
+  checkedAt   DateTime       @default(now())
+
+  service     MonitoredService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@index([checkedAt])
+  @@index([serviceId, checkedAt])
+}
+
+model MonitoredServer {
+  id             Int       @id @default(autoincrement())
+  organizationId String?
+  name           String
+  ip             String
+  port           Int       @default(22)
+  provider       String?
+  region         String?
+  tags           String[]  @default([])
+  isActive       Boolean   @default(true)
+  createdBy      String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+enum DeploymentStatus {
+  success
+  failed
+  running
+  cancelled
+}
+
+model Deployment {
+  id             Int              @id @default(autoincrement())
+  organizationId String?
+  service        String           // e.g. "Backend API", "Frontend"
+  environment    String           // e.g. "production", "staging"
+  status         DeploymentStatus @default(running)
+  commitHash     String?
+  commitMessage  String?
+  branch         String?
+  deployedBy     String?
+  version        String?
+  notes          String?
+  startedAt      DateTime         @default(now())
+  finishedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([environment])
+  @@index([startedAt])
+  @@index([organizationId, version])
+}
+
+enum DevOpsAlertSeverity {
+  critical
+  warning
+  info
+}
+
+model DevOpsAlert {
+  id             Int                 @id @default(autoincrement())
+  organizationId String?
+  title          String
+  service        String
+  severity       DevOpsAlertSeverity @default(warning)
+  description    String?
+  resolved       Boolean             @default(false)
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  createdBy      String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([resolved])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model DevOpsLogSource {
+  id             Int      @id @default(autoincrement())
+  organizationId String?
+  name           String
+  provider       String   @default("generic")
+  environment    String   @default("production")
+  endpoint       String?
+  authType       String   @default("api_key")
+  authConfig     Json     @default("{}")
+  ingestKeyHash  String
+  isActive       Boolean  @default(true)
+  createdBy      String?
+  lastIngestAt   DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([deletedAt])
+}

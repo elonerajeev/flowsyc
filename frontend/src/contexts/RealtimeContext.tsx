@@ -36,6 +36,11 @@ function resolveSocketUrl() {
   return apiBaseUrl.replace(/\/api\/?$/, "").replace(/\/$/, "");
 }
 
+function getStoredSocketToken() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("crm-auth-token") ?? "";
+}
+
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
@@ -52,13 +57,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     }
 
     setStatus("connecting");
+    const authToken = getStoredSocketToken();
 
     const socket = io(socketUrl, {
       autoConnect: true,
       transports: ["websocket", "polling"],
       withCredentials: true,
       auth: {
-        userId: user.id,
+        token: authToken,
       },
     });
 

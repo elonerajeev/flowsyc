@@ -67,6 +67,13 @@ const GTMOpsPage = lazy(() => import("@/pages/GTMOpsPage"));
 const GTMFlowPage = lazy(() => import("@/pages/GTMFlowPage"));
 const InboxPage = lazy(() => import("@/pages/InboxPage"));
 
+const DevOpsHealthPage      = lazy(() => import("@/pages/devops/HealthPage"));
+const DevOpsServersPage     = lazy(() => import("@/pages/devops/ServersPage"));
+const DevOpsDeploymentsPage = lazy(() => import("@/pages/devops/DeploymentsPage"));
+const DevOpsPipelinesPage   = lazy(() => import("@/pages/devops/PipelinesPage"));
+const DevOpsLogsPage        = lazy(() => import("@/pages/devops/LogsPage"));
+const DevOpsAlertsPage      = lazy(() => import("@/pages/devops/AlertsPage"));
+
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
@@ -228,6 +235,13 @@ const App = () => {
                                       <Route path="/billing" element={<Navigate to="/finance" replace />} />
                                       <Route path="/settings" element={<Navigate to="/system/settings" replace />} />
                                       <Route path="/restricted" element={<RestrictedPage />} />
+                                      <Route path="/devops/health"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsHealthPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/servers"     element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsServersPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/deployments" element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsDeploymentsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/pipelines"   element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsPipelinesPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/logs"        element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsLogsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops/alerts"      element={<RouteAccessGuard><Suspense fallback={<PageLoader />}><DevOpsAlertsPage /></Suspense></RouteAccessGuard>} />
+                                      <Route path="/devops"             element={<Navigate to="/devops/health" replace />} />
                                       <Route path="*" element={<NotFound />} />
                                     </Routes>
                                   </Suspense>

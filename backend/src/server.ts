@@ -8,6 +8,9 @@ import http from "http";
 import { startAutomationCron, stopAutomationCron } from "./services/automation-engine";
 import { startInboxScheduler, stopInboxScheduler } from "./services/inbox-scheduler.service";
 import { purgeOldAuditLogs } from "./utils/audit";
+import { monitoringService } from "./services/monitoring.service";
+import { pipelinesService } from "./services/pipelines.service";
+import cron from "node-cron";
 
 process.on("unhandledRejection", (reason) => {
   logger.error("Unhandled rejection", { reason });
@@ -40,6 +43,29 @@ async function start() {
   startAutomationCron();
   logger.info("Automation engine started");
 
+  // Health checker — runs every 30s
+  const healthCron = cron.schedule("*/30 * * * * *", () => {
+    monitoringService.runAllChecks().catch((err) => logger.error("Health check cron error", { err }));
+  });
+  logger.info("Health checker started (30s interval)");
+
+  // GitHub pipeline auto-sync — runs every 5 minutes (env token only, no user context needed)
+  const pipelineCron = cron.schedule("*/5 * * * *", async () => {
+    try {
+      const result = await pipelinesService.syncFromGitHub(null, 50);
+      if (result.processed > 0) {
+        logger.info(`[PipelineSync] Auto-synced ${result.processed} runs from ${result.source}`);
+      }
+    } catch (err) {
+      // Only log if it's not a "not configured" error — that's expected when no token is set
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("not configured") && !msg.includes("GITHUB_NOT_CONFIGURED")) {
+        logger.warn("[PipelineSync] Auto-sync failed", { err: msg });
+      }
+    }
+  });
+  logger.info("Pipeline auto-sync started (5m interval)");
+
   // Start IMAP inbox background sync
   if (env.NODE_ENV !== "test") {
     startInboxScheduler();
@@ -51,6 +77,8 @@ async function start() {
     // Stop automation cron
     stopAutomationCron();
     stopInboxScheduler();
+    healthCron.stop();
+    pipelineCron.stop();
     await closeQueues().catch((err) => logger.error("Error closing queues", { err }));
     
     server.close(async () => {
