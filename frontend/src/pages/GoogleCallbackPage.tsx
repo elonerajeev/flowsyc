@@ -16,10 +16,24 @@ export default function GoogleCallbackPage() {
           throw new Error("No authenticated session found");
         }
         setRole(session.user.role);
+
+        const isPopup = typeof window !== "undefined" && !!window.opener && window.opener !== window;
+        if (isPopup) {
+          window.opener.postMessage({ type: "google-auth-success" }, window.location.origin);
+          window.close();
+          return;
+        }
+
         navigate("/overview");
       })
       .catch((err) => {
         console.error("Google login error:", err);
+        const isPopup = typeof window !== "undefined" && !!window.opener && window.opener !== window;
+        if (isPopup) {
+          window.opener.postMessage({ type: "google-auth-failed" }, window.location.origin);
+          window.close();
+          return;
+        }
         setError("Failed to complete Google login. Please try again.");
       });
   }, [navigate, setRole]);

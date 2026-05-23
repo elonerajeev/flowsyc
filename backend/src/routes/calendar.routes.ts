@@ -28,7 +28,11 @@ router.get(
   requireRole(["admin", "manager"]),
   asyncHandler(async (req, res) => {
     const { getGoogleAuthUrl } = await import("../services/google-auth.service.js");
-    const authUrl = getGoogleAuthUrl(req.auth!.email);
+    const authUrl = await getGoogleAuthUrl({
+      email: req.auth!.email,
+      userId: req.auth!.userId,
+      organizationId: req.auth!.organizationId,
+    });
     res.json({ authUrl });
   }),
 );

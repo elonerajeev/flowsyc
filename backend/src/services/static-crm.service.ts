@@ -53,9 +53,20 @@ function splitName(fullName: string) {
 }
 
 export const staticCrmService = {
-  async listCompanies() {
+  async listCompanies(access?: AccessScope) {
+    const where: Prisma.ClientWhereInput = { deletedAt: null };
+    if (access?.organizationId) {
+      where.organizationId = access.organizationId;
+    } else if (access?.role === "admin" || access?.role === "manager") {
+      where.assignedTo = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+    } else if (access?.role === "employee") {
+      where.assignedTo = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+    } else if (access?.role === "client") {
+      where.email = { equals: access.email, mode: "insensitive" };
+    }
+
     const clients = await prisma.client.findMany({
-      where: { deletedAt: null },
+      where,
       orderBy: [{ updatedAt: "desc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -137,12 +148,20 @@ export const staticCrmService = {
   },
 
   async getSalesMetrics(access?: AccessScope) {
-    const CACHE_KEY = `sales:metrics:${access?.email || "public"}`;
+    const CACHE_KEY = `sales:metrics:${access?.userId || access?.email || "public"}:${access?.organizationId || "global"}`;
     const cached = cache.get<SalesMetrics>(CACHE_KEY);
     if (cached) return cached;
 
     // Build user-specific filters for data isolation
     const dealWhere: Prisma.DealWhereInput = { deletedAt: null };
+    const invoiceWhere: Prisma.InvoiceWhereInput = { deletedAt: null };
+    const clientWhere: Prisma.ClientWhereInput = { deletedAt: null };
+
+    if (access?.organizationId) {
+      dealWhere.organizationId = access.organizationId;
+      invoiceWhere.organizationId = access.organizationId;
+      clientWhere.organizationId = access.organizationId;
+    }
     
     // Admin/Manager see only their deals
     if (access?.role === "admin" || access?.role === "manager") {
@@ -168,7 +187,7 @@ export const staticCrmService = {
         },
       }),
       prisma.invoice.findMany({
-        where: { deletedAt: null },
+        where: invoiceWhere,
         select: {
           amount: true,
           client: true,
@@ -178,7 +197,7 @@ export const staticCrmService = {
         },
       }),
       prisma.client.findMany({
-        where: { deletedAt: null },
+        where: clientWhere,
         select: {
           name: true,
           company: true,

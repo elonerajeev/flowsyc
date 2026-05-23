@@ -39,14 +39,18 @@ function formatMonthRange(dates: Date[]) {
 
 function buildActorFilter(actor?: AccessActor) {
   if (!actor || actor.role === "employee") return {};
+  const orgFilter = actor.organizationId ? { organizationId: actor.organizationId } : {};
   const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
-  return actorIds.length > 0 ? { createdBy: { in: actorIds } } : {};
+  if (actorIds.length === 0) return orgFilter;
+  return { ...orgFilter, createdBy: { in: actorIds } };
 }
 
 function buildClientActorFilter(actor?: AccessActor) {
   if (!actor) return {};
+  const orgFilter = actor.organizationId ? { organizationId: actor.organizationId } : {};
   const actorIds = [actor.email, actor.userId].filter(Boolean) as string[];
-  return actorIds.length > 0 ? { assignedTo: { in: actorIds } } : {};
+  if (actorIds.length === 0) return orgFilter;
+  return { ...orgFilter, assignedTo: { in: actorIds } };
 }
 
 function parseCurrency(value: unknown): number {
@@ -118,7 +122,7 @@ export const reportsService = {
         take: REPORT_SNAPSHOT_LIMIT,
       }),
       prisma.teamMember.findMany({
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) },
         select: { name: true, attendance: true, department: true, role: true, designation: true },
         orderBy: { createdAt: "desc" },
         take: REPORT_SNAPSHOT_LIMIT,
@@ -270,7 +274,7 @@ export const reportsService = {
         take: ANALYTICS_SNAPSHOT_LIMIT,
       }),
       prisma.teamMember.findMany({
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) },
         select: { department: true, attendance: true },
         orderBy: { createdAt: "desc" },
         take: ANALYTICS_SNAPSHOT_LIMIT,

@@ -45,6 +45,7 @@ type AccessScope = {
   role: UserRole;
   email: string;
   userId?: string;
+  organizationId?: string;
 } | null | undefined;
 
 function mapDeal(deal: any): DealRecord {
@@ -72,18 +73,30 @@ export const dealsService = {
   async list(access?: AccessScope) {
     const where: Prisma.DealWhereInput = { deletedAt: null };
 
-    // Data isolation: Admin/Manager can only see deals they created or assigned to them
-    if (access?.role === "admin" || access?.role === "manager") {
-      where.OR = [
-        { createdBy: access.email },
-        { assignedTo: access.email },
-        { assignedTo: access.userId ?? "" },
-      ];
-    }
-
-    // RBAC: Employees see only assigned deals
-    if (access?.role === "employee") {
-      where.assignedTo = { in: [access.email, access.userId ?? ""] };
+    // Org-level isolation (primary)
+    if (access?.organizationId) {
+      where.organizationId = access.organizationId;
+      if (access.role === "manager") {
+        const ids = [access.email, access.userId].filter(Boolean) as string[];
+        where.OR = [
+          ...ids.map((id) => ({ createdBy: id })),
+          ...ids.map((id) => ({ assignedTo: id })),
+        ];
+      } else if (access.role === "employee") {
+        where.assignedTo = { in: [access.email, access.userId ?? ""].filter(Boolean) };
+      }
+    } else {
+      // Backward-compat user-level isolation
+      if (access?.role === "admin" || access?.role === "manager") {
+        where.OR = [
+          { createdBy: access.email },
+          { assignedTo: access.email },
+          { assignedTo: access.userId ?? "" },
+        ];
+      }
+      if (access?.role === "employee") {
+        where.assignedTo = { in: [access.email, access.userId ?? ""] };
+      }
     }
 
     try {
@@ -103,7 +116,12 @@ export const dealsService = {
   },
 
   async getById(id: number, access?: AccessScope) {
-    const deal = await prisma.deal.findUnique({ where: { id } });
+    const deal = await prisma.deal.findFirst({
+      where: {
+        id,
+        ...(access?.organizationId ? { organizationId: access.organizationId } : {}),
+      },
+    });
     if (!deal || deal.deletedAt) {
       throw new AppError("Deal not found", 404, "NOT_FOUND");
     }
@@ -137,6 +155,7 @@ export const dealsService = {
         assignedTo: input.assignedTo,
         createdBy: access?.email ?? null,
         tags: input.tags ?? [],
+        organizationId: access?.organizationId ?? null,
       },
     });
 

@@ -9,7 +9,11 @@ export function initializeIO(server: http.Server): SocketIOServer {
   if (!_io) {
     _io = new SocketIOServer(server, {
       cors: {
-        origin: process.env.FRONTEND_URL ?? "http://localhost:8080",
+        origin: [
+          process.env.FRONTEND_URL ?? "http://localhost:8080",
+          "https://flowsyc-svuj.vercel.app",
+          "https://flowsyc.com",
+        ],
         methods: ["GET", "POST"],
       },
     });
@@ -35,7 +39,9 @@ export function initializeIO(server: http.Server): SocketIOServer {
       });
 
       socket.on('join', (userId: string) => {
-        socket.join(`user_${userId}`);
+        if (userId === socket.data.userId) {
+          socket.join(`user_${userId}`);
+        }
       });
     });
   }

@@ -26,6 +26,7 @@ export const hiringController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "create",
         entity: "JobPosting",
         entityId: job.id,
@@ -40,6 +41,7 @@ export const hiringController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "JobPosting",
         entityId: jobId,
@@ -54,6 +56,7 @@ export const hiringController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "delete",
         entity: "JobPosting",
         entityId: jobId,
@@ -68,6 +71,7 @@ export const hiringController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "update",
         entity: "JobPosting",
         entityId: jobId,
@@ -81,6 +85,7 @@ export const hiringController = {
     if (req.auth) {
       await logAudit({
         userId: req.auth.userId,
+        organizationId: req.auth.organizationId,
         action: "create",
         entity: "JobPosting",
         entityId: job.id,

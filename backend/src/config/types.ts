@@ -22,6 +22,7 @@ export type AuthUser = {
   payrollDueDate: string;
   joinedAt: string;
   location: string;
+  organizationId?: string;
 };
 
 export type ThemePreview = {

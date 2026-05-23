@@ -1,4 +1,4 @@
-# Focal Point Compass — Comprehensive Technical Context
+# FlowSync — Comprehensive Technical Context
 
 **Last Updated:** 2026-04-22  
 **Project Status:** ✅ Production Ready — 100% Complete  
@@ -39,7 +39,7 @@
 
 ## 1. Executive Summary
 
-**Focal Point Compass** is an enterprise-grade CRM platform covering the complete business lifecycle:
+**FlowSync** is an enterprise-grade CRM platform covering the complete business lifecycle:
 
 - **Sales:** Leads → Deals → Clients → Contacts → GTM pipeline
 - **Work:** Projects → Tasks → Calendar → Notes → Meetings → Activity feed
@@ -1152,6 +1152,6 @@ cat .git/hooks/post-commit
 
 ---
 
-*This document is the authoritative technical reference for Focal Point Compass CRM.*  
+*This document is the authoritative technical reference for FlowSync CRM.*  
 *For AI agents: Always start with `codebase-snapshot.xml` for compact index, use this file for deep-dive details.*  
 *Last Updated: 2026-04-22 | Version: 1.0.0*

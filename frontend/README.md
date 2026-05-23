@@ -1,6 +1,6 @@
-# Focal Point Compass Frontend
+# Flowsyc Frontend
 
-This is the frontend application for Focal Point Compass, a comprehensive CRM system built with React, TypeScript, and modern web technologies.
+This is the frontend application for Flowsyc, a comprehensive CRM system built with React, TypeScript, and modern web technologies.
 
 ## Features
 

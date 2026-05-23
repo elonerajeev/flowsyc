@@ -7,7 +7,7 @@ import type { UserRole } from "../config/types";
 
 process.env.NODE_ENV = "test";
 process.env.PORT = "3000";
-process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/focal_point_compass_test";
+process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/flowsyc_test";
 process.env.JWT_ACCESS_SECRET = "a".repeat(64);
 process.env.JWT_REFRESH_SECRET = "b".repeat(64);
 process.env.FRONTEND_URL = "http://localhost:8080";
@@ -115,6 +115,13 @@ const mockPrisma = {
   auditLog: {
     create: jest.fn(async () => {}),
   },
+  organization: {
+    create: jest.fn(async ({ data }: { data: { id: string; name: string; updatedAt: Date } }) => ({
+      id: data.id,
+      name: data.name,
+      updatedAt: data.updatedAt,
+    })),
+  },
   $transaction: jest.fn(async (fn: (...args: any[]) => any) => fn(mockPrisma)),
 };
 
@@ -181,7 +188,7 @@ describe("auth API", () => {
         name: "Test User",
         email: "test@example.com",
         password: "Password123!",
-        role: "employee",
+        role: "admin",
       },
     });
 
@@ -192,7 +199,7 @@ describe("auth API", () => {
       refreshToken: string;
     };
     expect(signupBody.user.email).toBe("test@example.com");
-    expect(signupBody.user.role).toBe("employee");
+    expect(signupBody.user.role).toBe("admin");
     expect(signupBody.accessToken).toEqual(expect.any(String));
     expect(signupBody.refreshToken).toEqual(expect.any(String));
 
@@ -242,25 +249,43 @@ describe("auth API", () => {
     expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
   });
 
-  it("rejects privileged role during public signup", async () => {
+  it("allows admin signup and still rejects unsupported privileged role", async () => {
     const app = createApp();
 
-    const signupResponse = await dispatch(app, {
+    const adminSignupResponse = await dispatch(app, {
       method: "POST",
       url: "/api/auth/signup",
       body: {
-        name: "Privileged User",
-        email: "privileged@example.com",
+        name: "Admin User",
+        email: "admin@example.com",
         password: "Password123!",
         role: "admin",
       },
     });
 
-    expect(signupResponse.statusCode).toBe(400);
-    const signupBody = signupResponse._getJSONData() as {
+    expect(adminSignupResponse.statusCode).toBe(201);
+    const adminSignupBody = adminSignupResponse._getJSONData() as {
+      user: { role: UserRole; email: string };
+    };
+    expect(adminSignupBody.user.role).toBe("admin");
+    expect(adminSignupBody.user.email).toBe("admin@example.com");
+
+    const managerSignupResponse = await dispatch(app, {
+      method: "POST",
+      url: "/api/auth/signup",
+      body: {
+        name: "Manager User",
+        email: "manager@example.com",
+        password: "Password123!",
+        role: "manager",
+      },
+    });
+
+    expect(managerSignupResponse.statusCode).toBe(400);
+    const managerSignupBody = managerSignupResponse._getJSONData() as {
       error: { code: string; message: string };
     };
-    expect(signupBody.error.code).toBe("VALIDATION_ERROR");
-    expect(mockState.users).toHaveLength(0);
+    expect(managerSignupBody.error.code).toBe("VALIDATION_ERROR");
+    expect(mockState.users).toHaveLength(1);
   });
 });

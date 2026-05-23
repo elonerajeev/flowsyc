@@ -22,10 +22,10 @@ sudo usermod -aG docker $USER
 newgrp docker
 
 # Clone the Github Repo
-git clone https://github.com/elonerajeev/focal-point-compass.git
+git clone https://github.com/elonerajeev/flowsyc.git
 
 # move to wokring directory
-cd focal-point-compass
+cd flowsyc
 
 # build teh docker compose images
 docker compose up --build

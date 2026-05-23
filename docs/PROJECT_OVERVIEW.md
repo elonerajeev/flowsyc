@@ -1,4 +1,4 @@
-# 🎯 Focal Point Compass — Complete Project Overview
+# 🎯 Flowsyc — Complete Project Overview
 
 **Last Updated:** 2026-04-22  
 **Status:** ✅ Fully Operational — Production Ready  
@@ -32,7 +32,7 @@
 
 ## 🎯 Project Summary
 
-**Focal Point Compass** is a comprehensive, enterprise-grade internal CRM platform managing the full business lifecycle:  
+**Flowsyc** is a comprehensive, enterprise-grade internal CRM platform managing the full business lifecycle:  
 clients → leads → deals → projects → tasks → invoices → HR → analytics — all in one place.
 
 ### Current Status (April 2026)
@@ -707,6 +707,6 @@ node scripts/update-snapshot.js
 
 ---
 
-**Built with ❤️ — Focal Point Compass CRM**  
+**Built with ❤️ — Flowsyc CRM**  
 *For AI agents: Always read `codebase-snapshot.xml` before making changes.*  
 *Last Updated: 2026-04-22*

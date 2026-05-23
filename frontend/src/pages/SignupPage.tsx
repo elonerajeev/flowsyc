@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { authService } from "@/services/auth";
 import AuthLayout from "@/components/layout/AuthLayout";
 import type { UserRole } from "@/contexts/ThemeContext";
 
@@ -25,6 +27,7 @@ function getStrength(password: string): { score: number; label: string; color: s
 export default function SignupPage() {
   const navigate = useNavigate();
   const { signup } = useAuth();
+  const { setRole } = useTheme();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,11 +60,74 @@ export default function SignupPage() {
       if (!response.ok) throw new Error("Failed to get auth URL");
       const data = await response.json();
       if (data.authUrl) {
-        window.location.href = data.authUrl;
+        const popup = window.open(
+          data.authUrl,
+          "google-auth",
+          "width=520,height=700,menubar=no,toolbar=no,status=no,resizable=yes,scrollbars=yes",
+        );
+
+        if (!popup) {
+          window.location.href = data.authUrl;
+          return;
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          const timeoutMs = 120000;
+          const timeout = window.setTimeout(() => {
+            cleanup();
+            reject(new Error("Google authentication timed out."));
+          }, timeoutMs);
+
+          const poll = window.setInterval(() => {
+            if (popup.closed) {
+              cleanup();
+              resolve();
+            }
+          }, 400);
+
+          const onMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data?.type === "google-auth-success") {
+              cleanup();
+              try {
+                popup.close();
+              } catch {
+                // no-op
+              }
+              resolve();
+              return;
+            }
+            if (event.data?.type === "google-auth-failed") {
+              cleanup();
+              try {
+                popup.close();
+              } catch {
+                // no-op
+              }
+              reject(new Error("Google authentication failed."));
+            }
+          };
+
+          function cleanup() {
+            window.clearTimeout(timeout);
+            window.clearInterval(poll);
+            window.removeEventListener("message", onMessage);
+          }
+
+          window.addEventListener("message", onMessage);
+        });
+
+        const session = await authService.me();
+        if (!session?.user) {
+          throw new Error("No authenticated session found");
+        }
+        setRole(session.user.role);
+        navigate("/overview");
       }
     } catch (err) {
       console.error("Google signup error:", err);
       setError("Google signup not available. Use form below.");
+    } finally {
       setLoadingGoogle(false);
     }
   };
