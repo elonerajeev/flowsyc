@@ -1,21 +1,15 @@
-services:
-  # ──────────────────────────────────────
-  # Database — Render Managed PostgreSQL
-  # ──────────────────────────────────────
-  - type: postgres
-    name: focalpoint-db
-    plan: standard
+databases:
+  - name: focalpoint-db
     databaseName: focal_point_compass
     user: crm_user
+    plan: standard
 
-  # ──────────────────────────────────────
-  # Redis / Valkey — Render Managed Redis
-  # ──────────────────────────────────────
-  - type: redis
-    name: focalpoint-valkey
+redis:
+  - name: focalpoint-valkey
     plan: starter
     maxmemoryPolicy: noeviction
 
+services:
   # ──────────────────────────────────────
   # Backend — Express API + Socket.IO
   # ──────────────────────────────────────
@@ -36,7 +30,7 @@ services:
       - key: NODE_ENV
         value: production
 
-      # Database — from the postgres service above
+      # Database — from the postgres database above
       - key: DATABASE_URL
         fromDatabase:
           name: focalpoint-db
@@ -58,7 +52,7 @@ services:
       - key: FRONTEND_URL
         value: https://flowsyc-svuj.vercel.app
 
-      # Redis — from the redis service above
+      # Redis — from the redis instance above
       - key: REDIS_URL
         fromService:
           type: redis
