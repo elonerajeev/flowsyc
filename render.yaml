@@ -2,7 +2,7 @@ databases:
   - name: focalpoint-db
     databaseName: focal_point_compass
     user: crm_user
-    plan: standard
+    plan: starter
 
 redis:
   - name: focalpoint-valkey
@@ -30,7 +30,6 @@ services:
       - key: NODE_ENV
         value: production
 
-      # Database — from the postgres database above
       - key: DATABASE_URL
         fromDatabase:
           name: focalpoint-db
@@ -40,7 +39,6 @@ services:
           name: focalpoint-db
           property: connectionString
 
-      # JWT Secrets — set these manually in Render Dashboard
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
@@ -48,11 +46,9 @@ services:
       - key: COOKIE_SECRET
         sync: false
 
-      # Frontend URL (deployed on Cloudflare)
       - key: FRONTEND_URL
         value: https://flowsyc-svuj.vercel.app
 
-      # Redis — from the redis instance above
       - key: REDIS_URL
         fromService:
           type: redis
@@ -64,7 +60,6 @@ services:
           name: focalpoint-valkey
           property: connectionString
 
-      # Email (SMTP) — set manually in Dashboard
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -78,7 +73,6 @@ services:
       - key: SMTP_FROM
         sync: false
 
-      # Google OAuth
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -88,77 +82,5 @@ services:
       - key: GOOGLE_CALENDAR_REDIRECT_URI
         sync: false
 
-      # Audit retention
       - key: AUDIT_RETENTION_DAYS
         value: "30"
-
-  # ──────────────────────────────────────
-  # Monitoring — Prometheus
-  # ──────────────────────────────────────
-  - type: private_service
-    name: prometheus
-    runtime: image
-    image:
-      url: prom/prometheus:v2.54.1
-    plan: starter
-    healthCheckPath: /-/healthy
-
-    envVars:
-      - key: TZ
-        value: UTC
-
-    disk:
-      name: prometheus-data
-      mountPath: /prometheus
-      sizeGB: 2
-
-  # ──────────────────────────────────────
-  # Monitoring — Loki (log aggregation)
-  # ──────────────────────────────────────
-  - type: private_service
-    name: loki
-    runtime: image
-    image:
-      url: grafana/loki:3.1.1
-    plan: starter
-
-    disk:
-      name: loki-data
-      mountPath: /loki
-      sizeGB: 2
-
-  # ──────────────────────────────────────
-  # Monitoring — Grafana
-  # ──────────────────────────────────────
-  - type: web
-    name: grafana
-    runtime: image
-    image:
-      url: grafana/grafana:11.1.4
-    plan: starter
-    healthCheckPath: /api/health
-
-    envVars:
-      - key: GF_SERVER_HTTP_PORT
-        value: 3000
-      - key: GF_SERVER_ROOT_URL
-        value: "%(protocol)s://%(domain)s/"
-      - key: GF_SECURITY_ADMIN_USER
-        value: admin
-      - key: GF_SECURITY_ADMIN_PASSWORD
-        sync: false
-
-    disk:
-      name: grafana-data
-      mountPath: /var/lib/grafana
-      sizeGB: 2
-
-  # ──────────────────────────────────────
-  # Monitoring — Alertmanager
-  # ──────────────────────────────────────
-  - type: private_service
-    name: alertmanager
-    runtime: image
-    image:
-      url: prom/alertmanager:v0.27.0
-    plan: starter
