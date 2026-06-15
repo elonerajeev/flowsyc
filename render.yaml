@@ -15,9 +15,6 @@ services:
     dockerfilePath: ./backend/Dockerfile
     plan: starter
     healthCheckPath: /api/health
-    scaling:
-      minInstances: 1
-      maxInstances: 1
 
     envVars:
       - key: PORT
