@@ -1,5 +1,24 @@
 services:
-  # Backend
+  # ──────────────────────────────────────
+  # Database — Render Managed PostgreSQL
+  # ──────────────────────────────────────
+  - type: postgres
+    name: focalpoint-db
+    plan: standard
+    databaseName: focal_point_compass
+    user: crm_user
+
+  # ──────────────────────────────────────
+  # Redis / Valkey — Render Managed Redis
+  # ──────────────────────────────────────
+  - type: redis
+    name: focalpoint-valkey
+    plan: starter
+    maxmemoryPolicy: noeviction
+
+  # ──────────────────────────────────────
+  # Backend — Express API + Socket.IO
+  # ──────────────────────────────────────
   - type: web
     name: focalpoint-backend
     runtime: docker
@@ -7,78 +26,88 @@ services:
     dockerfilePath: ./backend/Dockerfile
     plan: starter
     healthCheckPath: /api/health
+    scaling:
+      minInstances: 1
+      maxInstances: 1
 
     envVars:
       - key: PORT
         value: 3000
-
       - key: NODE_ENV
         value: production
 
+      # Database — from the postgres service above
       - key: DATABASE_URL
-        sync: false
-
+        fromDatabase:
+          name: focalpoint-db
+          property: connectionString
       - key: DIRECT_URL
-        sync: false
+        fromDatabase:
+          name: focalpoint-db
+          property: connectionString
 
+      # JWT Secrets — set these manually in Render Dashboard
       - key: JWT_ACCESS_SECRET
         sync: false
-
       - key: JWT_REFRESH_SECRET
         sync: false
-
       - key: COOKIE_SECRET
         sync: false
 
+      # Frontend URL (deployed on Cloudflare)
       - key: FRONTEND_URL
         value: https://flowsyc-svuj.vercel.app
 
-      # SMTP
-      - key: SMTP_HOST
-        sync: false
-
-      - key: SMTP_PORT
-        value: 587
-
-      - key: SMTP_SECURE
-        value: false
-
-      - key: SMTP_USER
-        sync: false
-
-      - key: SMTP_PASS
-        sync: false
-
-      - key: SMTP_FROM
-        sync: false
-
-      # Google OAuth
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-
-      - key: GOOGLE_REDIRECT_URI
-        sync: false
-
-      - key: GOOGLE_CALENDAR_REDIRECT_URI
-        sync: false
-
-      # Redis
+      # Redis — from the redis service above
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: focalpoint-valkey
+          property: connectionString
       - key: VALKEY_URL
         fromService:
           type: redis
           name: focalpoint-valkey
           property: connectionString
 
+      # Email (SMTP) — set manually in Dashboard
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
 
-  # Prometheus
+      # Google OAuth
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_CALENDAR_REDIRECT_URI
+        sync: false
+
+      # Audit retention
+      - key: AUDIT_RETENTION_DAYS
+        value: "30"
+
+  # ──────────────────────────────────────
+  # Monitoring — Prometheus
+  # ──────────────────────────────────────
   - type: private_service
     name: prometheus
     runtime: image
     image:
       url: prom/prometheus:v2.54.1
+    plan: starter
+    healthCheckPath: /-/healthy
 
     envVars:
       - key: TZ
@@ -89,37 +118,39 @@ services:
       mountPath: /prometheus
       sizeGB: 2
 
-
-  # Loki
+  # ──────────────────────────────────────
+  # Monitoring — Loki (log aggregation)
+  # ──────────────────────────────────────
   - type: private_service
     name: loki
     runtime: image
     image:
       url: grafana/loki:3.1.1
+    plan: starter
 
     disk:
       name: loki-data
       mountPath: /loki
       sizeGB: 2
 
-
-  # Grafana
+  # ──────────────────────────────────────
+  # Monitoring — Grafana
+  # ──────────────────────────────────────
   - type: web
     name: grafana
     runtime: image
     image:
       url: grafana/grafana:11.1.4
+    plan: starter
+    healthCheckPath: /api/health
 
     envVars:
       - key: GF_SERVER_HTTP_PORT
         value: 3000
-
       - key: GF_SERVER_ROOT_URL
         value: "%(protocol)s://%(domain)s/"
-
       - key: GF_SECURITY_ADMIN_USER
         value: admin
-
       - key: GF_SECURITY_ADMIN_PASSWORD
         sync: false
 
@@ -128,10 +159,12 @@ services:
       mountPath: /var/lib/grafana
       sizeGB: 2
 
-
-  # Alertmanager
+  # ──────────────────────────────────────
+  # Monitoring — Alertmanager
+  # ──────────────────────────────────────
   - type: private_service
     name: alertmanager
     runtime: image
     image:
       url: prom/alertmanager:v0.27.0
+    plan: starter
