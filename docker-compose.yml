@@ -47,22 +47,20 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_URL: ${DIRECT_URL}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      COOKIE_SECRET: ${COOKIE_SECRET}
-      FRONTEND_URL: ${FRONTEND_URL:-https://crm-software.flowsyc.workers.dev}
-      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://crm_user:crm_password@db:5432/focal_point_compass
+      DIRECT_URL: postgresql://crm_user:crm_password@db:5432/focal_point_compass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-32-chars-minimum!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-32-chars-minimum!!}
+      COOKIE_SECRET: ${COOKIE_SECRET:-dev-cookie-secret-32-chars-min!!}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
-      # Email (optional — leave blank to disable email features)
-      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
+      SMTP_USER: ${SMTP_USER:-dev@flowsyc.local}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      # Google OAuth / Calendar (optional)
+      SMTP_FROM: ${SMTP_FROM:-dev@flowsyc.local}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
