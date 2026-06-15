@@ -4,11 +4,6 @@ databases:
     user: crm_user
     plan: starter
 
-redis:
-  - name: focalpoint-valkey
-    plan: starter
-    maxmemoryPolicy: noeviction
-
 services:
   # ──────────────────────────────────────
   # Backend — Express API + Socket.IO
@@ -50,15 +45,9 @@ services:
         value: https://flowsyc-svuj.vercel.app
 
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: focalpoint-valkey
-          property: connectionString
+        sync: false
       - key: VALKEY_URL
-        fromService:
-          type: redis
-          name: focalpoint-valkey
-          property: connectionString
+        sync: false
 
       - key: SMTP_HOST
         sync: false
