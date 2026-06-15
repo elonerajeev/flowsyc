@@ -94,7 +94,7 @@ export function createApp() {
   app.use(compression());
   app.use(
     cors({
-      origin: [env.FRONTEND_URL, env.FRONTEND_URL?.replace("https://", "https://www."), "https://flowsyc-svuj.vercel.app", "https://flowsyc.com"],
+      origin: [env.FRONTEND_URL, env.FRONTEND_URL?.replace("https://", "https://www."), "https://flowsyc-svuj.vercel.app", "https://flowsyc.com", "https://crm-software.flowsyc.workers.dev"],
       credentials: true,
     }),
   );

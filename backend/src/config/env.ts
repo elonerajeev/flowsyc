@@ -27,7 +27,7 @@ const envSchema = z.object({
     .string()
     .url()
     .or(z.string().startsWith("http://localhost"))
-    .default("http://localhost:8080"),
+    .default("https://crm-software.flowsyc.workers.dev"),
   COOKIE_SECRET: z.string().min(32),
   SMTP_HOST: z.string().default("smtp.gmail.com"),
   SMTP_PORT: z.coerce.number().default(587),
