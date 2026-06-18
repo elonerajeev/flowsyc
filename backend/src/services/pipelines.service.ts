@@ -469,12 +469,30 @@ function isWebhookConfigured(config: RuntimeGitHubConfig | null) {
   return Boolean(config?.webhookSecret && config?.webhookOrganizationId);
 }
 
+function assertValidGitHubOwner(owner: string): void {
+  const trimmed = owner.trim();
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37})$/.test(trimmed)) {
+    throw new AppError("Invalid GitHub owner format", 400, "VALIDATION_ERROR");
+  }
+}
+
 export const pipelinesService = {
   // List all repos accessible by a token (org repos or user repos)
   async listGitHubRepos(token: string, owner: string, isOrg: boolean): Promise<{ name: string; fullName: string; private: boolean; description: string | null }[]> {
-    const url = isOrg
-      ? `https://api.github.com/orgs/${owner}/repos?per_page=100&sort=updated`
-      : `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator`;
+    let url: string;
+    if (isOrg) {
+      assertValidGitHubOwner(owner);
+      const orgReposUrl = new URL(`https://api.github.com/orgs/${encodeURIComponent(owner)}/repos`);
+      orgReposUrl.searchParams.set("per_page", "100");
+      orgReposUrl.searchParams.set("sort", "updated");
+      url = orgReposUrl.toString();
+    } else {
+      const userReposUrl = new URL("https://api.github.com/user/repos");
+      userReposUrl.searchParams.set("per_page", "100");
+      userReposUrl.searchParams.set("sort", "updated");
+      userReposUrl.searchParams.set("affiliation", "owner,collaborator");
+      url = userReposUrl.toString();
+    }
 
     const response = await fetch(url, {
       headers: {
